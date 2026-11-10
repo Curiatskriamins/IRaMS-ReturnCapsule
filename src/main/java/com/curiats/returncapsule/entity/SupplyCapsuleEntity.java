@@ -8,6 +8,7 @@ import com.curiats.returncapsule.entity.fall.LandingSite;
 import com.curiats.returncapsule.entity.fall.ShakeBurst;
 import com.curiats.returncapsule.progress.SummonTier;
 import com.curiats.returncapsule.registry.ModEntities;
+import com.curiats.returncapsule.registry.ModSounds;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.particles.DustParticleOptions;
 import net.minecraft.core.particles.ParticleTypes;
@@ -93,6 +94,9 @@ public class SupplyCapsuleEntity extends FallingCapsuleEntity {
         server.playSound(null, x, y, z, SoundEvents.GENERIC_EXPLODE, SoundSource.BLOCKS,
                 Config.IMPACT_SOUND_VOLUME.get().floatValue(),
                 Config.IMPACT_SOUND_PITCH.get().floatValue());
+        // Slowed anvil by default; the bundled steel_impact pack swaps this event for metal.
+        server.playSound(null, x, y, z, ModSounds.CAPSULE_IMPACT.get(), SoundSource.BLOCKS, 1.2F,
+                Config.IMPACT_THUD_PITCH.get().floatValue());
         this.spawnImpactParticles(server, x, y, z);
 
         if (Config.SCREEN_SHAKE.get()) {

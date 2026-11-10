@@ -10,6 +10,7 @@ import com.curiats.returncapsule.menu.CapsuleMenu;
 import com.curiats.returncapsule.progress.SummonTier;
 import com.curiats.returncapsule.progress.TierResolver;
 import com.curiats.returncapsule.registry.ModEntities;
+import com.curiats.returncapsule.registry.ModSounds;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.nbt.CompoundTag;
@@ -159,6 +160,8 @@ public class TransportCapsuleEntity extends FallingCapsuleEntity implements Menu
         server.playSound(null, x, y, z, SoundEvents.GENERIC_EXPLODE, SoundSource.BLOCKS,
                 Config.IMPACT_SOUND_VOLUME.get().floatValue(),
                 Config.IMPACT_SOUND_PITCH.get().floatValue());
+        server.playSound(null, x, y, z, ModSounds.CAPSULE_IMPACT.get(), SoundSource.BLOCKS, 1.2F,
+                Config.IMPACT_THUD_PITCH.get().floatValue());
         ShakeBurst.forPassengers(this, 25, 3);
 
         Set<UUID> excluded = new HashSet<>();

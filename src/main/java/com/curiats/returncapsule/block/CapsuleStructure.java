@@ -26,7 +26,8 @@ public final class CapsuleStructure {
                     cursor.setWithOffset(main, dx, dy, dz);
                     BlockState existing = level.getBlockState(cursor);
                     if (existing.isAir() || existing.canBeReplaced()) {
-                        level.setBlock(cursor, part, Block.UPDATE_ALL);
+                        int index = dy * 9 + (dz + 1) * 3 + (dx + 1);
+                        level.setBlock(cursor, part.setValue(CapsulePartBlock.PART, index), Block.UPDATE_ALL);
                         placed++;
                     }
                 }

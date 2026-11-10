@@ -9,19 +9,20 @@ public final class LootRarity {
         Rarity rarity = stack.getRarity();
         return switch (tier) {
             case BASIC -> switch (rarity) {
-                case COMMON -> 4;
-                case UNCOMMON -> 1;
+                case COMMON -> 8;
+                case UNCOMMON -> 2;
                 default -> 0;
             };
             case ADVANCED -> switch (rarity) {
-                case COMMON -> 1;
-                case UNCOMMON, RARE -> 2;
+                case COMMON -> 3;
+                case UNCOMMON -> 6;
+                case RARE -> 2;
                 default -> 0;
             };
             case ELITE -> switch (rarity) {
-                case COMMON -> 1;
-                case UNCOMMON -> 2;
-                case RARE -> 3;
+                case COMMON -> 0;
+                case UNCOMMON -> 3;
+                case RARE -> 6;
                 case EPIC -> 4;
             };
         };

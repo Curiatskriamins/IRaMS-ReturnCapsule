@@ -30,6 +30,7 @@ public final class Config {
     public static final ForgeConfigSpec.DoubleValue SHAKE_START_DISTANCE;
     public static final ForgeConfigSpec.DoubleValue IMPACT_SOUND_VOLUME;
     public static final ForgeConfigSpec.DoubleValue IMPACT_SOUND_PITCH;
+    public static final ForgeConfigSpec.DoubleValue IMPACT_THUD_PITCH;
 
     public static final ForgeConfigSpec.IntValue SHOCK_STUN_TICKS;
     public static final ForgeConfigSpec.DoubleValue SHOCK_DAMAGE;
@@ -55,9 +56,16 @@ public final class Config {
     public static final ForgeConfigSpec.DoubleValue TRAIL_SCALE;
     public static final ForgeConfigSpec.DoubleValue SHAKE_AMPLITUDE;
     public static final ForgeConfigSpec.DoubleValue SHAKE_SOUND_RANGE;
+    public static final ForgeConfigSpec.DoubleValue MODEL_YAW_OFFSET;
 
     public static final ForgeConfigSpec.BooleanValue ADD_MOD_ITEMS;
+    public static final ForgeConfigSpec.IntValue MOD_ITEM_ROLLS;
+    public static final ForgeConfigSpec.IntValue VANILLA_LOOT_STACKS;
+    public static final ForgeConfigSpec.DoubleValue UNIQUE_WEAPON_CHANCE;
     public static final ForgeConfigSpec.ConfigValue<List<? extends String>> MOD_LOOT_EXCLUDED_NAMESPACES;
+    public static final ForgeConfigSpec.ConfigValue<List<? extends String>> MOD_LOOT_EXCLUDED_ITEMS;
+    public static final ForgeConfigSpec.ConfigValue<List<? extends String>> BLADE_NAMESPACES;
+    public static final ForgeConfigSpec.DoubleValue FILL_TARGET;
     public static final ForgeConfigSpec.IntValue TACZ_MIN_GUNS;
     public static final ForgeConfigSpec.IntValue TACZ_MAX_GUNS;
     public static final ForgeConfigSpec.IntValue TACZ_MIN_ATTACHMENTS;
@@ -138,6 +146,10 @@ public final class Config {
         IMPACT_SOUND_PITCH = builder
                 .comment("落地爆炸音效的音调(Pitch of the landing explosion sound)")
                 .defineInRange("impactSoundPitch", 0.55D, 0.1D, 2.0D);
+        IMPACT_THUD_PITCH = builder
+                .comment("落地闷响的播放音调，默认 1.0(Pitch used when playing the landing thud; default 1.0)",
+                        "默认铁砧的慢放效果由 sounds.json 里的 pitch 0.45 提供，这里保持 1.0 即可(The slowed anvil is done by pitch 0.45 in sounds.json, so keep this at 1.0)")
+                .defineInRange("impactThudPitch", 1.0D, 0.1D, 2.0D);
         builder.pop();
 
         builder.push("shock");
@@ -216,19 +228,51 @@ public final class Config {
         SHAKE_SOUND_RANGE = builder
                 .comment("只有该距离内的爆炸音效才会额外触发镜头震动(Only explosion sounds within this distance trigger an additional camera shake)")
                 .defineInRange("shakeSoundRange", 64.0D, 0.0D, 256.0D);
+        MODEL_YAW_OFFSET = builder
+                .comment("模型朝向偏移，单位度(Model yaw offset in degrees)",
+                        "默认 180 让舱门朝向玩家；如果模型正面其实是反的，改成 0(180 makes the door face the player; set 0 if the model's front is reversed)")
+                .defineInRange("modelYawOffset", 180.0D, -360.0D, 360.0D);
         builder.pop();
 
         builder.push("loot");
         ADD_MOD_ITEMS = builder
                 .comment("从已安装的其他模组中随机抽取物品，加入补给舱战利品表(Add a random draw of items from other installed mods to the supply capsule loot table)")
                 .define("addModItems", true);
+        MOD_ITEM_ROLLS = builder
+                .comment("每次开舱从模组物品池抽取多少次，0 表示关闭(How many draws a capsule makes from the mod item pool; 0 disables it)",
+                        "原版战利品表约有 33-44 次抽取，所以这个值太小的话舱里会几乎全是原版物品(The vanilla tables roll 33-44 times, so a small value here leaves the capsule almost entirely vanilla)")
+                .defineInRange("modItemRolls", 32, 0, 256);
+        VANILLA_LOOT_STACKS = builder
+                .comment("每个舱最多保留多少堆原版战利品，超出部分丢弃，稀有度高的优先保留(How many vanilla loot stacks a capsule keeps; the rarest rolls are kept first)",
+                        "原版表有 33-44 次抽取，不限制的话会压过模组物品(The vanilla tables roll 33-44 stacks, which otherwise drown out the mod items)",
+                        "0 表示不限制(0 keeps every roll)")
+                .defineInRange("vanillaLootStacks", 20, 0, 64);
+        UNIQUE_WEAPON_CHANCE = builder
+                .comment("三阶舱携带一把无合成表独特武器的概率，每个舱最多一把(Chance that a tier III capsule carries one uncraftable unique weapon; at most one per capsule)",
+                        "目前支持 T.E.B.L. Slashblades (tcpl)，装了才会生效(Currently supports T.E.B.L. Slashblades (tcpl); only active when that mod is installed)")
+                .defineInRange("uniqueWeaponChance", 0.5D, 0.0D, 1.0D);
+        BLADE_NAMESPACES = builder
+                .comment("哪些模组命名空间的武器算作拔刀剑，按攻击伤害分阶级(Bleeding-edge: namespaces whose weapons count as slashblades, tiered by attack damage)",
+                        "伤害 < 7 进一阶，7-19 进二阶，> 19 进三阶；每个舱最多一把(Damage < 7 goes to tier I, 7-19 to tier II, > 19 to tier III; at most one per capsule)")
+                .defineListAllowEmpty("bladeNamespaces",
+                        List.of("slashblade", "slashblade_addon", "tcpl"),
+                        value -> value instanceof String);
+        FILL_TARGET = builder
+                .comment("开舱后目标填充率，0-1；不足的部分用同一阶的模组物品补满(Target fill ratio after opening; remaining slots are topped up with mod items of the same tier)",
+                        "1.0 会把 324 格全部塞满，0 则不补(1.0 fills all 324 slots, 0 disables the top-up)")
+                .defineInRange("fillTarget", 0.75D, 0.0D, 1.0D);
         MOD_LOOT_EXCLUDED_NAMESPACES = builder
                 .comment("排除在随机模组物品池之外的模组命名空间，不区分大小写的子串匹配(Mod namespaces excluded from the random mod item pool, case-insensitive substring match)",
                         "默认排除枪械模组，因为它们的枪、配件和弹药需要 NBT 数据才能运作(Gun mods are excluded by default because their guns, attachments and ammo need NBT data to work)",
                         "安装了 TaCZ 时，TaCZ 联动会自动用有效的枪械填充返回舱(the TaCZ integration already fills the capsule with valid guns when present)")
                 .defineListAllowEmpty("excludedModNamespaces",
-                        List.of("tacz", "lrtactical", "gunsmithlib"),
+                        List.of("tacz", "lrtactical", "gunsmithlib",
+                                "slashblade", "slashblade_addon", "tcpl"),
                         value -> value instanceof String);
+        MOD_LOOT_EXCLUDED_ITEMS = builder
+                .comment("按完整物品 ID 排除，例：\"srparasites:some_item\"(Exact item ids excluded from the random mod item pool)",
+                        "模组刷怪蛋、NBT 驱动道具等自动过滤漏掉的物品可以写在这里(Use this for spawn eggs or NBT driven items that slip through the automatic filters)")
+                .defineListAllowEmpty("excludedItems", List.of(), value -> value instanceof String);
         TACZ_MIN_GUNS = builder
                 .comment("TaCZ 联动：单个返回舱内放置的最少枪械数量(TaCZ integration: minimum number of guns placed in one capsule)")
                 .defineInRange("taczMinGuns", 1, 0, 32);

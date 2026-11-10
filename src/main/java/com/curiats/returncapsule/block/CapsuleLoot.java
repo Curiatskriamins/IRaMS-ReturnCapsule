@@ -1,8 +1,11 @@
 package com.curiats.returncapsule.block;
 
+import com.curiats.returncapsule.compat.BladeLoot;
 import com.curiats.returncapsule.compat.LootLayout;
 import com.curiats.returncapsule.compat.TaCZIntegration;
 import com.curiats.returncapsule.compat.TransportLoot;
+import com.curiats.returncapsule.loot.BulkCargo;
+import com.curiats.returncapsule.loot.Supplies;
 import com.curiats.returncapsule.loot.TieredLoot;
 import com.curiats.returncapsule.progress.SummonTier;
 import net.minecraft.nbt.CompoundTag;
@@ -36,16 +39,20 @@ final class CapsuleLoot {
     }
 
     void ensureAssigned() {
-        if (this.phase != Phase.UNASSIGNED) {
+        if (this.phase == Phase.FILLED || this.phase == Phase.READY) {
             return;
         }
         if (!(this.owner.getLevel() instanceof ServerLevel server)) {
             return;
         }
+        // A capsule receives its loot table the moment it lands (phase TABLE), so the gun
+        // decision has to be possible after that point too. Both "no table yet" and "table
+        // assigned but not opened yet" pass through here; only this method picks between the
+        // TaCZ gun fill and the vanilla table.
         RandomSource random = server.random;
         SummonTier tier = this.owner.getTier();
         if (TieredLoot.allowsGunLoot(tier) && TaCZIntegration.isLoaded()
-                && TaCZIntegration.fill(this.owner, random)) {
+                && TaCZIntegration.fill(this.owner, random, tier)) {
             this.taczItems = true;
             TransportLoot.fillVanilla(this.owner, server, random, tier);
             this.owner.clearLootTable();
@@ -53,8 +60,10 @@ final class CapsuleLoot {
             this.owner.setChanged();
             return;
         }
-        this.owner.assignLootTable(tier.lootTable(), random.nextLong());
-        this.phase = Phase.TABLE;
+        if (this.phase == Phase.UNASSIGNED) {
+            this.owner.assignLootTable(tier.lootTable(), random.nextLong());
+            this.phase = Phase.TABLE;
+        }
     }
 
     void prepareForAccess(Player player) {
@@ -68,6 +77,9 @@ final class CapsuleLoot {
         }
         if (this.phase == Phase.FILLED) {
             TieredLoot.fillModItems(this.owner, this.owner.getTier(), player.getRandom());
+            Supplies.fill(this.owner, this.owner.getTier(), player.getRandom());
+            BladeLoot.fill(this.owner, this.owner.getTier(), player.getRandom());
+            BulkCargo.fill(this.owner, this.owner.getTier(), player.getRandom());
             LootLayout.spread(this.owner, player.getRandom());
             this.owner.clearLootTable();
             this.phase = Phase.READY;

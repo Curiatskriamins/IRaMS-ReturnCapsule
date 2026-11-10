@@ -8,6 +8,7 @@ import com.curiats.returncapsule.registry.ModEntities;
 import com.curiats.returncapsule.registry.ModItems;
 import com.curiats.returncapsule.registry.ModLootEntries;
 import com.curiats.returncapsule.registry.ModMenus;
+import com.curiats.returncapsule.registry.ModSounds;
 import com.curiats.returncapsule.network.ModNetwork;
 import com.curiats.returncapsule.registry.ModTabs;
 import net.minecraft.resources.ResourceLocation;
@@ -33,6 +34,7 @@ public final class ReturnCapsuleMod {
         ModEntities.ENTITIES.register(modBus);
         ModEffects.EFFECTS.register(modBus);
         ModMenus.MENUS.register(modBus);
+        ModSounds.SOUNDS.register(modBus);
         ModTabs.TABS.register(modBus);
         ModLootEntries.ENTRY_TYPES.register(modBus);
         ModNetwork.register();

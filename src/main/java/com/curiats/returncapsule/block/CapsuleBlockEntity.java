@@ -7,6 +7,7 @@ import com.curiats.returncapsule.registry.ModBlockEntities;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.NonNullList;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.Tag;
 import net.minecraft.network.Connection;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.protocol.Packet;
@@ -133,6 +134,11 @@ public class CapsuleBlockEntity extends RandomizableContainerBlockEntity {
         this.loot.ensureAssigned();
     }
 
+    /** Fills the container completely, including the guaranteed supplies and unique weapon. */
+    public void prepareLoot(Player player) {
+        this.loot.prepareForAccess(player);
+    }
+
     void assignLootTable(ResourceLocation table, long seed) {
         this.setLootTable(table, seed);
     }
@@ -175,7 +181,7 @@ public class CapsuleBlockEntity extends RandomizableContainerBlockEntity {
 
     @Override
     public int getContainerSize() {
-        return this.slots;
+        return this.items.size();
     }
 
     @Override
@@ -225,7 +231,11 @@ public class CapsuleBlockEntity extends RandomizableContainerBlockEntity {
     @Override
     public void load(CompoundTag tag) {
         super.load(tag);
-        this.items = NonNullList.withSize(this.slots, ItemStack.EMPTY);
+        // Capsules saved by an older build may hold more stacks than the current slot count;
+        // keep their capacity instead of dropping (or crashing on) the extra entries.
+        int saved = tag.getList("Items", Tag.TAG_COMPOUND).size();
+        int size = Math.max(this.slots, saved);
+        this.items = NonNullList.withSize(size, ItemStack.EMPTY);
         boolean hasLootTable = this.tryLoadLootTable(tag);
         if (!hasLootTable) {
             ContainerHelper.loadAllItems(tag, this.items);

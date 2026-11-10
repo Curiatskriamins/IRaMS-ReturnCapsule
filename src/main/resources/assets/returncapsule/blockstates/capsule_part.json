@@ -1,7 +1,22 @@
 {
   "variants": {
-    "": {
-      "model": "returncapsule:block/capsule"
-    }
+    "part=0": { "model": "returncapsule:block/capsule" },
+    "part=1": { "model": "returncapsule:block/capsule" },
+    "part=2": { "model": "returncapsule:block/capsule" },
+    "part=3": { "model": "returncapsule:block/capsule" },
+    "part=4": { "model": "returncapsule:block/capsule" },
+    "part=5": { "model": "returncapsule:block/capsule" },
+    "part=6": { "model": "returncapsule:block/capsule" },
+    "part=7": { "model": "returncapsule:block/capsule" },
+    "part=8": { "model": "returncapsule:block/capsule" },
+    "part=9": { "model": "returncapsule:block/capsule" },
+    "part=10": { "model": "returncapsule:block/capsule" },
+    "part=11": { "model": "returncapsule:block/capsule" },
+    "part=12": { "model": "returncapsule:block/capsule" },
+    "part=13": { "model": "returncapsule:block/capsule" },
+    "part=14": { "model": "returncapsule:block/capsule" },
+    "part=15": { "model": "returncapsule:block/capsule" },
+    "part=16": { "model": "returncapsule:block/capsule" },
+    "part=17": { "model": "returncapsule:block/capsule" }
   }
 }

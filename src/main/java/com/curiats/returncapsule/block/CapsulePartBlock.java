@@ -14,6 +14,8 @@ import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.RenderShape;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.StateDefinition;
+import net.minecraft.world.level.block.state.properties.IntegerProperty;
 import net.minecraft.world.level.material.PushReaction;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.shapes.CollisionContext;
@@ -23,8 +25,20 @@ import net.minecraft.world.phys.shapes.VoxelShape;
 import javax.annotation.Nullable;
 
 public class CapsulePartBlock extends Block {
+    /** 0-17: index into the 3x3x2 shell, so each part knows where it sits around the core. */
+    public static final IntegerProperty PART = IntegerProperty.create("part", 0, 17);
+
+    private static final VoxelShape EDGE = Block.box(2.0D, 0.0D, 2.0D, 14.0D, 16.0D, 14.0D);
+    private static final VoxelShape CORNER = Block.box(5.0D, 0.0D, 5.0D, 11.0D, 16.0D, 11.0D);
+
     public CapsulePartBlock(Properties properties) {
         super(properties);
+        this.registerDefaultState(this.stateDefinition.any().setValue(PART, 0));
+    }
+
+    @Override
+    protected void createBlockStateDefinition(StateDefinition.Builder<Block, BlockState> builder) {
+        builder.add(PART);
     }
 
     @Override
@@ -34,12 +48,29 @@ public class CapsulePartBlock extends Block {
 
     @Override
     public VoxelShape getShape(BlockState state, BlockGetter level, BlockPos pos, CollisionContext context) {
-        return Shapes.block();
+        return shapeFor(state);
     }
 
     @Override
     public VoxelShape getCollisionShape(BlockState state, BlockGetter level, BlockPos pos, CollisionContext context) {
-        return Shapes.block();
+        return shapeFor(state);
+    }
+
+    /**
+     * The capsule is round, so the 3x3x2 shell only needs a full box in the centre column,
+     * a slimmer box on the four edges and a small box in the four corners.
+     */
+    private static VoxelShape shapeFor(BlockState state) {
+        int part = state.getValue(PART);
+        int dx = part % 3 - 1;
+        int dz = (part / 3) % 3 - 1;
+        if (dx == 0 && dz == 0) {
+            return Shapes.block();
+        }
+        if (dx == 0 || dz == 0) {
+            return EDGE;
+        }
+        return CORNER;
     }
 
     @Override

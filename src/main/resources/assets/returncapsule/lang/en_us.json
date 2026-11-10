@@ -23,5 +23,6 @@
   "container.returncapsule.transport.elite": "Tier III Transport Capsule",
   "entity.returncapsule.transport_capsule": "Transport Capsule",
   "effect.returncapsule.shock": "Shock",
+  "subtitles.returncapsule.capsule_impact": "Return capsule slams down",
   "block.returncapsule.capsule_part": "Supply Return Capsule"
 }

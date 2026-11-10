@@ -19,6 +19,22 @@ public final class ItemInserter {
         }
         int remaining = stack.getCount();
         int maxStack = Math.max(1, stack.getMaxStackSize());
+        // Fill up existing stacks of the same item first; otherwise every duplicate draw
+        // would occupy its own slot with a handful of items.
+        for (int i = 0; i < this.size && remaining > 0; i++) {
+            ItemStack existing = this.container.getItem(i);
+            if (existing.isEmpty() || !ItemStack.isSameItemSameTags(existing, stack)) {
+                continue;
+            }
+            int room = Math.min(existing.getMaxStackSize(), maxStack) - existing.getCount();
+            if (room <= 0) {
+                continue;
+            }
+            int moved = Math.min(room, remaining);
+            existing.grow(moved);
+            this.container.setItem(i, existing);
+            remaining -= moved;
+        }
         while (remaining > 0) {
             int slot = this.nextEmptySlot();
             if (slot < 0) {

@@ -2,6 +2,7 @@ package com.curiats.returncapsule.client;
 
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.math.Axis;
+import com.curiats.returncapsule.Config;
 import com.curiats.returncapsule.block.CapsuleBlock;
 import com.curiats.returncapsule.block.CapsuleBlockEntity;
 import net.minecraft.client.renderer.MultiBufferSource;
@@ -22,7 +23,7 @@ public class CapsuleBlockRenderer implements BlockEntityRenderer<CapsuleBlockEnt
         
         
         
-        pose.mulPose(Axis.YP.rotationDegrees(180.0F - facing.toYRot()));
+        pose.mulPose(Axis.YP.rotationDegrees(180.0F - facing.toYRot() + Config.MODEL_YAW_OFFSET.get().floatValue()));
         CapsuleGeoModel.get().render(pose, buffer, packedLight, overlay, blockEntity.getLidProgress(partialTick));
         pose.popPose();
     }

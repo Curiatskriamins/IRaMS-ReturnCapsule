@@ -49,10 +49,13 @@ public final class GeoRenderer {
                              VertexConsumer consumer, int packedLight, int overlay,
                              float shiftX, float shiftY, float shiftZ) {
         for (GeoFace face : faces) {
+            // The normal is shared by the four vertices of a face, so transform it once...
             NORMAL.set(face.normalX(), face.normalY(), face.normalZ());
             normalMatrix.transform(NORMAL);
             NORMAL.normalize();
-            consumer.normal(NORMAL.x, NORMAL.y, NORMAL.z);
+            float normalX = NORMAL.x;
+            float normalY = NORMAL.y;
+            float normalZ = NORMAL.z;
 
             float[] positions = face.positions();
             float[] uvs = face.uvs();
@@ -62,11 +65,14 @@ public final class GeoRenderer {
                         positions[base + 1] + shiftY,
                         positions[base + 2] + shiftZ, 1.0F);
                 matrix.transform(POSITION);
+                // ...but it still has to be emitted for every vertex: BufferBuilder verifies
+                // that each vertex received every element of the format before endVertex().
                 consumer.vertex(POSITION.x, POSITION.y, POSITION.z)
                         .color(255, 255, 255, 255)
                         .uv(uvs[vertex * 2], uvs[vertex * 2 + 1])
                         .overlayCoords(overlay)
                         .uv2(packedLight)
+                        .normal(normalX, normalY, normalZ)
                         .endVertex();
             }
         }

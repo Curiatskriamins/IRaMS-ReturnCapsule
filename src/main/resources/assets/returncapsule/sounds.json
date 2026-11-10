@@ -1,0 +1,12 @@
+{
+  "capsule_impact": {
+    "subtitle": "subtitles.returncapsule.capsule_impact",
+    "sounds": [
+      {
+        "type": "event",
+        "name": "minecraft:block.anvil.land",
+        "pitch": 0.45
+      }
+    ]
+  }
+}

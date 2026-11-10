@@ -23,5 +23,6 @@
   "container.returncapsule.transport.elite": "三阶运输舱",
   "entity.returncapsule.transport_capsule": "运输舱",
   "effect.returncapsule.shock": "震慑",
+  "subtitles.returncapsule.capsule_impact": "返回舱砸落",
   "block.returncapsule.capsule_part": "物资返回舱"
 }

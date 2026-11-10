@@ -8,6 +8,7 @@ import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.Container;
+import net.minecraft.world.item.ArmorItem;
 import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
@@ -15,6 +16,7 @@ import net.minecraft.world.item.SpawnEggItem;
 
 import java.util.ArrayList;
 import java.util.EnumMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -30,7 +32,6 @@ import java.util.Set;
 public final class ModItemPool {
     private static final Set<String> INTERNAL_NAMESPACES =
             Set.of("minecraft", "forge", "returncapsule", "fml", "neoforge");
-    private static final int MAX_PER_STACK = 3;
 
     private static final Map<SummonTier, List<Entry>> TEMPLATES = new EnumMap<>(SummonTier.class);
 
@@ -62,19 +63,46 @@ public final class ModItemPool {
             return;
         }
         ItemInserter inserter = new ItemInserter(container);
+        Set<Item> picked = new HashSet<>();
         for (int i = 0; i < rolls; i++) {
-            ItemStack stack = random(random, tier);
+            ItemStack stack = randomDistinct(random, tier, picked);
             if (stack.isEmpty()) {
                 continue;
             }
-            int max = Math.min(MAX_PER_STACK, stack.getMaxStackSize());
-            int min = Math.min(1, max);
-            stack.setCount(max <= min ? min : min + random.nextInt(max - min + 1));
+            // One full tier-sized stack per roll instead of 1-3 loose items per slot.
+            stack.setCount(Math.max(1, Math.min(maxPerStack(tier), stack.getMaxStackSize())));
             if (!inserter.insert(stack)) {
                 return;
             }
         }
         container.setChanged();
+    }
+
+    /**
+     * Draws an item that was not drawn yet, so a capsule feels like a mixed bag instead of
+     * repeating two or three entries. Falls back to the last draw once the pool is exhausted.
+     */
+    private static ItemStack randomDistinct(RandomSource random, SummonTier tier, Set<Item> picked) {
+        ItemStack fallback = ItemStack.EMPTY;
+        for (int attempt = 0; attempt < 5; attempt++) {
+            ItemStack stack = random(random, tier);
+            if (stack.isEmpty()) {
+                return stack;
+            }
+            fallback = stack;
+            if (picked.add(stack.getItem())) {
+                return stack;
+            }
+        }
+        return fallback;
+    }
+
+    private static int maxPerStack(SummonTier tier) {
+        return switch (tier) {
+            case BASIC -> 3;
+            case ADVANCED -> 8;
+            case ELITE -> 16;
+        };
     }
 
     private static List<Entry> templates(SummonTier tier) {
@@ -123,16 +151,36 @@ public final class ModItemPool {
         if (INTERNAL_NAMESPACES.contains(id.getNamespace()) || isExcludedNamespace(id.getNamespace())) {
             return false;
         }
-        if (item instanceof BlockItem || item instanceof SpawnEggItem) {
+        if (Config.MOD_LOOT_EXCLUDED_ITEMS.get().contains(id.toString())) {
             return false;
         }
-        String path = id.getPath();
-        if (path.contains("spawn_egg") || path.contains("debug") || path.contains("dummy")
+        // Armour is delivered by ArmorSets as a complete set, never as loose pieces.
+        if (item instanceof BlockItem || item instanceof ArmorItem || isSpawnEgg(id, item)) {
+            return false;
+        }
+        String path = id.getPath().toLowerCase(Locale.ROOT);
+        if (path.contains("debug") || path.contains("dummy")
                 || path.contains("placeholder") || path.contains("creative")) {
             return false;
         }
         ItemStack stack = new ItemStack(item);
         return stack.getMaxStackSize() > 1 || stack.getMaxDamage() > 0;
+    }
+
+    /**
+     * Spawn eggs are not always {@link SpawnEggItem}: some mods ship custom egg items whose only
+     * trace is the translation key or the class name, so check all of them.
+     */
+    private static boolean isSpawnEgg(ResourceLocation id, Item item) {
+        if (item instanceof SpawnEggItem) {
+            return true;
+        }
+        String path = id.getPath().toLowerCase(Locale.ROOT);
+        String description = item.getDescriptionId().toLowerCase(Locale.ROOT);
+        String type = item.getClass().getSimpleName().toLowerCase(Locale.ROOT);
+        return path.contains("spawn_egg") || path.endsWith("_egg") || path.contains("spawn")
+                || description.contains("spawn_egg")
+                || type.contains("spawnegg") || type.contains("spawn_egg");
     }
 
     private static boolean isExcludedNamespace(String namespace) {

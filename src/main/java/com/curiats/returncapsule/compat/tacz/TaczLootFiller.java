@@ -2,6 +2,7 @@ package com.curiats.returncapsule.compat.tacz;
 
 import com.curiats.returncapsule.Config;
 import com.curiats.returncapsule.compat.LrSupport;
+import com.curiats.returncapsule.progress.SummonTier;
 import com.curiats.returncapsule.util.ItemInserter;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.nbt.CompoundTag;
@@ -22,7 +23,7 @@ public final class TaczLootFiller {
     private static final ResourceLocation ATTACHMENT_ITEM = new ResourceLocation("tacz", "attachment");
     private static final ResourceLocation AMMO_ITEM = new ResourceLocation("tacz", "ammo");
 
-    public static boolean fill(Container container, RandomSource random) {
+    public static boolean fill(Container container, RandomSource random, SummonTier tier) {
         TaczCatalog.Snapshot catalog = TaczCatalog.snapshot();
         if (catalog.isEmpty()) {
             return false;
@@ -45,7 +46,7 @@ public final class TaczLootFiller {
             GunInfo gun = pool.get(i);
             inserter.insert(buildGun(gun));
             insertAttachments(inserter, attachments, random);
-            addAmmo(inserter, gun.ammoId(), ammoCount(gun.type(), random));
+            addAmmo(inserter, gun.ammoId(), ammoCount(gun.type(), random, tier));
         }
 
         if (LrSupport.isLoaded()) {
@@ -145,7 +146,7 @@ public final class TaczLootFiller {
         }
     }
 
-    private static int ammoCount(String type, RandomSource random) {
+    private static int ammoCount(String type, RandomSource random, SummonTier tier) {
         int base = switch (type == null ? "" : type.toLowerCase(Locale.ROOT)) {
             case "sniper" -> 20 + random.nextInt(101);
             case "rifle" -> 120 + random.nextInt(408);
@@ -156,7 +157,12 @@ public final class TaczLootFiller {
             case "rpg" -> 2 + random.nextInt(7);
             default -> 60 + random.nextInt(121);
         };
-        return (int) Math.round(base * Config.TACZ_AMMO_MULTIPLIER.get());
+        int tierFactor = switch (tier) {
+            case BASIC -> 1;
+            case ADVANCED -> 2;
+            case ELITE -> 4;
+        };
+        return (int) Math.round(base * Config.TACZ_AMMO_MULTIPLIER.get() * tierFactor);
     }
 
     private static <T> void shuffle(List<T> list, RandomSource random) {
