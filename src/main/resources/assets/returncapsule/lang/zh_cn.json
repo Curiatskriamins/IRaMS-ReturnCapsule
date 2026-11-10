@@ -24,5 +24,6 @@
   "entity.returncapsule.transport_capsule": "运输舱",
   "effect.returncapsule.shock": "震慑",
   "subtitles.returncapsule.capsule_impact": "返回舱砸落",
+  "resourcepack.returncapsule.titan_fall": "IRaMS 返回舱落地音效（泰坦）",
   "block.returncapsule.capsule_part": "物资返回舱"
 }

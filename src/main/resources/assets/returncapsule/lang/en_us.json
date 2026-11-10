@@ -24,5 +24,6 @@
   "entity.returncapsule.transport_capsule": "Transport Capsule",
   "effect.returncapsule.shock": "Shock",
   "subtitles.returncapsule.capsule_impact": "Return capsule slams down",
+  "resourcepack.returncapsule.titan_fall": "IRaMS capsule impact (titan fall)",
   "block.returncapsule.capsule_part": "Supply Return Capsule"
 }
