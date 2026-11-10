@@ -1,0 +1,14 @@
+pluginManagement {
+    repositories {
+        maven {
+            name = "Aliyun"
+            url = "https://maven.aliyun.com/repository/public"
+        }
+        maven {
+            name = "Forge"
+            url = "https://maven.minecraftforge.net"
+        }
+    }
+}
+
+rootProject.name = 'returncapsule'

@@ -1,0 +1,17 @@
+# Gradle
+.gradle/
+build/
+out/
+
+# IDEA
+.idea/
+*.iml
+
+# 运行/日志
+run/
+logs/
+*.log
+
+# 系统
+.DS_Store
+Thumbs.db

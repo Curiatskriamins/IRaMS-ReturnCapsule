@@ -1,0 +1,198 @@
+Supply Return Capsule —— 问题清单 / 技术债
+版本：0.12.0（构建于 2026-11-10 13:55）
+整理时间：2026-11-10
+说明：以下内容来自源码、配置、战利品表、打包 jar 与 run 目录日志的静态审阅。
+      带「待实机确认」的条目是基于代码推断，未在游戏内复现。
+
+================================================================
+一、P0：平衡与设计（会直接破坏整合包/服务器体验）
+================================================================
+
+[1] 默认配置下召唤器 = 自杀核弹
+    位置：Config.java:111-119（IMPACT_HALF_SIZE / TRUE_DAMAGE / DAMAGE_OWNER）
+    现状：真伤 5000，作用范围 8×8×8，DAMAGE_OWNER 默认 true；
+          capsule_impact 挂了 bypasses_armor / resistance / effects /
+          enchantments / invulnerability / shield / cooldown 全套标签。
+          被命中的目标会先被震慑（ShockManager.holdStill），
+          锁位 3 秒后 5000 真伤处决，跑不掉。
+    影响：召唤后站在落点 4 格内必死；新玩家第一次用几乎必死一次。
+    建议：默认 DAMAGE_OWNER=false，或改成「非 PVP 才伤 owner」；
+          真伤默认值降到 200-500 一档，5000 作为可选「处决模式」。
+
+[2] 它同时是全游戏最强武器
+    位置：Config.java:114、ShockManager.java:35-63
+    现状：8×8×8 内先吃 200 爆炸伤害，再吃 5000 真伤；凋灵 300 血也扛不住。
+    影响：1 个下界合金锭换一个 Boss，直接改写整合包进度曲线。
+    建议：要么给 Boss 加免疫/减伤，要么把「砸 Boss」变成明确的模组玩法
+          （例如需要专用武器/弹药），而不是召唤器的副作用。
+
+[3] 地形破坏不可逆，且绕过领地保护
+    位置：CapsuleBreaker.java:104-110（removeSilently）
+          LandingSite.java:15-42（findLanding，无掉落删除）
+    现状：下落通道用 level.setBlock(pos, AIR, 2) 直接删除，无掉落、
+          不触发 BlockEvent.BreakEvent；周围方块只有 40% 概率、最多 10 个掉落。
+    影响：圈地 / 防爆 / 领地插件拦不住（它们监听 BreakEvent）；
+          砸自家基地、红石、刷怪塔很常见。
+    建议：改为 level.destroyBlock / 发 BreakEvent，或提供「不破坏方块」预设；
+          至少给受保护区域加白名单判断（可参考 Forge 的 BlockEvent）。
+
+[4] 收益 / 成本失衡
+    位置：recipes/capsule_caller.json（1 下界合金锭）
+          loot_tables/chests/supply_capsule*.json
+    现状：召唤器一次性，1 个下界合金锭换 33 / 41 / 44 次抽取。
+          basic 以食物、铁、铜为主，偶尔钻石；
+          advanced/elite 池里有下界合金锭、下界之星、不死图腾、附魔金苹果。
+    影响：README 里自己也写了「平衡性无法保障」，发布前需要整体重做数值。
+    建议：先定「一次召唤的价值锚点」（例如 ≈ 半组铁 + 1 件随机装备），
+          再反推配方成本与各阶池子的期望值。
+
+[5] 玩家几乎没有任何反馈
+    位置：CapsuleCallerItem.java:28-59（召唤流程无 message 调用）
+          lang 里 message.returncapsule.locked / cooldown / no_space / failed
+          四条文案均已写好，但全项目没有任何地方发送它们。
+    影响：召唤成功/失败/没空间，玩家只看到粒子与音效；
+          「X 秒后落地」的倒计时完全缺失。
+    建议：在 CapsuleCallerItem 里补 actionBar 提示；
+          落点锁定后每秒刷一次剩余秒数，配合现有红色烟柱效果。
+
+[6] 运输舱门槛高，且落点就在黑曜石平台正上方
+    位置：TransportDesignatorItem.java:127-143、211-221
+          TransportMarkerBlockEntity.java:54-66
+    现状：需要 3×3 黑曜石平台 + 自己插过信标（BeaconRecords）
+          + 每次消耗 1 个下界之星 + 充能 1000（每秒 +1 ≈ 17 分钟回满）。
+    疑点（待实机确认）：落地前的破坏扫描 inner radius=1，正好覆盖 3×3 平台，
+          而落点就是平台正上方，可能每飞一次就砸掉一部分黑曜石。
+    建议：先确认平台是否被自己砸掉；若是，把运输舱的破坏扫描排除
+          platform 3×3，或让平台方块带保护标记。
+
+================================================================
+二、P1：技术债（整合包 / 服务器兼容，最可能出刷物品与卡人）
+================================================================
+
+[7] 324 格手写分页容器（最高风险）
+    位置：menu/CapsuleMenu.java:71-93（clickMenuButton 手动回传整页内容）
+          menu/CapsuleMenu.java:138-183（PageSlot 用 page 计算真实索引）
+          client/CapsuleScreen.java:51-74（客户端先本地翻页，再发按钮包）
+    风险：漏斗、比较器、快速移动、两人同时开箱、客户端/服务端 page 不同步，
+          都可能错位或复制物品；客户端本地改 page 再等服务端回包，天生有窗口期。
+    建议：砍成 27 或 54 格标准箱子（甚至直接用原版 ChestBlockEntity 逻辑），
+          这是投入产出比最高的一处改动。
+
+[8] mixin 取消 setHealth + 受伤事件全取消 = 无敌
+    位置：mixin/LivingEntitySetHealthMixin.java:14-20
+          compat/CapsuleProtection.java:33-56
+    现状：隐藏座位里的玩家、运输舱乘客的 setHealth 被 HEAD 处 cancel；
+          Attack / Hurt / Damage 事件也全部取消。
+    影响：坐进舱里就是绝对无敌，PvP 服会被玩坏；
+          和生命值上限 / 伤害显示 / 治疗类模组容易打架；
+          mixins.json 里 defaultRequire=1，映射一变就是启动崩溃。
+    建议：改成「只在坠落期间无敌」，落地/出舱立刻还原；
+          无敌实现优先用 invulnerableTime 或 Capability，少用 setHealth cancel。
+
+[9] 实体网络追踪范围过大
+    位置：registry/ModEntities.java:16-22（clientTrackingRange 2000，
+          updateInterval 1）
+    影响：一个在天上飞的舱，会给周围 125 区块内所有玩家每 tick 发包；
+          多人服 + 多人同时召唤时是明显的带宽与 tick 开销。
+    建议：降到 256-384；坠落阶段可以用低频更新 + 客户端插值，
+          只在接近落点时恢复每 tick。
+
+[10] 用错工具挖返回舱会吞掉 324 格物资
+    位置：block/CapsuleBlock.java:141-154（playerWillDestroy 里
+          hasCorrectToolForDrops 才 eject/drop）
+          block/CapsulePartBlock.java:99-120 同上
+    影响：铁镐能挖掉（hardness 20），但物资不会掉出来，直接消失。
+    建议：不管工具对不对，只要进入 onRemove 就 Containers.dropContents。
+
+[11] 强制加载区块可能泄漏
+    位置：block/TransportMarkerBlockEntity.java:123-149
+    现状：configure/onLoad 时 setChunkForced，setRemoved 时释放。
+    风险：用 /setblock、结构方块、世界编辑删掉标记方块时不会走 setRemoved；
+          崩溃也会留下 forcedchunks 记录。长期开服会累积强制加载区块。
+    建议：加一个全局清扫（服务端 tick 定期核对），或改用 ticket 管理器。
+
+[12] 隐藏座位每 tick 强制 teleport 锁位
+    位置：block/CapsuleSeats.java:65-87、124-133
+    影响：每 tick 发传送包，服务器卡顿/丢包时容易「卡在方块里」；
+          玩家在舱内登出、跨维度、被 /tp 时的边界情况较多。
+    建议：改成只发一次位置 + 客户端锁输入，或使用原版 riding 逻辑。
+
+[13] 模组物品随机池的兼容风险
+    位置：loot/ModItemPool.java:94-136
+    现状：扫描所有已装模组的物品，过滤掉 BlockItem / 刷怪蛋 /
+          不可堆叠且无耐久（猜测是 NBT 驱动）的物品，按稀有度加权。
+    风险：能量武器、背包、饰品、需要 Capability 的物品仍可能漏进来，
+          抽到就是「看起来是枪，实际不能用」。
+    建议：保持默认关闭，或在配置里提供「白名单模式」；
+          发布时在常见整合包里跑一遍池子，把问题命名空间写进默认排除列表。
+
+[14] 没有任何自动化测试
+    位置：build.gradle:44-50（开了 gametest namespace）
+    现状：src 下没有 GameTest / 单元测试，全部靠 run 目录手测。
+    建议：至少补 3 个 GameTest：召唤落地、开箱取物、分页容器取放。
+
+================================================================
+三、P2：小问题与打磨项
+================================================================
+
+[15] en_us.json 乱码
+    位置：assets/returncapsule/lang/en_us.json
+          "message.returncapsule.locked": "... 閳?impact in %s s"
+    说明：破折号「—」编码坏了，英文环境会显示乱码。
+    顺带：locked / cooldown / no_space / failed 四条 key 目前没有任何调用。
+
+[16] 破坏音效用了僵尸破门声
+    位置：entity/FallingCapsuleEntity.java:119-132
+          SoundEvents.ZOMBIE_BREAK_WOODEN_DOOR
+    说明：砸石头听起来像砸木门，建议换成 STONE_BREAK / 自定义音效。
+
+[17] 返回舱碰撞箱是完整的 3×3×2 实心块
+    位置：block/CapsuleBlock.java:104-117、block/CapsulePartBlock.java:36-43
+    说明：模型是舱体，但碰撞按整块算，落点周围会出现看不见的墙；
+          玩家只能右键传送进舱。若是有意为之，建议在 README/工具提示里说明。
+
+[18] 分页按钮画在 GUI 之外
+    位置：client/CapsuleScreen.java:37-43（topPos - 14）
+    说明：小窗口 / 大 GUI 缩放下可能跑到屏幕外或被聊天栏挡住。
+
+[19] 创造模式可无限召唤
+    位置：item/CapsuleCallerItem.java:55-57（isCreative 不消耗）
+    说明：配合 [2] 可以无限刷 Boss / 刷地形，测试方便但别带到正式服。
+
+[20] 没有版本控制与发布物料
+    现状：项目目录下没有 .git；mod_license 是 All rights reserved，没有 LICENSE 文件。
+    建议：先 git init + 打 tag（0.12.0），再决定开源协议；
+          发布前补 CurseForge/Modrinth 需要的 description、logo、更新日志。
+
+================================================================
+四、验证情况（哪些是实测、哪些是推断）
+================================================================
+
+已验证（静态 + 日志）：
+  - 0.12.0 jar 完整（assets / data / refmap / mixins / mods.toml 均已展开）；
+  - run/logs/latest.log 有 0.11.15 专用服务器正常启动记录（Done in 2.5s）；
+  - 0.5.0 的 ClientShake 空指针崩溃，当前版本已加 null 检查 + try/catch；
+  - 所有资源 JSON 语法有效（PowerShell 对空 key 的报错是误报，
+    capsule_part.json / transport_marker.json 的空 variants key 是合法的）。
+
+未验证（受环境限制 / 需要实机）：
+  - 0.12.0 未能实机启动：Gradle 缓存在工作区外，被沙箱拒绝写锁文件；
+    正式开服前请自己跑一次 runServer / 客户端进入世界确认。
+  - [3] 领地模组是否真的拦不住（取决于具体模组是否 hook setBlock）。
+  - [6] 运输舱是否真的砸掉自己的黑曜石平台（需开世界确认）。
+  - [11] 强制加载区块泄漏（需长时间/异常退出场景）。
+
+================================================================
+五、建议处理顺序
+================================================================
+
+第一优先（不改会直接影响口碑）：
+  [1] 默认不伤 owner / 降真伤  →  [5] 补召唤反馈与倒计时
+  →  [3] 破坏走 BreakEvent / 加保护判断
+
+第二优先（发布前的稳定性）：
+  [7] 容器改标准尺寸  →  [8] 无敌改成「仅坠落期间」
+  →  [9] 降追踪范围  →  [10] 物资必掉落
+
+第三优先（打磨）：
+  [15]-[18] 文案/音效/UI  →  [14] 补 GameTest  →  [20] git + 发布物料

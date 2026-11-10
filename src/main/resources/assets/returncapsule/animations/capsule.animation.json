@@ -1,0 +1,55 @@
+{
+	"format_version": "1.8.0",
+	"animations": {
+		"open": {
+			"animation_length": 2.125,
+			"bones": {
+				"GJ1": {
+					"position": {
+						"0.0": {
+							"vector": [0, 0, 0]
+						},
+						"0.75": {
+							"vector": [2, 14, -4],
+							"easing": "easeInSine"
+						},
+						"2.125": {
+							"pre": {
+								"vector": [2, 14, -4]
+							},
+							"post": {
+								"vector": [2, 14, -4]
+							},
+							"lerp_mode": "catmullrom"
+						}
+					}
+				}
+			}
+		},
+		"off": {
+			"animation_length": 1,
+			"bones": {
+				"GJ1": {
+					"position": {
+						"0.0": {
+							"vector": [2, 14, -4]
+						},
+						"0.5": {
+							"vector": [0, 0, 0],
+							"easing": "easeInSine"
+						},
+						"1.0": {
+							"pre": {
+								"vector": [0, 0, 0]
+							},
+							"post": {
+								"vector": [0, 0, 0]
+							},
+							"lerp_mode": "catmullrom"
+						}
+					}
+				}
+			}
+		}
+	}
+}

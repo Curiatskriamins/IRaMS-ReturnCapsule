@@ -1,0 +1,14 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "com.curiats.returncapsule.mixin",
+  "compatibilityLevel": "JAVA_17",
+  "refmap": "returncapsule.refmap.json",
+  "mixins": [
+    "LivingEntitySetHealthMixin",
+    "ThrownEnderpearlMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

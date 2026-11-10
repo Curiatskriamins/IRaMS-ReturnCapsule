@@ -1,0 +1,16 @@
+{
+  "variants": {
+    "facing=north": {
+      "model": "returncapsule:block/capsule"
+    },
+    "facing=east": {
+      "model": "returncapsule:block/capsule"
+    },
+    "facing=south": {
+      "model": "returncapsule:block/capsule"
+    },
+    "facing=west": {
+      "model": "returncapsule:block/capsule"
+    }
+  }
+}
