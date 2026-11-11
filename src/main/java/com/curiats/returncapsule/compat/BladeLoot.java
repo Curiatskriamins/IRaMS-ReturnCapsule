@@ -19,13 +19,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
-/**
- * Adds a slashblade-style weapon to a capsule, chosen by its real attack damage.
- *
- * <p>Slashblade mods ship dozens of blades with no crafting recipe, so the capsule is a natural
- * source for them. Damage thresholds: below 7 for tier I, 7-19 for tier II, above 19 for tier
- * III. At most one blade per capsule, so every blade the player sees is unique in that capsule.</p>
- */
+ 
 public final class BladeLoot {
     private static volatile List<Blade> cache;
 
@@ -95,9 +89,7 @@ public final class BladeLoot {
         return false;
     }
 
-    /**
-     * Displayed attack damage is "1 + attribute modifiers", which is also what the tooltip shows.
-     */
+     
     private static double damage(Item item) {
         double bonus = 0.0D;
         for (Map.Entry<Attribute, AttributeModifier> entry

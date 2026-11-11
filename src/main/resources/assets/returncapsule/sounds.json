@@ -3,7 +3,7 @@
     "subtitle": "subtitles.returncapsule.capsule_impact",
     "sounds": [
       {
-        "name": "returncapsule:titan_fall",
+        "name": "minecraft:block.anvil.land",
         "stream": false
       }
     ]

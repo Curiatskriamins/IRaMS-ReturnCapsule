@@ -25,7 +25,7 @@ import net.minecraft.world.phys.shapes.VoxelShape;
 import javax.annotation.Nullable;
 
 public class CapsulePartBlock extends Block {
-    /** 0-17: index into the 3x3x2 shell, so each part knows where it sits around the core. */
+     
     public static final IntegerProperty PART = IntegerProperty.create("part", 0, 17);
 
     private static final VoxelShape EDGE = Block.box(2.0D, 0.0D, 2.0D, 14.0D, 16.0D, 14.0D);
@@ -56,10 +56,7 @@ public class CapsulePartBlock extends Block {
         return shapeFor(state);
     }
 
-    /**
-     * The capsule is round, so the 3x3x2 shell only needs a full box in the centre column,
-     * a slimmer box on the four edges and a small box in the four corners.
-     */
+     
     private static VoxelShape shapeFor(BlockState state) {
         int part = state.getValue(PART);
         int dx = part % 3 - 1;

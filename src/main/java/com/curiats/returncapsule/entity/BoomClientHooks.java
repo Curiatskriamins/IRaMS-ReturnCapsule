@@ -1,10 +1,6 @@
 package com.curiats.returncapsule.entity;
 
-/**
- * Client-only hook for the cruise bomb, mirroring {@link CapsuleClientHooks}. Keeping the
- * reference as an interface means the dedicated server never loads the particle-only client
- * class.
- */
+ 
 public final class BoomClientHooks {
     @FunctionalInterface
     public interface TrailHook {

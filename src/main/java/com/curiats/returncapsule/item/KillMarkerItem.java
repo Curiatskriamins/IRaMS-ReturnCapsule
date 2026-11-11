@@ -39,18 +39,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
-/**
- * Kill indicator: the designator used to call cruise bombs. Its display name deliberately says
- * "kill" so it is never confused with the transport designator used to board a capsule.
- *
- * <p>Holding right click for one second starts marking. While marking, one cruise bomb is fired
- * every second, each one paid for with nine diamonds or one diamond block from the player's
- * inventory. If the player sneaks while marking, the bombs are queued instead of launched, and
- * the whole queue is released at once when the sneak key or the item is released.</p>
- *
- * <p>Anchor type II itself is not a block: every bomb owns its target point inside
- * {@link SuperBigCup} and draws the white particle marker while it flies.</p>
- */
+ 
 public class KillMarkerItem extends Item {
     private static final int USE_DURATION = 72000;
     private static final Map<UUID, Volley> VOLLEYS = new HashMap<>();
@@ -95,7 +84,7 @@ public class KillMarkerItem extends Item {
         Volley volley = VOLLEYS.computeIfAbsent(player.getUUID(), id -> new Volley());
         boolean sneaking = player.isShiftKeyDown();
 
-        // Releasing the sneak key dumps the whole queue at once.
+        
         if (volley.sneaking && !sneaking) {
             release(level, player, volley);
             volley.sneaking = false;
@@ -143,7 +132,7 @@ public class KillMarkerItem extends Item {
         if (volley == null) {
             return;
         }
-        // A dying player should not release a paid volley into the world; give the materials back.
+        
         if (player.isDeadOrDying()) {
             refundShots(player, volley);
             return;
@@ -191,16 +180,13 @@ public class KillMarkerItem extends Item {
             reservedAngles.add(controller.incidenceDegrees());
         }
         if (entity != null && server.getEntity(entity) instanceof LivingEntity) {
-            // The client keeps a single clock instance alive, so a whole volley cannot stack it.
+            
             player.playNotifySound(ModSounds.MISSILE_LOCK.get(), SoundSource.PLAYERS, 1.0F, 1.0F);
         }
         return true;
     }
 
-    /**
-     * The fire interval grows when the server simulation distance is below the configured minimum:
-     * the loaded edge is closer, so the next bomb waits longer before it is released.
-     */
+     
     private static int fireInterval(ServerPlayer player) {
         int interval = Math.max(1, Config.KILL_MARKER_INTERVAL_TICKS.get());
         int minimum = Math.max(1, Config.KILL_MARKER_MIN_SIMULATION_CHUNKS.get());
@@ -211,7 +197,7 @@ public class KillMarkerItem extends Item {
         return interval;
     }
 
-    /** Charges the player for one bomb, or returns {@code null} when they cannot pay. */
+     
     @Nullable
     private static Payment pay(ServerPlayer player) {
         if (player.isCreative()) {
@@ -231,7 +217,7 @@ public class KillMarkerItem extends Item {
         return null;
     }
 
-    /** Returns a failed launch's payment so the player never loses materials for nothing. */
+     
     private static void refund(ServerPlayer player, Payment payment) {
         if (payment.item() == null || payment.count() <= 0) {
             return;
@@ -270,11 +256,11 @@ public class KillMarkerItem extends Item {
         inventory.setChanged();
     }
 
-    /** Resolves the crosshair into a lock target, or {@code null} when it points at nothing. */
+     
     @Nullable
     private static Shot resolveShot(ServerPlayer player, Level level) {
-        // Only mark targets that are inside the simulation radius: the bomb spawns at that edge,
-        // and a bomb in a loaded but non-ticking chunk would never move.
+        
+        
         int simulation = Math.max(1, player.getServer().getPlayerList().getSimulationDistance());
         int margin = Config.BOOM_SPAWN_MARGIN_CHUNKS.get();
         double simulationLimit = Math.max(8.0D, (simulation - margin) * 16.0D - 16.0D);
@@ -304,7 +290,7 @@ public class KillMarkerItem extends Item {
         return null;
     }
 
-    /** Returns every paid but unlaunched shot to the player and clears the volley. */
+     
     public static void refundVolley(ServerPlayer player) {
         Volley volley = VOLLEYS.remove(player.getUUID());
         if (volley != null) {
@@ -319,7 +305,7 @@ public class KillMarkerItem extends Item {
         volley.shots.clear();
     }
 
-    /** Drops a pending sneak volley; called when the player leaves, dies or respawns. */
+     
     public static void dropVolley(UUID playerId) {
         VOLLEYS.remove(playerId);
     }

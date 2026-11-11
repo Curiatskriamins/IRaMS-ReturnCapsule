@@ -43,9 +43,9 @@ public final class TransportLoot {
                 .withParameter(LootContextParams.ORIGIN, Vec3.atCenterOf(server.getSharedSpawnPos()))
                 .create(LootContextParamSets.CHEST);
         List<ItemStack> rolled = new ArrayList<>(table.getRandomItems(params, random.nextLong()));
-        // The vanilla tables roll 33-44 stacks with big fixed counts, which buried the mod
-        // items and produced a lot of 2-6 item stacks. Keep only the best rolls: rarest first,
-        // then insert through ItemInserter so identical stacks merge instead of eating a slot.
+        
+        
+        
         rolled.sort(Comparator.comparingInt((ItemStack stack) -> stack.getRarity().ordinal()).reversed());
         int keep = Config.VANILLA_LOOT_STACKS.get();
         int limit = keep <= 0 ? rolled.size() : Math.min(keep, rolled.size());

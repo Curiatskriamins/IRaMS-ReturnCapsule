@@ -21,13 +21,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-/**
- * Parses a Bedrock style {@code .geo.json} model and bakes it into {@link GeoModel}.
- *
- * <p>The old {@code CapsuleGeoModel} mixed JSON parsing, bone tree handling, bounds maths and
- * rendering in one 490 line class. Parsing, baking and drawing are now separate, and the bake
- * step means the per frame cost no longer depends on the bone hierarchy.</p>
- */
+ 
 public final class GeoModelLoader {
     private static final Logger LOGGER = ReturnCapsuleMod.LOGGER;
     private static final String LID_BONE = "GJ1";
@@ -208,7 +202,7 @@ public final class GeoModelLoader {
         return (float) Math.toRadians(degrees);
     }
 
-    /** Accumulates baked faces while walking the bone tree once. */
+     
     private static final class Baker {
         private final boolean glow;
         private final List<GeoFace> staticFaces = new ArrayList<>();
@@ -238,8 +232,8 @@ public final class GeoModelLoader {
 
             boolean lid = insideLid || LID_BONE.equals(bone.name);
             if (lid && !insideLid) {
-                // The lid translation happens in the parent's space, so its model space
-                // direction is the parent rotation applied to the configured shift.
+                
+                
                 Vector3f shift = new Vector3f(LID_SHIFT_X, LID_SHIFT_Y, LID_SHIFT_Z);
                 new Matrix3f(parent).transform(shift);
                 this.lidShift.set(shift);

@@ -82,9 +82,9 @@ public final class BoomFlareOverlay {
         Vector3f viewOffset = cameraRotation.conjugate(new Quaternionf()).transform(
                 new Vector3f((float) relative.x, (float) relative.y, (float) relative.z));
         pose.pushPose();
-        // The event's PoseStack already contains the camera view rotation, so the world offset must
-        // be converted into view space first. The quad itself is drawn in the view XY plane and is
-        // therefore already camera-facing; do not apply camera.rotation() a second time.
+        
+        
+        
         pose.translate(viewOffset.x, viewOffset.y, viewOffset.z);
         Matrix4f matrix = pose.last().pose();
         float half = size * 0.5F;

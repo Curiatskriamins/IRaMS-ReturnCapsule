@@ -19,9 +19,9 @@ public final class TaczCatalog {
                 local = snapshot;
                 if (local == null) {
                     local = build();
-                    // An empty result usually means TaCZ has not finished indexing its gun
-                    // packs yet, so cache it only once it actually contains guns. Otherwise a
-                    // single early call would disable gun loot for the rest of the session.
+                    
+                    
+                    
                     if (!local.isEmpty()) {
                         snapshot = local;
                     }

@@ -20,7 +20,7 @@ public final class ServerState {
 
     @SubscribeEvent
     public static void onTagsUpdated(TagsUpdatedEvent event) {
-        // A datapack reload can change gun and attachment definitions.
+        
         TaczCatalog.invalidate();
         LrSupport.invalidate();
     }

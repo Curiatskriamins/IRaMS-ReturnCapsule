@@ -10,12 +10,7 @@ import net.minecraft.util.RandomSource;
 import net.minecraft.world.phys.Vec3;
 import org.joml.Vector3f;
 
-/**
- * Client-side exhaust trail of the cruise bomb, emitted every tick at the engine and pushed
- * backwards along the flight direction. It deliberately avoids the large white signal-smoke
- * particle and stays behind the tail, so it cannot swallow the flare or look detached from the
- * missile.
- */
+ 
 public final class BoomClientTrail {
     private static final DustParticleOptions FLAME_DUST =
             new DustParticleOptions(new Vector3f(1.0F, 0.42F, 0.08F), 1.8F);

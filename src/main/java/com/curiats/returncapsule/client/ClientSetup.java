@@ -35,7 +35,7 @@ public final class ClientSetup {
     public static void clientSetup(FMLClientSetupEvent event) {
         event.enqueueWork(() -> {
             MenuScreens.register(ModMenus.CAPSULE.get(), CapsuleScreen::new);
-            // Common code calls these hooks instead of allocating a DistExecutor lambda per tick.
+            
             CapsuleClientHooks.install(ClientTrail::onFallingTick);
             BoomClientHooks.install(BoomClientTrail::onTick);
         });

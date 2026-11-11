@@ -22,13 +22,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
-/**
- * Lazily built pool of items from every installed mod except vanilla, Forge and this mod.
- *
- * <p>Only "safe" items are kept: blocks and spawn eggs are skipped, as are unique items that
- * neither stack nor have durability (those are usually NBT driven, for example guns, backpacks
- * or wands). The default config also excludes the gun mods whose items need NBT to work.</p>
- */
+ 
 public final class ModItemPool {
     private static final Set<String> INTERNAL_NAMESPACES =
             Set.of("minecraft", "forge", "returncapsule", "fml", "neoforge");
@@ -69,7 +63,7 @@ public final class ModItemPool {
             if (stack.isEmpty()) {
                 continue;
             }
-            // One full tier-sized stack per roll instead of 1-3 loose items per slot.
+            
             stack.setCount(Math.max(1, Math.min(maxPerStack(tier), stack.getMaxStackSize())));
             if (!inserter.insert(stack)) {
                 return;
@@ -78,10 +72,7 @@ public final class ModItemPool {
         container.setChanged();
     }
 
-    /**
-     * Draws an item that was not drawn yet, so a capsule feels like a mixed bag instead of
-     * repeating two or three entries. Falls back to the last draw once the pool is exhausted.
-     */
+     
     private static ItemStack randomDistinct(RandomSource random, SummonTier tier, Set<Item> picked) {
         ItemStack fallback = ItemStack.EMPTY;
         for (int attempt = 0; attempt < 5; attempt++) {
@@ -154,7 +145,7 @@ public final class ModItemPool {
         if (Config.MOD_LOOT_EXCLUDED_ITEMS.get().contains(id.toString())) {
             return false;
         }
-        // Armour is delivered by ArmorSets as a complete set, never as loose pieces.
+        
         if (item instanceof BlockItem || item instanceof ArmorItem || isSpawnEgg(id, item)) {
             return false;
         }
@@ -167,10 +158,7 @@ public final class ModItemPool {
         return stack.getMaxStackSize() > 1 || stack.getMaxDamage() > 0;
     }
 
-    /**
-     * Spawn eggs are not always {@link SpawnEggItem}: some mods ship custom egg items whose only
-     * trace is the translation key or the class name, so check all of them.
-     */
+     
     private static boolean isSpawnEgg(ResourceLocation id, Item item) {
         if (item instanceof SpawnEggItem) {
             return true;

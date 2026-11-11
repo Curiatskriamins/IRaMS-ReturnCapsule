@@ -134,7 +134,7 @@ public class CapsuleBlockEntity extends RandomizableContainerBlockEntity {
         this.loot.ensureAssigned();
     }
 
-    /** Fills the container completely, including the guaranteed supplies and unique weapon. */
+     
     public void prepareLoot(Player player) {
         this.loot.prepareForAccess(player);
     }
@@ -231,8 +231,8 @@ public class CapsuleBlockEntity extends RandomizableContainerBlockEntity {
     @Override
     public void load(CompoundTag tag) {
         super.load(tag);
-        // Capsules saved by an older build may hold more stacks than the current slot count;
-        // keep their capacity instead of dropping (or crashing on) the extra entries.
+        
+        
         int saved = tag.getList("Items", Tag.TAG_COMPOUND).size();
         int size = Math.max(this.slots, saved);
         this.items = NonNullList.withSize(size, ItemStack.EMPTY);

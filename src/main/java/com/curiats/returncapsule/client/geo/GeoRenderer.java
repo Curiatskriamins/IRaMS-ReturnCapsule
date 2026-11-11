@@ -8,14 +8,7 @@ import org.joml.Matrix4f;
 import org.joml.Vector3f;
 import org.joml.Vector4f;
 
-/**
- * Streams a baked {@link GeoModel} into a vertex consumer.
- *
- * <p>Zero allocation per frame: vertices and normals are transformed through reusable scratch
- * vectors. The old renderer allocated a {@link Vector3f} for every face normal, applied four
- * pose stack operations per cube and used {@code VertexConsumer.vertex(Matrix4f, ..)} which
- * allocates a {@link Vector4f} per vertex (1368 allocations for this model).</p>
- */
+ 
 public final class GeoRenderer {
     private static final float MODEL_SCALE = 0.0625F;
     private static final Vector4f POSITION = new Vector4f();
@@ -49,7 +42,7 @@ public final class GeoRenderer {
                              VertexConsumer consumer, int packedLight, int overlay,
                              float shiftX, float shiftY, float shiftZ) {
         for (GeoFace face : faces) {
-            // The normal is shared by the four vertices of a face, so transform it once...
+            
             NORMAL.set(face.normalX(), face.normalY(), face.normalZ());
             normalMatrix.transform(NORMAL);
             NORMAL.normalize();
@@ -65,8 +58,8 @@ public final class GeoRenderer {
                         positions[base + 1] + shiftY,
                         positions[base + 2] + shiftZ, 1.0F);
                 matrix.transform(POSITION);
-                // ...but it still has to be emitted for every vertex: BufferBuilder verifies
-                // that each vertex received every element of the format before endVertex().
+                
+                
                 consumer.vertex(POSITION.x, POSITION.y, POSITION.z)
                         .color(255, 255, 255, 255)
                         .uv(uvs[vertex * 2], uvs[vertex * 2 + 1])

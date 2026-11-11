@@ -8,11 +8,7 @@ import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 
-/**
- * The "guaranteed" part of a capsule: what a supply drop always carries regardless of the
- * random tables. Food comes in full stacks because a real fight burns through stacks, and the
- * armour slot always delivers a complete set taken from the installed armour materials.
- */
+ 
 public final class Supplies {
     private static final Item[] FOODS = {
             Items.GOLDEN_CARROT, Items.COOKED_BEEF, Items.BREAD,

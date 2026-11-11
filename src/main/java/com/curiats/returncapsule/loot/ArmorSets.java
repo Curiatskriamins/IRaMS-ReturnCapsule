@@ -23,14 +23,7 @@ import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 
-/**
- * Builds complete armour sets at runtime from the registry.
- *
- * <p>No name matching: every {@link ArmorItem} is grouped by its {@link ArmorMaterial}, so a
- * set is "all four slots sharing one material". Sets are ranked by total defence + toughness,
- * which automatically follows the pack: vanilla leather sits at the bottom, whatever the pack
- * considers top tier (SRP, netherite, modded power armour) sits at the top.</p>
- */
+ 
 public final class ArmorSets {
     private static final List<ArmorItem.Type> SLOTS = List.of(
             ArmorItem.Type.HELMET, ArmorItem.Type.CHESTPLATE,
@@ -80,8 +73,8 @@ public final class ArmorSets {
     }
 
     private static List<Set> build() {
-        // Group by the ArmorMaterial object, not by its name: two mods may both call their
-        // material "steel", and mixing their pieces would produce a broken set.
+        
+        
         Map<ArmorMaterial, EnumMap<ArmorItem.Type, Item>> byMaterial = new IdentityHashMap<>();
         for (Item item : BuiltInRegistries.ITEM) {
             if (!(item instanceof ArmorItem armor)) {
@@ -118,10 +111,7 @@ public final class ArmorSets {
         return List.copyOf(result);
     }
 
-    /**
-     * Score from the item's real attribute modifiers first (that is what the game uses for
-     * armour points and covers modded bonuses), and fall back to the material's base values.
-     */
+     
     private static int itemPower(Item item, ArmorItem.Type type, ArmorMaterial material) {
         EquipmentSlot slot = switch (type) {
             case HELMET -> EquipmentSlot.HEAD;

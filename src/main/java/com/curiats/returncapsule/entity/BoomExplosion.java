@@ -22,18 +22,12 @@ import net.minecraft.world.phys.Vec3;
 
 import javax.annotation.Nullable;
 
-/**
- * Damage model of the cruise bomb.
- *
- * <p>The 30 ray occlusion test is the "30 rays reduce damage" rule from the design: every ray
- * that reaches the target counts, every ray that hits cover does not, and the resulting ratio
- * scales the damage between {@code minDamageMultiplier} and 1.</p>
- */
+ 
 public final class BoomExplosion {
     public enum Mode {
-        /** Reached anchor type II: 500 explosion damage plus the shock debuff. */
+         
         ANCHOR,
-        /** Touched terrain or an entity early: 500 true damage. */
+         
         PREMATURE
     }
 
@@ -42,10 +36,10 @@ public final class BoomExplosion {
         double radius = Config.boomRadius();
         float power = Config.BOOM_POWER.get().floatValue();
 
-        // Only the terrain-destroying mode uses the vanilla explosion. The default mode is drawn
-        // by our own particles and damage, and plays a dedicated boom_impact event that references
-        // the vanilla explosion sound. Because the event location is returncapsule:boom_impact,
-        // ClientShake (which only reacts to GENERIC_EXPLODE) does not add camera shake.
+        
+        
+        
+        
         if (Config.BOOM_DESTROY_TERRAIN.get()) {
             level.explode(bomb, center.x, center.y, center.z, power, Level.ExplosionInteraction.BLOCK);
         } else {
@@ -55,9 +49,9 @@ public final class BoomExplosion {
 
         spawnParticles(level, center, radius);
 
-        // Same shake path as the return capsule landing: a SHAKE effect on nearby players, driven by
-        // ClientShake. The boom_impact sound itself is a custom event, so it never triggers the
-        // generic-explosion sound shake on top of this.
+        
+        
+        
         if (Config.SCREEN_SHAKE.get()) {
             ShakeBurst.around(level, center.x, center.y, center.z, Config.SHAKE_RADIUS.get(), 25, 0);
         }

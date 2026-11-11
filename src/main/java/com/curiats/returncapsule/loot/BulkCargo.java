@@ -7,11 +7,7 @@ import net.minecraft.util.RandomSource;
 import net.minecraft.world.Container;
 import net.minecraft.world.item.ItemStack;
 
-/**
- * Tops the capsule up to a target fill ratio with more items of the same tier, so a 324 slot
- * capsule does not hand out one sparse page and five empty ones. The top-up uses the mod item
- * pool of the same tier, so the extra slots stay "mixed bag" instead of becoming vanilla bulk.
- */
+ 
 public final class BulkCargo {
     public static void fill(Container container, SummonTier tier, RandomSource random) {
         double target = Config.FILL_TARGET.get();

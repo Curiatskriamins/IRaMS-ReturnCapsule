@@ -72,10 +72,7 @@ public final class ShockManager {
         STUNS.clear();
     }
 
-    /**
-     * Pure shock: keep the target in place for {@code ticks} without dealing any damage. The
-     * cruise bomb uses this because its explosion already applies its own damage.
-     */
+     
     public static void applyShock(LivingEntity target, int ticks) {
         if (ticks <= 0 || target.level().isClientSide || !target.isAlive()) {
             return;

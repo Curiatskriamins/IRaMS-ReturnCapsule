@@ -45,10 +45,10 @@ final class CapsuleLoot {
         if (!(this.owner.getLevel() instanceof ServerLevel server)) {
             return;
         }
-        // A capsule receives its loot table the moment it lands (phase TABLE), so the gun
-        // decision has to be possible after that point too. Both "no table yet" and "table
-        // assigned but not opened yet" pass through here; only this method picks between the
-        // TaCZ gun fill and the vanilla table.
+        
+        
+        
+        
         RandomSource random = server.random;
         SummonTier tier = this.owner.getTier();
         if (TieredLoot.allowsGunLoot(tier) && TaCZIntegration.isLoaded()
@@ -111,7 +111,7 @@ final class CapsuleLoot {
                 this.phase = Phase.valueOf(tag.getString(TAG_PHASE));
                 return;
             } catch (IllegalArgumentException ignored) {
-                // Fall through to the legacy interpretation below.
+                
             }
         }
         if (tag.getBoolean(TAG_GENERATED)) {

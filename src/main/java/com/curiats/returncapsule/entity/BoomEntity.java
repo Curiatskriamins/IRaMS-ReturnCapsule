@@ -20,17 +20,7 @@ import net.minecraft.world.phys.Vec3;
 import javax.annotation.Nullable;
 import java.util.UUID;
 
-/**
- * The cruise bomb ("Boom" in the design notes): a guided falling entity that locks an anchor type
- * II and flies at the return capsule's terminal speed.
- *
- * <p>It explodes in two different ways on purpose:</p>
- * <ul>
- *   <li>reaching the anchor: 500 explosion damage plus an 8 second shock;</li>
- *   <li>touching any block or entity on the way: 500 true damage, because the bomb failed to
- *       deliver its payload to the designated point.</li>
- * </ul>
- */
+ 
 public class BoomEntity extends Entity {
     private static final String TAG_OWNER = "Owner";
     private static final String TAG_LOCKED_ENTITY = "LockedEntity";
@@ -75,8 +65,8 @@ public class BoomEntity extends Entity {
     public void tick() {
         super.tick();
         if (this.level().isClientSide) {
-            // Every client draws its own dense trail at the interpolated model position, which
-            // removes the stepped look of the old two-tick server-side puffs.
+            
+            
             BoomClientHooks.onTick(this);
             return;
         }
@@ -112,7 +102,7 @@ public class BoomEntity extends Entity {
         Vec3 next = from.add(dir.scale(speed));
         this.setPos(next.x, next.y, next.z);
 
-        // A segment test catches the target even when one tick is longer than the contact radius.
+        
         if (segmentDistanceSqr(from, next, target) <= CONTACT_RADIUS * CONTACT_RADIUS) {
             this.setPos(target.x, target.y, target.z);
             this.detonate(server, BoomExplosion.Mode.ANCHOR);
@@ -123,7 +113,7 @@ public class BoomEntity extends Entity {
                 ClipContext.Block.COLLIDER, ClipContext.Fluid.NONE, this));
         if (hit.getType() != HitResult.Type.MISS) {
             if (hit.getLocation().distanceToSqr(target) <= GRAZE_RADIUS * GRAZE_RADIUS) {
-                // The anchor sits on the surface we just touched, not behind it.
+                
                 this.setPos(target.x, target.y, target.z);
                 this.detonate(server, BoomExplosion.Mode.ANCHOR);
                 return;
@@ -265,9 +255,9 @@ public class BoomEntity extends Entity {
 
     @Override
     public void lerpTo(double x, double y, double z, float yRot, float xRot, int steps, boolean teleport) {
-        // The bomb crosses almost four blocks per tick. The vanilla three-step interpolation makes
-        // the model visibly trail behind its own position packets, which reads as stutter at this
-        // speed; one extra step smooths the model without a noticeable delay.
+        
+        
+        
         super.lerpTo(x, y, z, yRot, xRot, teleport ? steps : Math.max(4, steps), teleport);
     }
 

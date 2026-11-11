@@ -11,13 +11,7 @@ import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.util.RandomSource;
 import org.joml.Vector3f;
 
-/**
- * Client side smoke trail of a falling capsule.
- *
- * <p>The two ex {@code DistExecutor} lambdas and both hard coded particle counts moved here.
- * Counts are scaled by {@link Config#TRAIL_SCALE}, and the shared emitter removes the copy
- * pasted between the supply and transport variants.</p>
- */
+ 
 public final class ClientTrail {
     private static final DustParticleOptions TRANSPORT_DUST =
             new DustParticleOptions(new Vector3f(1.0F, 0.05F, 0.05F), 1.4F);
@@ -67,10 +61,7 @@ public final class ClientTrail {
         }
     }
 
-    /**
-     * Emits {@code count} particles in a box of the given half extents around the capsule, with
-     * a vertical offset, reproducing the original per particle type distributions.
-     */
+     
     private static void emit(ClientLevel level, RandomSource random, ParticleOptions particle, int count,
                              double cx, double cy, double cz,
                              double halfX, double spreadY, double halfZ,

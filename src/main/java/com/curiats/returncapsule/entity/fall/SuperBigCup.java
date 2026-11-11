@@ -20,30 +20,11 @@ import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
-/**
- * Flight brain of the cruise bomb. It is also the only owner of the "anchor type II": the anchor
- * is not a block, it is a target point held here plus a particle marker drawn for every player.
- *
- * <p>Responsibilities:</p>
- * <ol>
- *   <li><b>Target point handling</b> — a fixed world point, or the live centre of a locked
- *       entity.</li>
- *   <li><b>Continuous locking</b> — {@link #update()} re-resolves the locked entity every tick,
- *       so the bomb follows it after it walks away.</li>
- *   <li><b>Incidence angle and spawn point</b> — the bomb appears at the edge of the server's
- *       simulation distance and flies a straight line to the target. {@link #nextIncidence()}
- *       hands out a different base angle for every bomb; if the line is obstructed the controller
- *       tries other angles and azimuths.</li>
- *   <li><b>Flexible steering</b> — a fan of directions around the direct line is sampled every
- *       tick, which allows the sharp turns needed to follow a channel to the target.</li>
- *   <li><b>Marker particles</b> — {@link #markerParticles()} is the visible anchor type II: the
- *       same smoke + dust puff as anchor type I, in white, broadcast to every player.</li>
- * </ol>
- */
+ 
 public final class SuperBigCup {
     private static final double MIN_INCIDENCE = 5.0D;
     private static final double MAX_INCIDENCE = 85.0D;
-    /** Extra incidence angles tried when the requested one is obstructed, as offsets in degrees. */
+     
     private static final double[] INCIDENCE_FALLBACKS = {15.0D, -15.0D, 30.0D, -30.0D, 45.0D, -45.0D};
     private static final int AZIMUTH_STEPS = 12;
     private static final int[] YAW_OFFSETS = {-90, -45, -20, 0, 20, 45, 90};
@@ -51,7 +32,7 @@ public final class SuperBigCup {
     private static final double CLEAR_EPSILON = 0.05D;
     private static final DustParticleOptions MARKER_DUST =
             new DustParticleOptions(new Vector3f(1.0F, 1.0F, 1.0F), 1.2F);
-    /** Low-angle spiral around the target before the terminal dive. */
+     
     private static final int SPIRAL_DURATION = 70;
     private static final double SPIRAL_TURNS = 1.0D;
     private static final double SPIRAL_RADIUS = 45.0D;
@@ -64,10 +45,10 @@ public final class SuperBigCup {
     @Nullable
     private UUID lockedEntity;
     private Vec3 targetPoint;
-    /** Offset from the live target point to the spawn point at the loaded chunk edge. */
+     
     private final Vec3 approachOffset;
     private final double incidenceDegrees;
-    /** Horizontal angle where the spiral starts (the spawn side). */
+     
     private final double spiralAngle;
     private int spiralTicks;
 
@@ -81,10 +62,7 @@ public final class SuperBigCup {
         this.spiralAngle = Math.atan2(approachOffset.z, approachOffset.x);
     }
 
-    /**
-     * Hands out the next incidence angle. The sequence holds every 0.1 degree from 5 to 85
-     * (801 distinct values), so even a full 256 bomb queue never repeats an angle.
-     */
+     
     public static synchronized double nextIncidence() {
         if (incidenceSequence == null) {
             double base = Mth.clamp(Config.BOOM_INCIDENCE_DEGREES.get(), MIN_INCIDENCE, MAX_INCIDENCE);
@@ -106,12 +84,7 @@ public final class SuperBigCup {
         return angle;
     }
 
-    /**
-     * Builds a controller for a freshly marked target. The spawn point sits inside the edge of
-     * the server simulation distance, at the requested incidence angle. {@code playerDistance} is
-     * the distance from the shooter to the target: it keeps the spawn inside the ticking area
-     * when the target itself is already far from the player.
-     */
+     
     public static SuperBigCup create(ServerLevel level, Vec3 targetPoint, @Nullable UUID lockedEntity,
                                      double incidenceDegrees, double playerDistance,
                                      @Nullable Vec3 playerPos,
@@ -123,8 +96,8 @@ public final class SuperBigCup {
         double baseAngle = Mth.clamp(incidenceDegrees, MIN_INCIDENCE, MAX_INCIDENCE);
         double angleRad = Math.toRadians(baseAngle);
         double cos = Math.max(0.05D, Math.cos(angleRad));
-        // Spawn behind the shooter at the simulation edge instead of next to the target. For a far
-        // target this turns the old 16-block hop into a 250+ block approach.
+        
+        
         double horizontal = Math.max(0.0D, playerDistance) + radius * cos;
         double distance = horizontal / cos;
         double baseAzimuth = playerPos == null
@@ -135,7 +108,7 @@ public final class SuperBigCup {
         return new SuperBigCup(level, lockedEntity, targetPoint, approach.offset(), approach.angle());
     }
 
-    /** Rebuilds a controller from saved data, keeping the previously chosen spawn offset. */
+     
     public static SuperBigCup restore(ServerLevel level, @Nullable UUID lockedEntity,
                                       Vec3 fallbackPoint, Vec3 approachOffset, double incidenceDegrees) {
         Vec3 point = fallbackPoint;
@@ -148,14 +121,11 @@ public final class SuperBigCup {
         return new SuperBigCup(level, lockedEntity, point, approachOffset, incidenceDegrees);
     }
 
-    /**
-     * Re-reads the locked entity. This is the "continuous lock": the target point follows the
-     * entity as long as it is alive; after it dies the last known point is kept.
-     */
+     
     public void update(Vec3 from) {
-        // The spiral starts only after the bomb has reached the target area; otherwise the timer
-        // would run out during the long approach from the spawn edge and the bomb would fly
-        // straight again.
+        
+        
+        
         if (this.spiralTicks < SPIRAL_DURATION
                 && (this.spiralTicks > 0
                 || from.distanceToSqr(this.targetPoint)
@@ -180,10 +150,7 @@ public final class SuperBigCup {
         return this.targetPoint;
     }
 
-    /**
-     * Current steering point. It starts on a low-angle spiral around the target and ends exactly
-     * on the target, so the bomb circles down instead of crossing the whole map in two seconds.
-     */
+     
     public Vec3 aimPoint() {
         if (this.spiralTicks >= SPIRAL_DURATION) {
             return this.targetPoint;
@@ -195,7 +162,7 @@ public final class SuperBigCup {
         return this.targetPoint.add(Math.cos(angle) * radius, height, Math.sin(angle) * radius);
     }
 
-    /** Spawn point on the loaded edge; it follows a moving target. */
+     
     public Vec3 launchPoint() {
         return this.targetPoint.add(this.approachOffset);
     }
@@ -213,10 +180,7 @@ public final class SuperBigCup {
         return uuid.equals(this.lockedEntity);
     }
 
-    /**
-     * Direct line if possible, otherwise the best direction of a fan around it. No turn rate
-     * limit on purpose: the design allows sharp turns to squeeze through a channel.
-     */
+     
     public Vec3 steer(Vec3 from, Vec3 desired, @Nullable Entity source) {
         Vec3 direct = this.targetPoint.subtract(from);
         double distance = direct.length();
@@ -251,11 +215,7 @@ public final class SuperBigCup {
         return best;
     }
 
-    /**
-     * The visible "anchor type II": the same smoke + dust puff as anchor type I, in white, plus a
-     * tall white column so the marked target can be seen from far away. Broadcast with the
-     * long-distance flag, like the capsule impact particles.
-     */
+     
     public void markerParticles() {
         Vec3 point = this.targetPoint;
         double x = point.x;
@@ -275,7 +235,7 @@ public final class SuperBigCup {
         return clearDistance(this.level, from, to, source) >= from.distanceTo(to) - CLEAR_EPSILON;
     }
 
-    /** Distance travelled from {@code from} before the first collider, or the full distance. */
+     
     private static double clearDistance(net.minecraft.world.level.Level level, Vec3 from, Vec3 to,
                                         @Nullable Entity source) {
         if (from.distanceToSqr(to) < 1.0E-6D) {
@@ -306,7 +266,7 @@ public final class SuperBigCup {
         double bestClear = -1.0D;
         for (int index = 0; index < angles.size(); index++) {
             double angle = angles.get(index);
-            // The requested angle is always allowed; fallbacks must not steal another bomb's angle.
+            
             if (index > 0 && isReserved(angle, reservedAngles)) {
                 continue;
             }

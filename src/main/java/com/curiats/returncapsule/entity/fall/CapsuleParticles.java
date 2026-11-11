@@ -32,7 +32,7 @@ public final class CapsuleParticles {
         level.sendParticles(particle, x, y, z, scaled, dx, dy, dz, speed);
     }
 
-    /** Sends the particles only to players within {@code radius} blocks of the point. */
+     
     public static void within(ServerLevel level, double radius, ParticleOptions particle,
                               double x, double y, double z, int count,
                               double dx, double dy, double dz, double speed) {

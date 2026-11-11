@@ -11,12 +11,7 @@ import net.minecraftforge.client.event.sound.PlaySoundEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 
-/**
- * Keeps exactly one clock instance alive. A volley locks a target once per bomb and the server
- * therefore sends one lock sound packet per bomb; this handler cancels those packets and only
- * starts the clock when the previous 13.5 s clock has already finished, so the sound never
- * stacks.
- */
+ 
 @Mod.EventBusSubscriber(modid = ReturnCapsuleMod.MODID, value = Dist.CLIENT)
 public final class MissileLockSound {
     private static final ResourceLocation LOCK = ReturnCapsuleMod.id("missile_lock");
@@ -31,7 +26,7 @@ public final class MissileLockSound {
         if (!LOCK.equals(sound.getLocation())) {
             return;
         }
-        // Cancel the server-side instance; the single local clock is managed below.
+        
         event.setSound(null);
         Minecraft minecraft = Minecraft.getInstance();
         if (active != null && minecraft.getSoundManager().isActive(active)) {

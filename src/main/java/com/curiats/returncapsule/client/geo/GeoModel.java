@@ -1,13 +1,6 @@
 package com.curiats.returncapsule.client.geo;
 
-/**
- * Immutable, fully baked capsule geometry.
- *
- * <p>Static bones are transformed into model space once at load time, so a frame only streams
- * vertices. The animated lid is the single exception: its quads are stored without the lid
- * translation and shifted by {@link #lidOffsetX()} etc. while rendering, which is exactly the
- * transform the original recursive renderer applied through the pose stack.</p>
- */
+ 
 public final class GeoModel {
     private static final GeoFace[] NO_FACES = new GeoFace[0];
 

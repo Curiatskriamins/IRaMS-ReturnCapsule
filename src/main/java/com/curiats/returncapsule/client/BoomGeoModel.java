@@ -11,15 +11,7 @@ import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.RenderType;
 import net.minecraft.resources.ResourceLocation;
 
-/**
- * Cached geometry of the cruise bomb. The file lives in {@code geo/boom.geo.json} and was
- * converted from the Bedrock model in {@code sjjd/导弹/boom.geo.json}.
- *
- * <p>Like the capsule, the bomb has an optional emissive layer: {@code boom_glow.png} is a
- * transparent mask that keeps only the red parts, and it is drawn a second time with an
- * emissive render type at full brightness. Remove that texture in a resource pack to disable
- * the glow.</p>
- */
+ 
 public final class BoomGeoModel {
     private static final ResourceLocation GEO = ReturnCapsuleMod.id("geo/boom.geo.json");
     public static final ResourceLocation TEXTURE = ReturnCapsuleMod.id("textures/entity/boom.png");

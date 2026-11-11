@@ -59,9 +59,9 @@ public class CapsuleBlock extends BaseEntityBlock {
     public void setPlacedBy(Level level, BlockPos pos, BlockState state, @Nullable LivingEntity placer, ItemStack stack) {
         super.setPlacedBy(level, pos, state, placer, stack);
         if (!level.isClientSide && level.getBlockEntity(pos) instanceof CapsuleBlockEntity capsule) {
-            // A capsule placed by a player is an empty container. Only a capsule that fell from
-            // the sky is allowed to roll loot: otherwise mining a landed capsule and placing it
-            // again would generate a fresh loot table every time.
+            
+            
+            
             capsule.markLootGenerated();
         }
     }

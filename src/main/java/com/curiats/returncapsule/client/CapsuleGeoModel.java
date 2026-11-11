@@ -11,12 +11,7 @@ import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.RenderType;
 import net.minecraft.resources.ResourceLocation;
 
-/**
- * Cached capsule geometry plus its texture layers.
- *
- * <p>All parsing lives in {@link GeoModelLoader} and all drawing in {@link GeoRenderer}; this
- * class is only the cache and the resource locations, so the three renderers keep a tiny API.</p>
- */
+ 
 public final class CapsuleGeoModel {
     private static final ResourceLocation GEO = ReturnCapsuleMod.id("geo/capsule.geo.json");
     public static final ResourceLocation TEXTURE = ReturnCapsuleMod.id("textures/entity/capsule.png");

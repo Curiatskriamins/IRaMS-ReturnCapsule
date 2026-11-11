@@ -94,7 +94,8 @@ public class SupplyCapsuleEntity extends FallingCapsuleEntity {
         server.playSound(null, x, y, z, SoundEvents.GENERIC_EXPLODE, SoundSource.BLOCKS,
                 Config.IMPACT_SOUND_VOLUME.get().floatValue(),
                 Config.IMPACT_SOUND_PITCH.get().floatValue());
-        // Slowed anvil by default; the bundled steel_impact pack swaps this event for metal.
+        
+        
         server.playSound(null, x, y, z, ModSounds.CAPSULE_IMPACT.get(), SoundSource.BLOCKS,
                 Config.IMPACT_THUD_VOLUME.get().floatValue(),
                 Config.IMPACT_THUD_PITCH.get().floatValue());
@@ -153,13 +154,13 @@ public class SupplyCapsuleEntity extends FallingCapsuleEntity {
     @Override
     protected void addAdditionalSaveData(CompoundTag tag) {
         super.addAdditionalSaveData(tag);
-        // Keep writing the legacy key so worlds saved by an older build stay readable.
+        
         if (this.anchor != null) {
             tag.putLong(TAG_LEGACY_TARGET, this.anchor.asLong());
         }
     }
 
-    // Referenced from data driven code paths that predate the base class split.
+    
     public boolean isImpacted() {
         return this.impacted;
     }

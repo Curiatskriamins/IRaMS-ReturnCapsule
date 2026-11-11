@@ -11,10 +11,7 @@ import net.minecraft.client.renderer.texture.OverlayTexture;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.Mth;
 
-/**
- * Draws the cruise bomb along its flight direction. The model is reused for both the cruise and
- * the terminal dive, so the nose follows the actual movement vector instead of a fixed yaw.
- */
+ 
 public class BoomRenderer extends EntityRenderer<BoomEntity> {
     public BoomRenderer(EntityRendererProvider.Context context) {
         super(context);
@@ -33,8 +30,8 @@ public class BoomRenderer extends EntityRenderer<BoomEntity> {
         pose.pushPose();
         float yaw = Mth.lerp(partialTick, entity.yRotO, entity.getYRot());
         float pitch = Mth.lerp(partialTick, entity.xRotO, entity.getXRot());
-        // The model is authored nose-down (-Y), so turn it to +Z first, then align +Z with the
-        // actual flight direction. This keeps the nose pointing forward for the whole flight.
+        
+        
         pose.mulPose(Axis.YP.rotationDegrees(yaw));
         pose.mulPose(Axis.XP.rotationDegrees(pitch));
         pose.mulPose(Axis.XP.rotationDegrees(

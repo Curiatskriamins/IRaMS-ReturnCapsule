@@ -171,13 +171,13 @@ public final class Config {
                 .comment("落地爆炸音效的音调(Pitch of the landing explosion sound)")
                 .defineInRange("impactSoundPitch", 0.55D, 0.1D, 2.0D);
         IMPACT_THUD_VOLUME = builder
-                .comment("落地闷响/内置音效包的音量(Volume of the landing thud / bundled sound pack impact)",
-                        "默认 4.0，让 titan fall 不至于被 5.0 的爆炸声完全盖住(Default 4.0 so the titan-fall pack is not buried by the 5.0 explosion)")
+                .comment("落地闷响/内置音效包的音量(Volume of the landing anvil thud / bundled sound pack impact)",
+                        "默认 4.0，让铁砧/泰坦陨落不至于被 5.0 的爆炸声完全盖住(Default 4.0 so the anvil/titan-fall thud is not buried by the 5.0 explosion)")
                 .defineInRange("impactThudVolume", 4.0D, 0.0D, 16.0D);
         IMPACT_THUD_PITCH = builder
-                .comment("落地闷响的播放音调，默认 1.0(Pitch used when playing the landing thud; default 1.0)",
-                        "音效文件本身的音高已经录好，一般保持 1.0(The sound file already has its own pitch, so keep this at 1.0)")
-                .defineInRange("impactThudPitch", 1.0D, 0.1D, 2.0D);
+                .comment("落地闷响的播放音调，默认 0.55 让原版铁砧听起来更慢更沉(Pitch used when playing the landing thud; 0.55 slows the vanilla anvil down)",
+                        "使用泰坦陨落音效包时文件本身已有音高，可以改回 1.0(When using the titan-fall pack the file already has its own pitch, so raise this back to 1.0)")
+                .defineInRange("impactThudPitch", 0.55D, 0.1D, 2.0D);
         builder.pop();
 
         builder.push("shock");

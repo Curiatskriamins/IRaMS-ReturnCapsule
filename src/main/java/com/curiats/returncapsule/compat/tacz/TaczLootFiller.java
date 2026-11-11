@@ -69,7 +69,7 @@ public final class TaczLootFiller {
             return;
         }
         if (wanted == available) {
-            // Small pools are cheaper to shuffle than to sample.
+            
             List<ResourceLocation> all = new ArrayList<>(attachments);
             shuffle(all, random);
             for (ResourceLocation id : all) {

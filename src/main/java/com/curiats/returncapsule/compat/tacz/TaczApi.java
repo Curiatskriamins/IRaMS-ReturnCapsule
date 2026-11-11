@@ -147,7 +147,7 @@ final class TaczApi {
                 return String.valueOf(collection.iterator().next());
             }
         } catch (ReflectiveOperationException | RuntimeException ignored) {
-            // Fall back to the default fire mode below.
+            
         }
         return "SEMI";
     }
