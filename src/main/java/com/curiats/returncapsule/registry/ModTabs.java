@@ -19,6 +19,7 @@ public final class ModTabs {
                     .displayItems((parameters, output) -> {
                         output.accept(ModItems.CAPSULE_CALLER.get());
                         output.accept(ModItems.TRANSPORT_DESIGNATOR.get());
+                        output.accept(ModItems.KILL_MARKER_INDICATOR.get());
                         output.accept(ModItems.CAPSULE.get());
                     })
                     .build());

@@ -72,6 +72,29 @@ public final class Config {
     public static final ForgeConfigSpec.IntValue TACZ_MAX_ATTACHMENTS;
     public static final ForgeConfigSpec.DoubleValue TACZ_AMMO_MULTIPLIER;
 
+    public static final ForgeConfigSpec.DoubleValue BOOM_POWER;
+    public static final ForgeConfigSpec.BooleanValue BOOM_DESTROY_TERRAIN;
+    public static final ForgeConfigSpec.DoubleValue BOOM_DAMAGE;
+    public static final ForgeConfigSpec.DoubleValue BOOM_TRUE_DAMAGE;
+    public static final ForgeConfigSpec.IntValue BOOM_SHOCK_TICKS;
+    public static final ForgeConfigSpec.IntValue BOOM_RAYS;
+    public static final ForgeConfigSpec.DoubleValue BOOM_MIN_DAMAGE_MULTIPLIER;
+    public static final ForgeConfigSpec.DoubleValue BOOM_RADIUS_PER_POWER;
+    public static final ForgeConfigSpec.DoubleValue BOOM_INCIDENCE_DEGREES;
+    public static final ForgeConfigSpec.IntValue BOOM_SPAWN_MARGIN_CHUNKS;
+    public static final ForgeConfigSpec.BooleanValue BOOM_HURT_OWNER;
+    public static final ForgeConfigSpec.IntValue BOOM_MAX_LIFETIME_TICKS;
+    public static final ForgeConfigSpec.DoubleValue BOOM_MODEL_SCALE;
+    public static final ForgeConfigSpec.DoubleValue BOOM_MODEL_BASE_PITCH;
+
+    public static final ForgeConfigSpec.IntValue KILL_MARKER_RANGE;
+    public static final ForgeConfigSpec.IntValue KILL_MARKER_CHARGE_TICKS;
+    public static final ForgeConfigSpec.IntValue KILL_MARKER_INTERVAL_TICKS;
+    public static final ForgeConfigSpec.IntValue KILL_MARKER_DIAMONDS;
+    public static final ForgeConfigSpec.IntValue KILL_MARKER_DIAMOND_BLOCKS;
+    public static final ForgeConfigSpec.IntValue KILL_MARKER_MIN_SIMULATION_CHUNKS;
+    public static final ForgeConfigSpec.IntValue KILL_MARKER_MAX_QUEUED;
+
     static {
         ForgeConfigSpec.Builder builder = new ForgeConfigSpec.Builder();
 
@@ -291,12 +314,86 @@ public final class Config {
                 .defineInRange("taczAmmoMultiplier", 1.0D, 0.0D, 100.0D);
         builder.pop();
 
+        builder.push("boom");
+        BOOM_POWER = builder
+                .comment("巡航弹爆炸威力(Explosion power of the cruise bomb)",
+                        "默认配置不破坏地形，该数值只决定伤害范围(The default config keeps terrain intact, so this only decides the damage radius)")
+                .defineInRange("power", 1.8D, 0.0D, 16.0D);
+        BOOM_RADIUS_PER_POWER = builder
+                .comment("每点威力换算的伤害半径，最终半径 = 威力 × 该值(Damage radius per point of power; final radius = power x this value)")
+                .defineInRange("radiusPerPower", 2.0D, 0.5D, 16.0D);
+        BOOM_DESTROY_TERRAIN = builder
+                .comment("巡航弹是否破坏地形(Whether the cruise bomb destroys terrain)")
+                .define("destroyTerrain", false);
+        BOOM_DAMAGE = builder
+                .comment("命中锚点二型时的爆炸伤害(Explosion damage when the bomb reaches the anchor)")
+                .defineInRange("damage", 500.0D, 0.0D, 1_000_000.0D);
+        BOOM_TRUE_DAMAGE = builder
+                .comment("提前撞到方块或实体时的真伤(True damage when the bomb hits a block or entity before the anchor)")
+                .defineInRange("trueDamage", 500.0D, 0.0D, 1_000_000.0D);
+        BOOM_SHOCK_TICKS = builder
+                .comment("爆炸附加的震撼时长 tick(Shock duration applied by the explosion in ticks)")
+                .defineInRange("shockTicks", 160, 0, 1200);
+        BOOM_RAYS = builder
+                .comment("每个目标用于计算减伤的射线数量(Rays cast at every target to compute the damage reduction)")
+                .defineInRange("damageRays", 30, 1, 128);
+        BOOM_MIN_DAMAGE_MULTIPLIER = builder
+                .comment("全部射线被阻挡时保留的伤害倍率(Damage multiplier kept when every ray is blocked)")
+                .defineInRange("minDamageMultiplier", 0.1D, 0.0D, 1.0D);
+        BOOM_INCIDENCE_DEGREES = builder
+                .comment("第一枚巡航弹的入射角，后续巡航弹会自动错开，单位为度，0 为水平、90 为垂直(Incidence angle of the first bomb in degrees above the horizon; later bombs deliberately use different angles)")
+                .defineInRange("incidenceDegrees", 45.0D, 5.0D, 85.0D);
+        BOOM_SPAWN_MARGIN_CHUNKS = builder
+                .comment("从服务器模拟距离边缘向内缩进多少区块生成，0 表示正好在边缘(Spawn this many chunks inside the server simulation distance edge; 0 means exactly on the edge)")
+                .defineInRange("spawnMarginChunks", 1, 0, 8);
+        BOOM_HURT_OWNER = builder
+                .comment("使用者是否会被自己的巡航弹伤到(Whether the user can be hurt by their own cruise bomb)")
+                .define("hurtOwner", false);
+        BOOM_MAX_LIFETIME_TICKS = builder
+                .comment("巡航弹最长飞行时间，超时自爆；默认 1200 tick = 1 分钟(Maximum flight time in ticks before the bomb self destructs; 1200 ticks = 1 minute)")
+                .defineInRange("maxLifetimeTicks", 1200, 40, 12000);
+        BOOM_MODEL_SCALE = builder
+                .comment("巡航弹模型缩放倍率；模型本体约 55 单位长，1.0 即约 3.4 格(Model scale multiplier of the cruise bomb; the body is about 55 units long, so 1.0 is roughly 3.4 blocks)")
+                .defineInRange("modelScale", 1.0D, 0.1D, 10.0D);
+        BOOM_MODEL_BASE_PITCH = builder
+                .comment("模型自身朝向的补偿角：模型默认朝下(-Y)时用 -90 把弹头转到 +Z；若模型在游戏里前后颠倒，改成 90(Base orientation of the model: -90 turns a nose-down (-Y) model to +Z; use 90 if the model flies backwards)")
+                .defineInRange("modelBasePitch", -90.0D, -180.0D, 180.0D);
+        builder.pop();
+
+        builder.push("kill_marker");
+        KILL_MARKER_RANGE = builder
+                .comment("击杀指示器的准星标记距离，会被服务器模拟距离截断，保证目标在弹体可 tick 的范围内(Crosshair marking range of the kill indicator; clamped to the server simulation distance so the target is inside the ticking area)")
+                .defineInRange("range", 128, 8, 512);
+        KILL_MARKER_CHARGE_TICKS = builder
+                .comment("长按多少 tick 后开始标记，默认 20 tick = 1 秒(Ticks the indicator must be held before it starts marking; 20 ticks = 1 second)")
+                .defineInRange("chargeTicks", 20, 1, 200);
+        KILL_MARKER_INTERVAL_TICKS = builder
+                .comment("标记期间每隔多少 tick 发射一枚巡航弹，默认 20 tick = 1 秒(One bomb per this many ticks while marking; 20 ticks = 1 second)")
+                .defineInRange("intervalTicks", 20, 1, 400);
+        KILL_MARKER_DIAMONDS = builder
+                .comment("每枚巡航弹消耗的钻石数量(Diamonds consumed by one bomb)")
+                .defineInRange("diamonds", 9, 1, 64);
+        KILL_MARKER_DIAMOND_BLOCKS = builder
+                .comment("钻石不足时改为消耗的钻石块数量(Diamond blocks consumed instead when there are not enough diamonds)")
+                .defineInRange("diamondBlocks", 1, 1, 9);
+        KILL_MARKER_MIN_SIMULATION_CHUNKS = builder
+                .comment("服务器模拟距离低于该区块数时，每次发射后额外等待 (差值 × 20) tick 再发射(When the server simulation distance is below this many chunks, wait an extra 20 ticks per missing chunk before the next shot)")
+                .defineInRange("minSimulationChunks", 8, 1, 32);
+        KILL_MARKER_MAX_QUEUED = builder
+                .comment("潜行时最多暂存多少枚巡航弹(Maximum number of bombs queued while sneaking)")
+                .defineInRange("maxQueued", 50, 1, 256);
+        builder.pop();
+
         SPEC = builder.build();
     }
 
     public static int containerSlots() {
         int requested = CONTAINER_SLOTS.get();
         return Math.max(9, requested - requested % 9);
+    }
+
+    public static double boomRadius() {
+        return BOOM_POWER.get() * BOOM_RADIUS_PER_POWER.get();
     }
 
     public static int spawnHeight() {

@@ -25,6 +25,7 @@ public final class ClientSetup {
     public static void registerRenderers(EntityRenderersEvent.RegisterRenderers event) {
         event.registerEntityRenderer(ModEntities.SUPPLY_CAPSULE.get(), CapsuleRenderer::new);
         event.registerEntityRenderer(ModEntities.TRANSPORT_CAPSULE.get(), TransportCapsuleRenderer::new);
+        event.registerEntityRenderer(ModEntities.BOOM.get(), BoomRenderer::new);
         event.registerBlockEntityRenderer(ModBlockEntities.CAPSULE.get(), CapsuleBlockRenderer::new);
         event.registerBlockEntityRenderer(ModBlockEntities.TRANSPORT_MARKER.get(), TransportMarkerRenderer::new);
     }
@@ -49,6 +50,7 @@ public final class ClientSetup {
             @Override
             protected void apply(Void unused, ResourceManager resourceManager, ProfilerFiller profiler) {
                 CapsuleGeoModel.reload();
+                BoomGeoModel.reload();
             }
         });
     }

@@ -30,6 +30,7 @@ import java.util.UUID;
 @Mod.EventBusSubscriber(modid = ReturnCapsuleMod.MODID, bus = Mod.EventBusSubscriber.Bus.FORGE)
 public final class ShockManager {
     private static final Map<UUID, Target> TARGETS = new HashMap<>();
+    private static final Map<UUID, StunTarget> STUNS = new HashMap<>();
     private static final int INITIAL_STUN_PADDING = 5;
 
     public static void impact(ServerLevel level, Vec3 origin, double half,
@@ -68,11 +69,26 @@ public final class ShockManager {
 
     public static void clear() {
         TARGETS.clear();
+        STUNS.clear();
+    }
+
+    /**
+     * Pure shock: keep the target in place for {@code ticks} without dealing any damage. The
+     * cruise bomb uses this because its explosion already applies its own damage.
+     */
+    public static void applyShock(LivingEntity target, int ticks) {
+        if (ticks <= 0 || target.level().isClientSide || !target.isAlive()) {
+            return;
+        }
+        long now = target.level().getGameTime();
+        STUNS.put(target.getUUID(), new StunTarget(target,
+                new Vec3(target.getX(), target.getY(), target.getZ()), now + ticks));
+        applyStun(target, ticks + 2);
     }
 
     @SubscribeEvent
     public static void onServerTick(TickEvent.ServerTickEvent event) {
-        if (event.phase != TickEvent.Phase.END || TARGETS.isEmpty()) {
+        if (event.phase != TickEvent.Phase.END || (TARGETS.isEmpty() && STUNS.isEmpty())) {
             return;
         }
         MinecraftServer server = event.getServer();
@@ -107,7 +123,7 @@ public final class ShockManager {
             if (elapsed % refreshTicks == 0L) {
                 applyStun(living, refreshTicks + 2);
             }
-            holdStill(living, target);
+            holdStill(living, target.anchor());
             if (elapsed > 0L) {
                 living.invulnerableTime = 0;
                 living.hurt(level.damageSources().generic(), tickDamage * target.multiplier());
@@ -119,6 +135,33 @@ public final class ShockManager {
                 living.removeEffect(ModEffects.SHOCK.get());
             }
         }
+
+        int shockRefresh = Math.max(1, Config.SHOCK_REFRESH_TICKS.get());
+        Iterator<Map.Entry<UUID, StunTarget>> stuns = STUNS.entrySet().iterator();
+        while (stuns.hasNext()) {
+            StunTarget stun = stuns.next().getValue();
+            LivingEntity living = stun.entity();
+            if (living.isRemoved() || !living.isAlive()
+                    || !(living.level() instanceof ServerLevel level)) {
+                stuns.remove();
+                continue;
+            }
+            if (living instanceof Player player && (player.isCreative() || player.isSpectator())) {
+                stuns.remove();
+                living.removeEffect(ModEffects.SHOCK.get());
+                continue;
+            }
+            long now = level.getGameTime();
+            if (now >= stun.endTick()) {
+                stuns.remove();
+                living.removeEffect(ModEffects.SHOCK.get());
+                continue;
+            }
+            holdStill(living, stun.anchor());
+            if (now % shockRefresh == 0L) {
+                applyStun(living, shockRefresh + 2);
+            }
+        }
     }
 
     private static void applyStun(LivingEntity target, int durationTicks) {
@@ -126,8 +169,7 @@ public final class ShockManager {
                 false, true, true));
     }
 
-    private static void holdStill(LivingEntity living, Target target) {
-        Vec3 anchor = target.anchor();
+    private static void holdStill(LivingEntity living, Vec3 anchor) {
         living.setDeltaMovement(Vec3.ZERO);
         living.setSprinting(false);
         living.setSwimming(false);
@@ -148,6 +190,9 @@ public final class ShockManager {
     }
 
     private record Target(LivingEntity entity, Vec3 anchor, long startTick, float multiplier) {
+    }
+
+    private record StunTarget(LivingEntity entity, Vec3 anchor, long endTick) {
     }
 
     private ShockManager() {

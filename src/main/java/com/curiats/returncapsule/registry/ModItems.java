@@ -3,6 +3,7 @@ package com.curiats.returncapsule.registry;
 import com.curiats.returncapsule.ReturnCapsuleMod;
 import com.curiats.returncapsule.item.CapsuleBlockItem;
 import com.curiats.returncapsule.item.CapsuleCallerItem;
+import com.curiats.returncapsule.item.KillMarkerItem;
 import com.curiats.returncapsule.item.TransportDesignatorItem;
 import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.Item;
@@ -22,6 +23,9 @@ public final class ModItems {
 
     public static final RegistryObject<Item> TRANSPORT_DESIGNATOR = ITEMS.register("transport_designator",
             () -> new TransportDesignatorItem(new Item.Properties().stacksTo(1)));
+
+    public static final RegistryObject<Item> KILL_MARKER_INDICATOR = ITEMS.register("kill_marker_indicator",
+            () -> new KillMarkerItem(new Item.Properties().stacksTo(1)));
 
     private ModItems() {
     }

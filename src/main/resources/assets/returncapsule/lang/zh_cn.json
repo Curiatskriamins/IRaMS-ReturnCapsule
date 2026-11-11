@@ -25,5 +25,19 @@
   "effect.returncapsule.shock": "震慑",
   "subtitles.returncapsule.capsule_impact": "返回舱砸落",
   "resourcepack.returncapsule.titan_fall": "IRaMS返回舱落地音效修改",
-  "block.returncapsule.capsule_part": "物资返回舱"
+  "block.returncapsule.capsule_part": "物资返回舱",
+  "item.returncapsule.kill_marker_indicator": "击杀指示器",
+  "item.returncapsule.kill_marker_indicator.tooltip.range": "准星指向处最远 %s 格可标记锚点二型",
+  "item.returncapsule.kill_marker_indicator.tooltip.hold": "长按 %s 秒开始标记，之后每秒消耗 %s 个钻石或 %s 个钻石块发射一枚巡航弹",
+  "item.returncapsule.kill_marker_indicator.tooltip.sneak": "潜行时只蓄弹（最多 %s 枚），停止潜行或松开右键时一次性释放全部",
+  "entity.returncapsule.boom": "巡航弹",
+  "message.returncapsule.kill_marker.charging": "正在锁定…%s%%",
+  "message.returncapsule.kill_marker.no_target": "准星没有指向可标记的目标",
+  "message.returncapsule.kill_marker.no_diamond": "钻石不足：每枚巡航弹需要 %s 个钻石或 %s 个钻石块",
+  "message.returncapsule.kill_marker.queued": "已蓄弹 %s 枚，停止潜行或松开右键时一次性释放",
+  "message.returncapsule.kill_marker.queue_full": "潜行蓄弹已达上限（%s 枚）",
+  "message.returncapsule.kill_marker.failed": "巡航弹发射失败，材料已退还",
+  "message.returncapsule.kill_marker.released": "一次性释放 %s 枚巡航弹",
+  "death.attack.boom_impact": "%1$s 被巡航弹炸死了",
+  "death.attack.boom_impact.player": "%1$s 被 %2$s 的巡航弹炸死了"
 }

@@ -1,6 +1,7 @@
 package com.curiats.returncapsule.registry;
 
 import com.curiats.returncapsule.ReturnCapsuleMod;
+import com.curiats.returncapsule.entity.BoomEntity;
 import com.curiats.returncapsule.entity.SupplyCapsuleEntity;
 import com.curiats.returncapsule.entity.TransportCapsuleEntity;
 import net.minecraft.world.entity.EntityType;
@@ -28,6 +29,14 @@ public final class ModEntities {
                     .clientTrackingRange(2000)
                     .updateInterval(1)
                     .build(ReturnCapsuleMod.id("transport_capsule").toString()));
+
+    public static final RegistryObject<EntityType<BoomEntity>> BOOM =
+            ENTITIES.register("boom", () -> EntityType.Builder
+                    .<BoomEntity>of(BoomEntity::new, MobCategory.MISC)
+                    .sized(1.2F, 1.2F)
+                    .clientTrackingRange(512)
+                    .updateInterval(1)
+                    .build(ReturnCapsuleMod.id("boom").toString()));
 
     private ModEntities() {
     }

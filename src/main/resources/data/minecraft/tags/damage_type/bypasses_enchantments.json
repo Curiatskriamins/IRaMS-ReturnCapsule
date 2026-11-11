@@ -1,5 +1,6 @@
 {
   "values": [
-    "returncapsule:capsule_impact"
+    "returncapsule:capsule_impact",
+    "returncapsule:boom_impact"
   ]
 }
