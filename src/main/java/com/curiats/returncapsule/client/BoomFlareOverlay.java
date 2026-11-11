@@ -27,12 +27,6 @@ import org.joml.Matrix4f;
 import org.joml.Quaternionf;
 import org.joml.Vector3f;
 
-/**
- * World-space additive glow, following the AC-130 heat-glow renderer's approach: take the level
- * PoseStack and Camera, move to the missile tail in camera-relative space, draw a camera-facing
- * textured quad, and let the huge angular size + additive blending (SRC_ALPHA, ONE) do the work.
- * No screen-space HUD projection and no custom shader are involved.
- */
 @Mod.EventBusSubscriber(modid = ReturnCapsuleMod.MODID, value = Dist.CLIENT)
 public final class BoomFlareOverlay {
     private static final ResourceLocation FLARE =
