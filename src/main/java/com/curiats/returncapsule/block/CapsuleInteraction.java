@@ -1,6 +1,8 @@
 package com.curiats.returncapsule.block;
 
+import com.curiats.returncapsule.registry.ModSounds;
 import net.minecraft.core.BlockPos;
+import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.entity.player.Player;
@@ -23,7 +25,11 @@ public final class CapsuleInteraction {
                 return InteractionResult.PASS;
             }
             switch (capsule.getAnimState()) {
-                case CLOSED -> capsule.startOpening();
+                case CLOSED -> {
+                    capsule.startOpening();
+                    level.playSound(null, pos, ModSounds.CAPSULE_OPEN.get(),
+                            SoundSource.BLOCKS, 1.0F, 1.0F);
+                }
                 case OPEN -> player.openMenu(capsule);
                 case OPENING, CLOSING -> {
                     return InteractionResult.SUCCESS;

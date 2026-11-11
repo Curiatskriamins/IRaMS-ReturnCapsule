@@ -95,7 +95,8 @@ public class SupplyCapsuleEntity extends FallingCapsuleEntity {
                 Config.IMPACT_SOUND_VOLUME.get().floatValue(),
                 Config.IMPACT_SOUND_PITCH.get().floatValue());
         // Slowed anvil by default; the bundled steel_impact pack swaps this event for metal.
-        server.playSound(null, x, y, z, ModSounds.CAPSULE_IMPACT.get(), SoundSource.BLOCKS, 1.2F,
+        server.playSound(null, x, y, z, ModSounds.CAPSULE_IMPACT.get(), SoundSource.BLOCKS,
+                Config.IMPACT_THUD_VOLUME.get().floatValue(),
                 Config.IMPACT_THUD_PITCH.get().floatValue());
         this.spawnImpactParticles(server, x, y, z);
 

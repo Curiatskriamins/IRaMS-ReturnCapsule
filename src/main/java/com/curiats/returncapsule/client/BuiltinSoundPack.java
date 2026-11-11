@@ -19,6 +19,12 @@ import java.nio.file.Path;
  * Registers the bundled titan-fall sound pack, which lives inside this jar under
  * {@code resourcepacks/IRaMS_titan_fall}. Forge does not expose nested pack folders on its
  * own, so they have to be added as a repository source.
+ *
+ * <p>The pack is marked as required on purpose: the client {@code PackRepository} only adds
+ * packs whose {@code isRequired()} is true to the default selection, while
+ * {@code PackSource.shouldAddAutomatically()} is only consulted by the server data pack
+ * repository. A non-required pack would show up in the resource pack screen but stay disabled,
+ * so the anvil sound would keep playing and the bundled titan-fall sound would never be heard.</p>
  */
 @Mod.EventBusSubscriber(modid = ReturnCapsuleMod.MODID, bus = Mod.EventBusSubscriber.Bus.MOD, value = Dist.CLIENT)
 public final class BuiltinSoundPack {
@@ -45,6 +51,8 @@ public final class BuiltinSoundPack {
                     PackSource.BUILT_IN);
             if (pack != null) {
                 consumer.accept(pack);
+            } else {
+                ReturnCapsuleMod.LOGGER.warn("Bundled sound pack {} could not be read", FOLDER);
             }
         });
     }

@@ -160,7 +160,8 @@ public class TransportCapsuleEntity extends FallingCapsuleEntity implements Menu
         server.playSound(null, x, y, z, SoundEvents.GENERIC_EXPLODE, SoundSource.BLOCKS,
                 Config.IMPACT_SOUND_VOLUME.get().floatValue(),
                 Config.IMPACT_SOUND_PITCH.get().floatValue());
-        server.playSound(null, x, y, z, ModSounds.CAPSULE_IMPACT.get(), SoundSource.BLOCKS, 1.2F,
+        server.playSound(null, x, y, z, ModSounds.CAPSULE_IMPACT.get(), SoundSource.BLOCKS,
+                Config.IMPACT_THUD_VOLUME.get().floatValue(),
                 Config.IMPACT_THUD_PITCH.get().floatValue());
         ShakeBurst.forPassengers(this, 25, 3);
 

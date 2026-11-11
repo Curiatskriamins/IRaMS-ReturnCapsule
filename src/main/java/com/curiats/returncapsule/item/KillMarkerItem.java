@@ -4,10 +4,11 @@ import com.curiats.returncapsule.Config;
 import com.curiats.returncapsule.ReturnCapsuleMod;
 import com.curiats.returncapsule.entity.BoomEntity;
 import com.curiats.returncapsule.entity.fall.SuperBigCup;
+import com.curiats.returncapsule.registry.ModSounds;
 import net.minecraft.core.Direction;
-import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.InteractionResultHolder;
@@ -19,7 +20,6 @@ import net.minecraft.world.entity.projectile.ProjectileUtil;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
-import net.minecraft.world.item.TooltipFlag;
 import net.minecraft.world.item.UseAnim;
 import net.minecraft.world.item.context.UseOnContext;
 import net.minecraft.world.level.ClipContext;
@@ -105,11 +105,6 @@ public class KillMarkerItem extends Item {
 
         int charge = Math.max(1, Config.KILL_MARKER_CHARGE_TICKS.get());
         if (elapsed < charge) {
-            if (elapsed % 5 == 0) {
-                player.displayClientMessage(Component.translatable(
-                        "message.returncapsule.kill_marker.charging",
-                        (elapsed * 100) / charge), true);
-            }
             return;
         }
         int interval = fireInterval(player);
@@ -119,35 +114,23 @@ public class KillMarkerItem extends Item {
 
         int maxQueued = Math.max(1, Config.KILL_MARKER_MAX_QUEUED.get());
         if (sneaking && volley.shots.size() >= maxQueued) {
-            player.displayClientMessage(Component.translatable(
-                    "message.returncapsule.kill_marker.queue_full", maxQueued), true);
             return;
         }
 
         Shot shot = resolveShot(player, level);
         if (shot == null) {
-            player.displayClientMessage(
-                    Component.translatable("message.returncapsule.kill_marker.no_target"), true);
             return;
         }
         Payment payment = pay(player);
         if (payment == null) {
-            player.displayClientMessage(Component.translatable(
-                    "message.returncapsule.kill_marker.no_diamond",
-                    Config.KILL_MARKER_DIAMONDS.get(),
-                    Config.KILL_MARKER_DIAMOND_BLOCKS.get()), true);
             return;
         }
 
         double angle = SuperBigCup.nextIncidence();
         if (sneaking) {
             volley.shots.add(new QueuedShot(shot.point(), shot.entity(), angle, payment));
-            player.displayClientMessage(Component.translatable(
-                    "message.returncapsule.kill_marker.queued", volley.shots.size()), true);
         } else if (!spawnBomb(level, player, shot.point(), shot.entity(), angle, null)) {
             refund(player, payment);
-            player.displayClientMessage(
-                    Component.translatable("message.returncapsule.kill_marker.failed"), true);
         }
     }
 
@@ -176,25 +159,12 @@ public class KillMarkerItem extends Item {
         for (QueuedShot shot : volley.shots) {
             reserved.add(shot.angle());
         }
-        int released = 0;
-        int failed = 0;
         for (QueuedShot shot : volley.shots) {
-            if (spawnBomb(level, player, shot.point(), shot.entity(), shot.angle(), reserved)) {
-                released++;
-            } else {
+            if (!spawnBomb(level, player, shot.point(), shot.entity(), shot.angle(), reserved)) {
                 refund(player, shot.payment());
-                failed++;
             }
         }
         volley.shots.clear();
-        if (released > 0) {
-            player.displayClientMessage(Component.translatable(
-                    "message.returncapsule.kill_marker.released", released), true);
-        }
-        if (failed > 0) {
-            player.displayClientMessage(
-                    Component.translatable("message.returncapsule.kill_marker.failed"), true);
-        }
     }
 
     private static boolean spawnBomb(Level level, ServerPlayer player, Vec3 point,
@@ -208,7 +178,7 @@ public class KillMarkerItem extends Item {
         try {
             double playerDistance = Math.sqrt(player.distanceToSqr(point));
             controller = SuperBigCup.create(server, point, entity, angle, playerDistance,
-                    reservedAngles, server.random);
+                    player.position(), reservedAngles, server.random);
             bomb = new BoomEntity(server, controller, player);
         } catch (RuntimeException exception) {
             ReturnCapsuleMod.LOGGER.warn("Failed to build a cruise bomb", exception);
@@ -219,6 +189,10 @@ public class KillMarkerItem extends Item {
         }
         if (reservedAngles != null) {
             reservedAngles.add(controller.incidenceDegrees());
+        }
+        if (entity != null && server.getEntity(entity) instanceof LivingEntity) {
+            // The client keeps a single clock instance alive, so a whole volley cannot stack it.
+            player.playNotifySound(ModSounds.MISSILE_LOCK.get(), SoundSource.PLAYERS, 1.0F, 1.0F);
         }
         return true;
     }
@@ -348,19 +322,6 @@ public class KillMarkerItem extends Item {
     /** Drops a pending sneak volley; called when the player leaves, dies or respawns. */
     public static void dropVolley(UUID playerId) {
         VOLLEYS.remove(playerId);
-    }
-
-    @Override
-    public void appendHoverText(ItemStack stack, @Nullable Level level, List<Component> tooltip,
-                                TooltipFlag flag) {
-        tooltip.add(Component.translatable("item.returncapsule.kill_marker_indicator.tooltip.range",
-                Config.KILL_MARKER_RANGE.get()));
-        tooltip.add(Component.translatable("item.returncapsule.kill_marker_indicator.tooltip.hold",
-                Config.KILL_MARKER_CHARGE_TICKS.get() / 20.0D,
-                Config.KILL_MARKER_DIAMONDS.get(),
-                Config.KILL_MARKER_DIAMOND_BLOCKS.get()));
-        tooltip.add(Component.translatable("item.returncapsule.kill_marker_indicator.tooltip.sneak",
-                Config.KILL_MARKER_MAX_QUEUED.get()));
     }
 
     @Override

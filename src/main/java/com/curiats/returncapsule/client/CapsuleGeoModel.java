@@ -22,7 +22,7 @@ public final class CapsuleGeoModel {
     public static final ResourceLocation TEXTURE = ReturnCapsuleMod.id("textures/entity/capsule.png");
     public static final ResourceLocation GLOW_TEXTURE = ReturnCapsuleMod.id("textures/entity/capsule_glow.png");
 
-    private static final RenderType GLOW_LAYER = RenderType.entityTranslucentEmissive(GLOW_TEXTURE);
+    private static final RenderType GLOW_LAYER = RenderType.entityTranslucent(GLOW_TEXTURE);
 
     private static volatile CapsuleGeoModel instance;
 

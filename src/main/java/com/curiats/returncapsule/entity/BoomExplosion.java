@@ -3,10 +3,11 @@ package com.curiats.returncapsule.entity;
 import com.curiats.returncapsule.Config;
 import com.curiats.returncapsule.compat.ShockManager;
 import com.curiats.returncapsule.entity.fall.CapsuleParticles;
-import com.curiats.returncapsule.entity.fall.ShakeBurst;
+import com.curiats.returncapsule.registry.ModSounds;
 import com.curiats.returncapsule.util.TrueDamage;
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
@@ -40,20 +41,18 @@ public final class BoomExplosion {
         double radius = Config.boomRadius();
         float power = Config.BOOM_POWER.get().floatValue();
 
-        // Feedback explosion. NONE keeps the terrain intact while still giving knockback,
-        // particles and sound; the configured damage is applied by our own loop below.
-        level.explode(bomb, center.x, center.y, center.z, power,
-                Config.BOOM_DESTROY_TERRAIN.get()
-                        ? Level.ExplosionInteraction.BLOCK
-                        : Level.ExplosionInteraction.NONE);
+        // Only the terrain-destroying mode uses the vanilla explosion. The default mode is drawn
+        // by our own particles and damage, and plays a dedicated boom_impact event that references
+        // the vanilla explosion sound. Because the event location is returncapsule:boom_impact,
+        // ClientShake (which only reacts to GENERIC_EXPLODE) does not add camera shake.
+        if (Config.BOOM_DESTROY_TERRAIN.get()) {
+            level.explode(bomb, center.x, center.y, center.z, power, Level.ExplosionInteraction.BLOCK);
+        } else {
+            level.playSound(null, center.x, center.y, center.z, ModSounds.BOOM_IMPACT.get(),
+                    SoundSource.BLOCKS, 4.0F, 0.8F);
+        }
 
         spawnParticles(level, center, radius);
-        // level.explode already plays the vanilla explosion sound; playing it again here
-        // doubled the sound and triggered the camera shake twice.
-        if (Config.SCREEN_SHAKE.get()) {
-            ShakeBurst.around(level, center.x, center.y, center.z,
-                    Config.SHAKE_RADIUS.get(), 30, 2);
-        }
 
         double base = mode == Mode.ANCHOR ? Config.BOOM_DAMAGE.get() : Config.BOOM_TRUE_DAMAGE.get();
         AABB area = new AABB(center, center).inflate(radius);
@@ -87,14 +86,14 @@ public final class BoomExplosion {
         double x = center.x;
         double y = center.y;
         double z = center.z;
-        CapsuleParticles.broadcast(level, ParticleTypes.EXPLOSION_EMITTER, x, y, z, 3, 2.0D, 1.0D, 2.0D, 0.0D);
-        CapsuleParticles.broadcast(level, ParticleTypes.EXPLOSION, x, y, z, 24, 4.0D, 1.5D, 4.0D, 0.0D);
-        CapsuleParticles.broadcast(level, ParticleTypes.LARGE_SMOKE, x, y, z, 90,
-                radius * 1.4D, 2.0D, radius * 1.4D, 0.08D);
-        CapsuleParticles.broadcast(level, ParticleTypes.CAMPFIRE_COSY_SMOKE, x, y, z, 40,
-                radius, 1.5D, radius, 0.03D);
-        CapsuleParticles.broadcast(level, ParticleTypes.FLAME, x, y - 0.2D, z, 70,
-                radius, 1.2D, radius, 0.07D);
+        CapsuleParticles.broadcast(level, ParticleTypes.EXPLOSION_EMITTER, x, y, z, 5, 2.0D, 1.0D, 2.0D, 0.0D);
+        CapsuleParticles.broadcast(level, ParticleTypes.EXPLOSION, x, y, z, 40, 4.0D, 1.5D, 4.0D, 0.0D);
+        CapsuleParticles.broadcast(level, ParticleTypes.LARGE_SMOKE, x, y, z, 160,
+                radius * 1.6D, 2.0D, radius * 1.6D, 0.08D);
+        CapsuleParticles.broadcast(level, ParticleTypes.CAMPFIRE_COSY_SMOKE, x, y, z, 80,
+                radius * 1.2D, 1.5D, radius * 1.2D, 0.03D);
+        CapsuleParticles.broadcast(level, ParticleTypes.FLAME, x, y - 0.2D, z, 120,
+                radius * 1.2D, 1.2D, radius * 1.2D, 0.07D);
     }
 
     private static double occlusionFactor(ServerLevel level, Vec3 center, LivingEntity target,

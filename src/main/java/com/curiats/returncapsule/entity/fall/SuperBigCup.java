@@ -49,9 +49,13 @@ public final class SuperBigCup {
     private static final int[] YAW_OFFSETS = {-90, -45, -20, 0, 20, 45, 90};
     private static final int[] PITCH_OFFSETS = {-45, -20, 0, 20, 45};
     private static final double CLEAR_EPSILON = 0.05D;
-    private static final double MARKER_RADIUS = 50.0D;
     private static final DustParticleOptions MARKER_DUST =
             new DustParticleOptions(new Vector3f(1.0F, 1.0F, 1.0F), 1.2F);
+    /** Low-angle spiral around the target before the terminal dive. */
+    private static final int SPIRAL_DURATION = 70;
+    private static final double SPIRAL_TURNS = 1.0D;
+    private static final double SPIRAL_RADIUS = 45.0D;
+    private static final double SPIRAL_HEIGHT = 25.0D;
 
     private static List<Double> incidenceSequence;
     private static int incidenceCursor;
@@ -63,6 +67,9 @@ public final class SuperBigCup {
     /** Offset from the live target point to the spawn point at the loaded chunk edge. */
     private final Vec3 approachOffset;
     private final double incidenceDegrees;
+    /** Horizontal angle where the spiral starts (the spawn side). */
+    private final double spiralAngle;
+    private int spiralTicks;
 
     private SuperBigCup(ServerLevel level, @Nullable UUID lockedEntity, Vec3 targetPoint,
                         Vec3 approachOffset, double incidenceDegrees) {
@@ -71,6 +78,7 @@ public final class SuperBigCup {
         this.targetPoint = targetPoint;
         this.approachOffset = approachOffset;
         this.incidenceDegrees = incidenceDegrees;
+        this.spiralAngle = Math.atan2(approachOffset.z, approachOffset.x);
     }
 
     /**
@@ -106,14 +114,24 @@ public final class SuperBigCup {
      */
     public static SuperBigCup create(ServerLevel level, Vec3 targetPoint, @Nullable UUID lockedEntity,
                                      double incidenceDegrees, double playerDistance,
+                                     @Nullable Vec3 playerPos,
                                      @Nullable Set<Double> reservedAngles,
                                      RandomSource random) {
         int simulation = Math.max(1, level.getServer().getPlayerList().getSimulationDistance());
         int margin = Config.BOOM_SPAWN_MARGIN_CHUNKS.get();
         double radius = Math.max(16.0D, (simulation - margin) * 16.0D);
-        double distance = Math.max(16.0D, radius - Math.max(0.0D, playerDistance));
         double baseAngle = Mth.clamp(incidenceDegrees, MIN_INCIDENCE, MAX_INCIDENCE);
-        Approach approach = chooseApproach(level, targetPoint, baseAngle, distance, reservedAngles, random);
+        double angleRad = Math.toRadians(baseAngle);
+        double cos = Math.max(0.05D, Math.cos(angleRad));
+        // Spawn behind the shooter at the simulation edge instead of next to the target. For a far
+        // target this turns the old 16-block hop into a 250+ block approach.
+        double horizontal = Math.max(0.0D, playerDistance) + radius * cos;
+        double distance = horizontal / cos;
+        double baseAzimuth = playerPos == null
+                ? random.nextDouble() * Math.PI * 2.0D
+                : Math.atan2(playerPos.z - targetPoint.z, playerPos.x - targetPoint.x);
+        Approach approach = chooseApproach(level, targetPoint, baseAngle, distance, baseAzimuth,
+                reservedAngles);
         return new SuperBigCup(level, lockedEntity, targetPoint, approach.offset(), approach.angle());
     }
 
@@ -134,7 +152,16 @@ public final class SuperBigCup {
      * Re-reads the locked entity. This is the "continuous lock": the target point follows the
      * entity as long as it is alive; after it dies the last known point is kept.
      */
-    public void update() {
+    public void update(Vec3 from) {
+        // The spiral starts only after the bomb has reached the target area; otherwise the timer
+        // would run out during the long approach from the spawn edge and the bomb would fly
+        // straight again.
+        if (this.spiralTicks < SPIRAL_DURATION
+                && (this.spiralTicks > 0
+                || from.distanceToSqr(this.targetPoint)
+                <= (SPIRAL_RADIUS + 24.0D) * (SPIRAL_RADIUS + 24.0D))) {
+            this.spiralTicks++;
+        }
         if (this.lockedEntity == null) {
             return;
         }
@@ -151,6 +178,21 @@ public final class SuperBigCup {
 
     public Vec3 targetPoint() {
         return this.targetPoint;
+    }
+
+    /**
+     * Current steering point. It starts on a low-angle spiral around the target and ends exactly
+     * on the target, so the bomb circles down instead of crossing the whole map in two seconds.
+     */
+    public Vec3 aimPoint() {
+        if (this.spiralTicks >= SPIRAL_DURATION) {
+            return this.targetPoint;
+        }
+        double t = this.spiralTicks / (double) SPIRAL_DURATION;
+        double angle = this.spiralAngle + t * SPIRAL_TURNS * Math.PI * 2.0D;
+        double radius = SPIRAL_RADIUS * (1.0D - t);
+        double height = SPIRAL_HEIGHT * (1.0D - t);
+        return this.targetPoint.add(Math.cos(angle) * radius, height, Math.sin(angle) * radius);
     }
 
     /** Spawn point on the loaded edge; it follows a moving target. */
@@ -210,19 +252,23 @@ public final class SuperBigCup {
     }
 
     /**
-     * The visible "anchor type II": the same smoke + dust puff as anchor type I, in white.
-     * Only players within 50 blocks of the point receive it, and it is drawn at the live target
-     * point so a locked entity carries it along.
+     * The visible "anchor type II": the same smoke + dust puff as anchor type I, in white, plus a
+     * tall white column so the marked target can be seen from far away. Broadcast with the
+     * long-distance flag, like the capsule impact particles.
      */
     public void markerParticles() {
         Vec3 point = this.targetPoint;
         double x = point.x;
         double y = point.y + 0.15D;
         double z = point.z;
-        CapsuleParticles.within(this.level, MARKER_RADIUS, ParticleTypes.SMOKE,
+        CapsuleParticles.broadcast(this.level, ParticleTypes.SMOKE,
                 x, y, z, 2, 0.28D, 0.04D, 0.28D, 0.004D);
-        CapsuleParticles.within(this.level, MARKER_RADIUS, MARKER_DUST,
+        CapsuleParticles.broadcast(this.level, MARKER_DUST,
                 x, y, z, 2, 0.28D, 0.04D, 0.28D, 0.004D);
+        for (int i = 0; i < 10; i++) {
+            CapsuleParticles.broadcast(this.level, ParticleTypes.END_ROD,
+                    x, y + 0.5D + i * 0.9D, z, 1, 0.04D, 0.04D, 0.04D, 0.0D);
+        }
     }
 
     private boolean isClear(Vec3 from, Vec3 to, @Nullable Entity source) {
@@ -244,9 +290,8 @@ public final class SuperBigCup {
     }
 
     private static Approach chooseApproach(ServerLevel level, Vec3 target, double baseAngle,
-                                           double distance, @Nullable Set<Double> reservedAngles,
-                                           RandomSource random) {
-        double baseAzimuth = random.nextDouble() * Math.PI * 2.0D;
+                                           double distance, double baseAzimuth,
+                                           @Nullable Set<Double> reservedAngles) {
         List<Double> angles = new ArrayList<>(INCIDENCE_FALLBACKS.length + 1);
         angles.add(baseAngle);
         for (double offset : INCIDENCE_FALLBACKS) {

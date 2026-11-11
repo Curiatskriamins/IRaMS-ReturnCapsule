@@ -1,6 +1,6 @@
 {
   "parent": "minecraft:item/generated",
   "textures": {
-    "layer0": "minecraft:item/spyglass"
+    "layer0": "returncapsule:item/kill_marker_indicator"
   }
 }

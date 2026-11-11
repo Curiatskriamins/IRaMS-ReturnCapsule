@@ -1,6 +1,7 @@
 package com.curiats.returncapsule.client;
 
 import com.curiats.returncapsule.ReturnCapsuleMod;
+import com.curiats.returncapsule.entity.BoomClientHooks;
 import com.curiats.returncapsule.entity.CapsuleClientHooks;
 import com.curiats.returncapsule.registry.ModBlockEntities;
 import com.curiats.returncapsule.registry.ModEntities;
@@ -34,8 +35,9 @@ public final class ClientSetup {
     public static void clientSetup(FMLClientSetupEvent event) {
         event.enqueueWork(() -> {
             MenuScreens.register(ModMenus.CAPSULE.get(), CapsuleScreen::new);
-            // Common code calls this hook instead of allocating a DistExecutor lambda per tick.
+            // Common code calls these hooks instead of allocating a DistExecutor lambda per tick.
             CapsuleClientHooks.install(ClientTrail::onFallingTick);
+            BoomClientHooks.install(BoomClientTrail::onTick);
         });
     }
 

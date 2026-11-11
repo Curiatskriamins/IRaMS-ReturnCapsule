@@ -26,7 +26,7 @@ public final class BoomGeoModel {
     public static final ResourceLocation GLOW_TEXTURE =
             ReturnCapsuleMod.id("textures/entity/boom_glow.png");
 
-    private static final RenderType GLOW_LAYER = RenderType.entityTranslucentEmissive(GLOW_TEXTURE);
+    private static final RenderType GLOW_LAYER = RenderType.entityTranslucent(GLOW_TEXTURE);
 
     private static volatile BoomGeoModel instance;
 

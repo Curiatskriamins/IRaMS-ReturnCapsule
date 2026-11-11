@@ -1,10 +1,8 @@
 package com.curiats.returncapsule.entity;
 
 import com.curiats.returncapsule.Config;
-import com.curiats.returncapsule.entity.fall.CapsuleParticles;
 import com.curiats.returncapsule.entity.fall.SuperBigCup;
 import com.curiats.returncapsule.registry.ModEntities;
-import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.util.Mth;
@@ -77,6 +75,9 @@ public class BoomEntity extends Entity {
     public void tick() {
         super.tick();
         if (this.level().isClientSide) {
+            // Every client draws its own dense trail at the interpolated model position, which
+            // removes the stepped look of the old two-tick server-side puffs.
+            BoomClientHooks.onTick(this);
             return;
         }
         if (this.impacted) {
@@ -92,14 +93,15 @@ public class BoomEntity extends Entity {
             return;
         }
 
-        this.controller.update();
         Vec3 from = this.position();
+        this.controller.update(from);
         if (this.life % 2 == 0) {
-            emitTrail(server);
             this.controller.markerParticles();
         }
         Vec3 target = this.controller.targetPoint();
-        Vec3 desired = target.subtract(from);
+        Vec3 aim = this.controller.aimPoint();
+
+        Vec3 desired = aim.subtract(from);
         if (desired.lengthSqr() < 1.0E-6D) {
             desired = this.moveDir;
         }
@@ -141,13 +143,6 @@ public class BoomEntity extends Entity {
             }
             return;
         }
-    }
-
-    private void emitTrail(ServerLevel server) {
-        CapsuleParticles.nearby(server, ParticleTypes.FLAME, this.getX(), this.getY(), this.getZ(),
-                3, 0.2D, 0.2D, 0.2D, 0.01D);
-        CapsuleParticles.nearby(server, ParticleTypes.LARGE_SMOKE, this.getX(), this.getY(), this.getZ(),
-                6, 0.3D, 0.3D, 0.3D, 0.02D);
     }
 
     private boolean isBombTarget(Entity entity) {
@@ -266,6 +261,14 @@ public class BoomEntity extends Entity {
     @Override
     public boolean shouldRenderAtSqrDistance(double distance) {
         return distance < 512.0D * 512.0D;
+    }
+
+    @Override
+    public void lerpTo(double x, double y, double z, float yRot, float xRot, int steps, boolean teleport) {
+        // The bomb crosses almost four blocks per tick. The vanilla three-step interpolation makes
+        // the model visibly trail behind its own position packets, which reads as stutter at this
+        // speed; one extra step smooths the model without a noticeable delay.
+        super.lerpTo(x, y, z, yRot, xRot, teleport ? steps : Math.max(4, steps), teleport);
     }
 
     public Vec3 moveDirection() {

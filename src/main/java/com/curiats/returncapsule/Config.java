@@ -30,6 +30,7 @@ public final class Config {
     public static final ForgeConfigSpec.DoubleValue SHAKE_START_DISTANCE;
     public static final ForgeConfigSpec.DoubleValue IMPACT_SOUND_VOLUME;
     public static final ForgeConfigSpec.DoubleValue IMPACT_SOUND_PITCH;
+    public static final ForgeConfigSpec.DoubleValue IMPACT_THUD_VOLUME;
     public static final ForgeConfigSpec.DoubleValue IMPACT_THUD_PITCH;
 
     public static final ForgeConfigSpec.IntValue SHOCK_STUN_TICKS;
@@ -169,9 +170,13 @@ public final class Config {
         IMPACT_SOUND_PITCH = builder
                 .comment("落地爆炸音效的音调(Pitch of the landing explosion sound)")
                 .defineInRange("impactSoundPitch", 0.55D, 0.1D, 2.0D);
+        IMPACT_THUD_VOLUME = builder
+                .comment("落地闷响/内置音效包的音量(Volume of the landing thud / bundled sound pack impact)",
+                        "默认 4.0，让 titan fall 不至于被 5.0 的爆炸声完全盖住(Default 4.0 so the titan-fall pack is not buried by the 5.0 explosion)")
+                .defineInRange("impactThudVolume", 4.0D, 0.0D, 16.0D);
         IMPACT_THUD_PITCH = builder
                 .comment("落地闷响的播放音调，默认 1.0(Pitch used when playing the landing thud; default 1.0)",
-                        "默认铁砧的慢放效果由 sounds.json 里的 pitch 0.45 提供，这里保持 1.0 即可(The slowed anvil is done by pitch 0.45 in sounds.json, so keep this at 1.0)")
+                        "音效文件本身的音高已经录好，一般保持 1.0(The sound file already has its own pitch, so keep this at 1.0)")
                 .defineInRange("impactThudPitch", 1.0D, 0.1D, 2.0D);
         builder.pop();
 
@@ -353,8 +358,8 @@ public final class Config {
                 .comment("巡航弹最长飞行时间，超时自爆；默认 1200 tick = 1 分钟(Maximum flight time in ticks before the bomb self destructs; 1200 ticks = 1 minute)")
                 .defineInRange("maxLifetimeTicks", 1200, 40, 12000);
         BOOM_MODEL_SCALE = builder
-                .comment("巡航弹模型缩放倍率；模型本体约 55 单位长，1.0 即约 3.4 格(Model scale multiplier of the cruise bomb; the body is about 55 units long, so 1.0 is roughly 3.4 blocks)")
-                .defineInRange("modelScale", 1.0D, 0.1D, 10.0D);
+                .comment("巡航弹模型缩放倍率；模型本体约 55 单位长，1.0 即约 3.4 格，默认 1.5 更有压迫感(Model scale multiplier of the cruise bomb; the body is about 55 units long, so 1.0 is roughly 3.4 blocks; 1.5 reads as more threatening)")
+                .defineInRange("modelScale", 1.5D, 0.1D, 10.0D);
         BOOM_MODEL_BASE_PITCH = builder
                 .comment("模型自身朝向的补偿角：模型默认朝下(-Y)时用 -90 把弹头转到 +Z；若模型在游戏里前后颠倒，改成 90(Base orientation of the model: -90 turns a nose-down (-Y) model to +Z; use 90 if the model flies backwards)")
                 .defineInRange("modelBasePitch", -90.0D, -180.0D, 180.0D);
