@@ -43,7 +43,6 @@ public final class BoomFlareOverlay {
     private static final float MIN_ALPHA = 0.35F;
     private static final float FADE_DISTANCE = 512.0F;
     private static final int FULL_BRIGHT = 0xF000F0;
-    private static long lastLog;
 
     @SubscribeEvent
     public static void onRenderLevelStage(RenderLevelStageEvent event) {
@@ -79,12 +78,7 @@ public final class BoomFlareOverlay {
         float alpha = Mth.clamp(1.0F - (float) distance / FADE_DISTANCE, MIN_ALPHA, 1.0F);
         AbstractTexture flareTexture = minecraft.getTextureManager().getTexture(FLARE);
         flareTexture.setFilter(false, false);
-        long now = System.currentTimeMillis();
-        if (now - lastLog > 1000L) {
-            lastLog = now;
-            ReturnCapsuleMod.LOGGER.info("[flare] nearest={} tail={} distance={} size={} alpha={}",
-                    nearest, tail, distance, size, alpha);
-        }
+
         renderFlare(event.getPoseStack(), event.getCamera(), tail, (float) size, alpha);
     }
 

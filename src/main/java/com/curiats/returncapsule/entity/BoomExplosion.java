@@ -3,6 +3,7 @@ package com.curiats.returncapsule.entity;
 import com.curiats.returncapsule.Config;
 import com.curiats.returncapsule.compat.ShockManager;
 import com.curiats.returncapsule.entity.fall.CapsuleParticles;
+import com.curiats.returncapsule.entity.fall.ShakeBurst;
 import com.curiats.returncapsule.registry.ModSounds;
 import com.curiats.returncapsule.util.TrueDamage;
 import net.minecraft.core.particles.ParticleTypes;
@@ -53,6 +54,13 @@ public final class BoomExplosion {
         }
 
         spawnParticles(level, center, radius);
+
+        // Same shake path as the return capsule landing: a SHAKE effect on nearby players, driven by
+        // ClientShake. The boom_impact sound itself is a custom event, so it never triggers the
+        // generic-explosion sound shake on top of this.
+        if (Config.SCREEN_SHAKE.get()) {
+            ShakeBurst.around(level, center.x, center.y, center.z, Config.SHAKE_RADIUS.get(), 25, 0);
+        }
 
         double base = mode == Mode.ANCHOR ? Config.BOOM_DAMAGE.get() : Config.BOOM_TRUE_DAMAGE.get();
         AABB area = new AABB(center, center).inflate(radius);
