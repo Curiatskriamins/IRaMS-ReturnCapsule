@@ -102,14 +102,16 @@ public class BoomEntity extends Entity {
             this.controller.markerParticles();
         }
         Vec3 target = this.controller.targetPoint();
-        Vec3 aim = this.controller.aimPoint();
+        boolean locked = this.controller.lockedEntity() != null;
+        Vec3 aim = locked ? this.controller.aimPoint()
+                : from.add(this.moveDir.scale(100.0D));
 
         Vec3 desired = aim.subtract(from);
         if (desired.lengthSqr() < 1.0E-6D) {
             desired = this.moveDir;
         }
         Vec3 dir;
-        if (this.life % 2 == 0) {
+        if (locked && this.life % 2 == 0) {
             dir = this.controller.steer(from, desired.normalize(), this);
             this.faceDirection(dir);
         } else {
@@ -121,7 +123,7 @@ public class BoomEntity extends Entity {
         this.setPos(next.x, next.y, next.z);
 
         
-        if (segmentDistanceSqr(from, next, target) <= CONTACT_RADIUS * CONTACT_RADIUS) {
+        if (locked && segmentDistanceSqr(from, next, target) <= CONTACT_RADIUS * CONTACT_RADIUS) {
             this.setPos(target.x, target.y, target.z);
             this.detonate(server, BoomExplosion.Mode.ANCHOR);
             return;
@@ -211,6 +213,8 @@ public class BoomEntity extends Entity {
     @Override
     protected void readAdditionalSaveData(CompoundTag tag) {
         this.life = tag.getInt(TAG_LIFE);
+        this.held = tag.getBoolean("Held");
+        this.impacted = tag.getBoolean("Impacted");
         this.ownerUuid = tag.hasUUID(TAG_OWNER) ? tag.getUUID(TAG_OWNER) : null;
         Vec3 fallback = new Vec3(tag.getDouble(TAG_TARGET_X), tag.getDouble(TAG_TARGET_Y),
                 tag.getDouble(TAG_TARGET_Z));
@@ -226,6 +230,8 @@ public class BoomEntity extends Entity {
     @Override
     protected void addAdditionalSaveData(CompoundTag tag) {
         tag.putInt(TAG_LIFE, this.life);
+        tag.putBoolean("Held", this.held);
+        tag.putBoolean("Impacted", this.impacted);
         if (this.ownerUuid != null) {
             tag.putUUID(TAG_OWNER, this.ownerUuid);
         }

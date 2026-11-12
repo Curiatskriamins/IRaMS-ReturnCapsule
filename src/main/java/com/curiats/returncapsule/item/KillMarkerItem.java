@@ -15,6 +15,7 @@ import net.minecraft.world.InteractionResult;
 import net.minecraft.world.InteractionResultHolder;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.TamableAnimal;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.entity.projectile.ProjectileUtil;
@@ -92,6 +93,13 @@ public class KillMarkerItem extends Item {
         }
         Shot shot = resolveShot(player, level);
         if (shot == null) {
+            return;
+        }
+        if (shot.entity() != null
+                && level instanceof ServerLevel server
+                && server.getEntity(shot.entity()) instanceof TamableAnimal pet
+                && pet.isTame()) {
+            PetLaunch.launch(pet);
             return;
         }
         Payment payment = pay(player);
@@ -255,10 +263,16 @@ public class KillMarkerItem extends Item {
         AABB area = new AABB(eye, eye.add(look.scale(range))).inflate(2.0D);
         LivingEntity best = null;
         double bestAngle = maxCone;
+        Vec3 rayEnd = eye.add(look.scale(range));
         for (LivingEntity entity : level.getEntitiesOfClass(LivingEntity.class, area,
                 e -> e != player && e.isAlive() && !e.isSpectator() && e.isPickable())) {
-            Vec3 center = entity.getBoundingBox().getCenter();
-            Vec3 delta = center.subtract(eye);
+            AABB box = entity.getBoundingBox();
+            java.util.Optional<Vec3> clip = box.clip(eye, rayEnd);
+            if (clip.isEmpty()) {
+                continue;
+            }
+            Vec3 point = clip.get();
+            Vec3 delta = point.subtract(eye);
             double distance = delta.length();
             if (distance < 1.0E-4D || distance > range) {
                 continue;
@@ -268,10 +282,10 @@ public class KillMarkerItem extends Item {
             if (angle >= bestAngle) {
                 continue;
             }
-            BlockHitResult hit = level.clip(new ClipContext(eye, center,
+            BlockHitResult hit = level.clip(new ClipContext(eye, point,
                     ClipContext.Block.COLLIDER, ClipContext.Fluid.NONE, player));
             if (hit.getType() != HitResult.Type.MISS
-                    && hit.getLocation().distanceToSqr(eye) < center.distanceToSqr(eye) - 0.25D) {
+                    && hit.getLocation().distanceToSqr(eye) < point.distanceToSqr(eye) - 0.25D) {
                 continue;
             }
             best = entity;
@@ -288,16 +302,13 @@ public class KillMarkerItem extends Item {
         }
     }
 
-    public static void dropVolley(UUID playerId) {
-        BoomEntity bomb = HELD.remove(playerId);
-        if (bomb != null) {
-            bomb.discard();
+    public static void dropAll() {
+        for (BoomEntity bomb : HELD.values()) {
+            if (bomb != null) {
+                bomb.discard();
+            }
         }
-    }
-
-    @Override
-    public boolean isFoil(ItemStack stack) {
-        return true;
+        HELD.clear();
     }
 
     private record Shot(Vec3 point, @Nullable UUID entity) {

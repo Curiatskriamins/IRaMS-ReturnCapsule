@@ -136,14 +136,11 @@ public final class SuperBigCup {
             return;
         }
         Entity entity = this.level.getEntity(this.lockedEntity);
-        if (entity == null) {
+        if (entity == null || !entity.isAlive()) {
+            this.lockedEntity = null;
             return;
         }
-        if (entity.isAlive()) {
-            this.targetPoint = entity.getBoundingBox().getCenter();
-        } else {
-            this.lockedEntity = null;
-        }
+        this.targetPoint = entity.getBoundingBox().getCenter();
     }
 
     public Vec3 targetPoint() {

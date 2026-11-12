@@ -2,7 +2,6 @@ package com.curiats.returncapsule.entity.fall;
 
 import com.curiats.returncapsule.Config;
 import com.curiats.returncapsule.block.CapsuleStructure;
-import com.curiats.returncapsule.registry.ModBlocks;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.ClipContext;
 import net.minecraft.world.level.Level;
@@ -86,9 +85,8 @@ public final class CapsuleBreaker {
             if (state.isAir() || state.getDestroySpeed(level, pos) < 0.0F) {
                 break;
             }
-            if (state.is(ModBlocks.CAPSULE_PART.get())) {
-                BlockPos main = CapsuleStructure.findMain(level, pos);
-                if (main != null && removeSilently(level, main)) {
+            if (CapsuleStructure.isCapsuleStructure(level, pos)) {
+                if (CapsuleStructure.crush(level, pos)) {
                     broken++;
                 }
                 break;

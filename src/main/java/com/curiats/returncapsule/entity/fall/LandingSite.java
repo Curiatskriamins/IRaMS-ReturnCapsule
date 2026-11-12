@@ -1,6 +1,7 @@
 package com.curiats.returncapsule.entity.fall;
 
 import com.curiats.returncapsule.Config;
+import com.curiats.returncapsule.block.CapsuleStructure;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.util.RandomSource;
@@ -31,6 +32,10 @@ public final class LandingSite {
                     if (state.getDestroySpeed(level, cursor) < 0.0F) {
                         break;
                     }
+                    if (CapsuleStructure.isCapsuleStructure(level, cursor)) {
+                        CapsuleStructure.crush(level, cursor);
+                        break;
+                    }
                     level.destroyBlock(cursor.immutable(), false);
                 }
             }
@@ -49,6 +54,10 @@ public final class LandingSite {
                     cursor.setWithOffset(anchor, dx, dy, dz);
                     BlockState state = level.getBlockState(cursor);
                     if (state.isAir() || state.getDestroySpeed(level, cursor) < 0.0F) {
+                        continue;
+                    }
+                    if (CapsuleStructure.isCapsuleStructure(level, cursor)) {
+                        CapsuleStructure.crush(level, cursor);
                         continue;
                     }
                     level.destroyBlock(cursor.immutable(), false);
@@ -84,6 +93,10 @@ public final class LandingSite {
                     continue;
                 }
                 if (state.getBlock().getExplosionResistance() > 100.0F) {
+                    continue;
+                }
+                if (CapsuleStructure.isCapsuleStructure(level, surface)) {
+                    CapsuleStructure.crush(level, surface);
                     continue;
                 }
                 if (level.destroyBlock(surface, true)) {

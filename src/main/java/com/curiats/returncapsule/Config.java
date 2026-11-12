@@ -25,6 +25,9 @@ public final class Config {
     public static final ForgeConfigSpec.BooleanValue DAMAGE_OWNER;
     public static final ForgeConfigSpec.BooleanValue CLEAR_LANDING_AREA;
     public static final ForgeConfigSpec.DoubleValue LANDING_DROP_CHANCE;
+    public static final ForgeConfigSpec.DoubleValue LANDING_FIRE_CHANCE;
+    public static final ForgeConfigSpec.IntValue LANDING_FIRE_RADIUS;
+    public static final ForgeConfigSpec.DoubleValue BOOM_FIRE_CHANCE;
     public static final ForgeConfigSpec.BooleanValue SCREEN_SHAKE;
     public static final ForgeConfigSpec.DoubleValue SHAKE_RADIUS;
     public static final ForgeConfigSpec.DoubleValue SHAKE_START_DISTANCE;
@@ -90,12 +93,8 @@ public final class Config {
     public static final ForgeConfigSpec.DoubleValue BOOM_FLARE_SCALE;
 
     public static final ForgeConfigSpec.IntValue KILL_MARKER_RANGE;
-    public static final ForgeConfigSpec.IntValue KILL_MARKER_CHARGE_TICKS;
-    public static final ForgeConfigSpec.IntValue KILL_MARKER_INTERVAL_TICKS;
     public static final ForgeConfigSpec.IntValue KILL_MARKER_DIAMONDS;
     public static final ForgeConfigSpec.IntValue KILL_MARKER_DIAMOND_BLOCKS;
-    public static final ForgeConfigSpec.IntValue KILL_MARKER_MIN_SIMULATION_CHUNKS;
-    public static final ForgeConfigSpec.IntValue KILL_MARKER_MAX_QUEUED;
 
     static {
         ForgeConfigSpec.Builder builder = new ForgeConfigSpec.Builder();
@@ -156,6 +155,10 @@ public final class Config {
         LANDING_DROP_CHANCE = builder
                 .comment("弹坑周围的地表方块被破坏并掉落物品的概率(Probability that a surface block around the crater is broken and drops its items)")
                 .defineInRange("landingDropChance", 0.4D, 0.0D, 1.0D);
+        LANDING_FIRE_CHANCE = builder
+                .defineInRange("landingFireChance", 0.35D, 0.0D, 1.0D);
+        LANDING_FIRE_RADIUS = builder
+                .defineInRange("landingFireRadius", 4, 0, 16);
         SCREEN_SHAKE = builder
                 .comment("镜头震动(Send a camera shake to players near the impact)")
                 .define("screenShake", true);
@@ -358,6 +361,8 @@ public final class Config {
         BOOM_MAX_LIFETIME_TICKS = builder
                 .comment("巡航弹最长飞行时间，超时自爆；默认 1200 tick = 1 分钟(Maximum flight time in ticks before the bomb self destructs; 1200 ticks = 1 minute)")
                 .defineInRange("maxLifetimeTicks", 1200, 40, 12000);
+        BOOM_FIRE_CHANCE = builder
+                .defineInRange("boomFireChance", 0.4D, 0.0D, 1.0D);
         BOOM_MODEL_SCALE = builder
                 .comment("巡航弹模型缩放倍率；模型本体约 55 单位长，1.0 即约 3.4 格，默认 1.5 更有压迫感(Model scale multiplier of the cruise bomb; the body is about 55 units long, so 1.0 is roughly 3.4 blocks; 1.5 reads as more threatening)")
                 .defineInRange("modelScale", 1.5D, 0.1D, 10.0D);
@@ -373,24 +378,12 @@ public final class Config {
         KILL_MARKER_RANGE = builder
                 .comment("击杀指示器的准星标记距离，会被服务器模拟距离截断，保证目标在弹体可 tick 的范围内(Crosshair marking range of the kill indicator; clamped to the server simulation distance so the target is inside the ticking area)")
                 .defineInRange("range", 128, 8, 512);
-        KILL_MARKER_CHARGE_TICKS = builder
-                .comment("长按多少 tick 后开始标记，默认 20 tick = 1 秒(Ticks the indicator must be held before it starts marking; 20 ticks = 1 second)")
-                .defineInRange("chargeTicks", 20, 1, 200);
-        KILL_MARKER_INTERVAL_TICKS = builder
-                .comment("标记期间每隔多少 tick 发射一枚巡航弹，默认 20 tick = 1 秒(One bomb per this many ticks while marking; 20 ticks = 1 second)")
-                .defineInRange("intervalTicks", 20, 1, 400);
         KILL_MARKER_DIAMONDS = builder
                 .comment("每枚巡航弹消耗的钻石数量(Diamonds consumed by one bomb)")
                 .defineInRange("diamonds", 9, 1, 64);
         KILL_MARKER_DIAMOND_BLOCKS = builder
                 .comment("钻石不足时改为消耗的钻石块数量(Diamond blocks consumed instead when there are not enough diamonds)")
                 .defineInRange("diamondBlocks", 1, 1, 9);
-        KILL_MARKER_MIN_SIMULATION_CHUNKS = builder
-                .comment("服务器模拟距离低于该区块数时，每次发射后额外等待 (差值 × 20) tick 再发射(When the server simulation distance is below this many chunks, wait an extra 20 ticks per missing chunk before the next shot)")
-                .defineInRange("minSimulationChunks", 8, 1, 32);
-        KILL_MARKER_MAX_QUEUED = builder
-                .comment("潜行时最多暂存多少枚巡航弹(Maximum number of bombs queued while sneaking)")
-                .defineInRange("maxQueued", 50, 1, 256);
         builder.pop();
 
         SPEC = builder.build();

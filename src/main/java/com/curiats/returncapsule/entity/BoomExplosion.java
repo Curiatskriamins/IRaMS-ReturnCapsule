@@ -42,12 +42,12 @@ public final class BoomExplosion {
         
         if (Config.BOOM_DESTROY_TERRAIN.get()) {
             level.explode(bomb, center.x, center.y, center.z, power, Level.ExplosionInteraction.BLOCK);
-        } else {
-            level.playSound(null, center.x, center.y, center.z, ModSounds.BOOM_IMPACT.get(),
-                    SoundSource.BLOCKS, 16.0F, 0.8F);
         }
+        level.playSound(null, center.x, center.y, center.z, ModSounds.BOOM_IMPACT.get(),
+                SoundSource.BLOCKS, 16.0F, 0.8F);
 
         spawnParticles(level, center, radius);
+        CapsuleFire.spread(level, center, radius, Config.BOOM_FIRE_CHANCE.get());
 
         
         

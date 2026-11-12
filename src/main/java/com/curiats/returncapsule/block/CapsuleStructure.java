@@ -3,6 +3,7 @@ package com.curiats.returncapsule.block;
 import com.curiats.returncapsule.registry.ModBlocks;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.Containers;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockState;
@@ -97,6 +98,22 @@ public final class CapsuleStructure {
             }
         }
         return null;
+    }
+
+    public static boolean crush(Level level, BlockPos pos) {
+        BlockPos main = findMain(level, pos);
+        if (main == null) {
+            return false;
+        }
+        if (level.getBlockEntity(main) instanceof CapsuleBlockEntity container
+                && level instanceof ServerLevel server) {
+            container.ensureLootTable();
+            Containers.dropContents(server, main, container);
+            container.clearContent();
+        }
+        removeParts(level, main);
+        level.removeBlock(main, false);
+        return true;
     }
 
     public static boolean isCapsuleStructure(Level level, BlockPos pos) {

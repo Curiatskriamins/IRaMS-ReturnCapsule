@@ -177,6 +177,8 @@ public class TransportCapsuleEntity extends FallingCapsuleEntity implements Menu
         CapsuleParticles.broadcast(server, ParticleTypes.EXPLOSION, x, y, z, 30, 4.5D, 1.0D, 4.5D, 0.0D);
 
         CapsulePlacer.withItems(server, landing, this.landingFacing, this.inventory, this.tier);
+        CapsuleFire.spread(server, new Vec3(x, y, z),
+                Config.LANDING_FIRE_RADIUS.get(), Config.LANDING_FIRE_CHANCE.get());
         this.discard();
     }
 

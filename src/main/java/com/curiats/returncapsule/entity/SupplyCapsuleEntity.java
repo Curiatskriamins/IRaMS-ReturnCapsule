@@ -119,6 +119,8 @@ public class SupplyCapsuleEntity extends FallingCapsuleEntity {
         }
         CapsulePlacer.withLootTable(server, landing, this.landingFacing,
                 this.tier.lootTable(), this.tier);
+        CapsuleFire.spread(server, new Vec3(x, y, z),
+                Config.LANDING_FIRE_RADIUS.get(), Config.LANDING_FIRE_CHANCE.get());
         this.discard();
     }
 
