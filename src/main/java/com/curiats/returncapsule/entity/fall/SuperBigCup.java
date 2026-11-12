@@ -124,10 +124,7 @@ public final class SuperBigCup {
         
         
         
-        if (this.spiralTicks < SPIRAL_DURATION
-                && (this.spiralTicks > 0
-                || from.distanceToSqr(this.targetPoint)
-                <= (SPIRAL_RADIUS + 24.0D) * (SPIRAL_RADIUS + 24.0D))) {
+        if (this.spiralTicks < SPIRAL_DURATION) {
             this.spiralTicks++;
         }
         if (this.lockedEntity == null) {
@@ -208,7 +205,7 @@ public final class SuperBigCup {
         }
         direct = direct.scale(1.0D / distance);
         if (isClear(from, this.targetPoint, source)) {
-            return direct;
+            return desired;
         }
 
         double baseYaw = Math.atan2(direct.x, direct.z);

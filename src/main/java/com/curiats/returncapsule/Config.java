@@ -296,7 +296,7 @@ public final class Config {
         FILL_TARGET = builder
                 .comment("开舱后目标填充率，0-1；不足的部分用同一阶的模组物品补满(Target fill ratio after opening; remaining slots are topped up with mod items of the same tier)",
                         "1.0 会把 324 格全部塞满，0 则不补(1.0 fills all 324 slots, 0 disables the top-up)")
-                .defineInRange("fillTarget", 0.75D, 0.0D, 1.0D);
+                .defineInRange("fillTarget", 0.6D, 0.0D, 1.0D);
         MOD_LOOT_EXCLUDED_NAMESPACES = builder
                 .comment("排除在随机模组物品池之外的模组命名空间，不区分大小写的子串匹配(Mod namespaces excluded from the random mod item pool, case-insensitive substring match)",
                         "默认排除枪械模组，因为它们的枪、配件和弹药需要 NBT 数据才能运作(Gun mods are excluded by default because their guns, attachments and ammo need NBT data to work)",

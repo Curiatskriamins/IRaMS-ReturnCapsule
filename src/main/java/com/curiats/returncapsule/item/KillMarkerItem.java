@@ -100,6 +100,9 @@ public class KillMarkerItem extends Item {
         }
         volley.sneaking = sneaking;
         int elapsed = this.getUseDuration(stack) - remainingUseDuration;
+        if (elapsed == 0) {
+            volley.normalFired = false;
+        }
         int charge = Math.max(1, Config.KILL_MARKER_CHARGE_TICKS.get());
         if (elapsed < charge) {
             return;
@@ -112,6 +115,9 @@ public class KillMarkerItem extends Item {
         if (sneaking && volley.shots.size() >= maxQueued) {
             return;
         }
+        if (!sneaking && volley.normalFired) {
+            return;
+        }
         Shot shot = resolveShot(player, level);
         if (shot == null) {
             return;
@@ -120,6 +126,7 @@ public class KillMarkerItem extends Item {
                 && level instanceof ServerLevel server
                 && server.getEntity(shot.entity()) instanceof TamableAnimal pet
                 && pet.isTame()) {
+            volley.normalFired = true;
             PetLaunch.launch(pet);
             return;
         }
@@ -131,9 +138,10 @@ public class KillMarkerItem extends Item {
         if (sneaking) {
             volley.shots.add(new QueuedShot(shot.point(), shot.entity(), angle, payment));
         } else {
+            volley.normalFired = true;
             BoomEntity bomb = spawnBomb(level, player, shot.point(), shot.entity(), angle, null);
             if (bomb != null) {
-                bomb.release();
+                volley.normalBomb = bomb;
             } else {
                 refund(player, payment);
             }
@@ -146,10 +154,20 @@ public class KillMarkerItem extends Item {
             return;
         }
         Volley volley = VOLLEYS.get(player.getUUID());
-        if (volley != null) {
-            volley.sneaking = false;
-            startFiring(volley);
+        if (volley == null) {
+            return;
         }
+        if (volley.normalBomb != null) {
+            BoomEntity bomb = volley.normalBomb;
+            volley.normalBomb = null;
+            if (player.isDeadOrDying()) {
+                bomb.discard();
+            } else {
+                bomb.release();
+            }
+        }
+        volley.sneaking = false;
+        startFiring(volley);
     }
 
     private static void startFiring(Volley volley) {
@@ -222,6 +240,7 @@ public class KillMarkerItem extends Item {
             double playerDistance = Math.sqrt(player.distanceToSqr(point));
             controller = SuperBigCup.create(server, point, entity, angle, playerDistance,
                     player.position(), reservedAngles, server.random);
+            server.getChunkAt(net.minecraft.core.BlockPos.containing(controller.launchPoint()));
             bomb = new BoomEntity(server, controller, player);
         } catch (RuntimeException exception) {
             ReturnCapsuleMod.LOGGER.warn("Failed to build a cruise bomb", exception);
@@ -346,10 +365,7 @@ public class KillMarkerItem extends Item {
                 e -> e != player && e.isAlive() && !e.isSpectator() && e.isPickable())) {
             AABB box = entity.getBoundingBox();
             java.util.Optional<Vec3> clip = box.clip(eye, rayEnd);
-            if (clip.isEmpty()) {
-                continue;
-            }
-            Vec3 point = clip.get();
+            Vec3 point = clip.orElseGet(box::getCenter);
             Vec3 delta = point.subtract(eye);
             double distance = delta.length();
             if (distance < 1.0E-4D || distance > range) {
@@ -375,12 +391,21 @@ public class KillMarkerItem extends Item {
      
     public static void refundVolley(ServerPlayer player) {
         Volley volley = VOLLEYS.remove(player.getUUID());
-        if (volley != null) {
-            refundShots(player, volley);
+        if (volley == null) {
+            return;
         }
+        if (volley.normalBomb != null) {
+            volley.normalBomb.discard();
+        }
+        refundShots(player, volley);
     }
 
     public static void dropAll() {
+        for (Volley volley : VOLLEYS.values()) {
+            if (volley.normalBomb != null) {
+                volley.normalBomb.discard();
+            }
+        }
         VOLLEYS.clear();
     }
 
@@ -405,6 +430,8 @@ public class KillMarkerItem extends Item {
         private final List<QueuedShot> shots = new ArrayList<>();
         private boolean sneaking;
         private boolean firing;
+        private boolean normalFired;
         private int cooldown;
+        private BoomEntity normalBomb;
     }
 }

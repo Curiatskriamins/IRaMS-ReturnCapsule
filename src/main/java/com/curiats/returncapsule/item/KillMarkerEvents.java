@@ -51,6 +51,7 @@ public final class KillMarkerEvents {
             PetLaunch.tick(level);
         }
         KillMarkerItem.tickQueues(event.getServer());
+        com.curiats.returncapsule.util.TrueDot.tick(event.getServer());
     }
 
     private static void refund(Player player) {

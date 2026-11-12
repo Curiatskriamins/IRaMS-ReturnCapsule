@@ -66,6 +66,13 @@ public final class ModItemPool {
             
             stack.setCount(Math.max(1, Math.min(1 + random.nextInt(maxPerStack(tier)),
                     stack.getMaxStackSize())));
+            if (com.curiats.returncapsule.util.LootLimits.isMusicDisc(stack)) {
+                int remaining = 3 - com.curiats.returncapsule.util.LootLimits.musicDiscCount(container);
+                if (remaining <= 0) {
+                    continue;
+                }
+                stack.setCount(Math.min(stack.getCount(), remaining));
+            }
             if (!inserter.insert(stack)) {
                 return;
             }

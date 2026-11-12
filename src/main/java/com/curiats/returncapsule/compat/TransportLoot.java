@@ -23,15 +23,16 @@ import java.util.List;
 
 public final class TransportLoot {
     public static void fill(Container container, ServerLevel server, RandomSource random, SummonTier tier) {
-        if (TieredLoot.allowsGunLoot(tier) && TaCZIntegration.isLoaded()) {
-            TaCZIntegration.fill(container, random, tier);
-        }
         fillVanilla(container, server, random, tier);
         TieredLoot.fillModItems(container, tier, random);
         Supplies.fill(container, tier, random);
         BladeLoot.fill(container, tier, random);
         BulkCargo.fill(container, tier, random);
+        if (TieredLoot.allowsGunLoot(tier) && TaCZIntegration.isLoaded()) {
+            TaCZIntegration.fill(container, random, tier);
+        }
         LootLayout.spread(container, random);
+        com.curiats.returncapsule.util.LootLimits.trimMusicDiscs(container, 3);
     }
 
     public static void fillVanilla(Container container, ServerLevel server, RandomSource random, SummonTier tier) {

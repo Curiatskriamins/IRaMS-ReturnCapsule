@@ -11,6 +11,7 @@ import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.ai.attributes.Attribute;
 import net.minecraft.world.entity.ai.attributes.AttributeModifier;
 import net.minecraft.world.entity.ai.attributes.Attributes;
+import net.minecraft.world.item.CreativeModeTab;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 
@@ -20,7 +21,6 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
- 
 public final class BladeLoot {
     private static volatile List<Blade> cache;
 
@@ -33,7 +33,7 @@ public final class BladeLoot {
             return;
         }
         Blade blade = pool.get(random.nextInt(pool.size()));
-        new ItemInserter(container).insert(new ItemStack(blade.item()));
+        new ItemInserter(container).insert(blade.stack().copy());
     }
 
     private static List<Blade> pool(SummonTier tier) {
@@ -80,16 +80,26 @@ public final class BladeLoot {
     private static List<Blade> build() {
         List<Blade> result = new ArrayList<>();
         for (Item item : BuiltInRegistries.ITEM) {
-            ResourceLocation id = BuiltInRegistries.ITEM.getKey(item);
-            if (id == null || !isBladeNamespace(id.getNamespace())) {
+            if (!isAllowed(item)) {
                 continue;
             }
-            if (!isSlashBlade(item)) {
-                continue;
+            ItemStack stack = item.getDefaultInstance();
+            result.add(new Blade(stack, damage(stack)));
+        }
+        for (CreativeModeTab tab : BuiltInRegistries.CREATIVE_MODE_TAB) {
+            for (ItemStack stack : tab.getDisplayItems()) {
+                if (!isAllowed(stack.getItem())) {
+                    continue;
+                }
+                result.add(new Blade(stack.copy(), damage(stack)));
             }
-            result.add(new Blade(item, damage(item)));
         }
         return List.copyOf(result);
+    }
+
+    private static boolean isAllowed(Item item) {
+        ResourceLocation id = BuiltInRegistries.ITEM.getKey(item);
+        return id != null && isBladeNamespace(id.getNamespace()) && isSlashBlade(item);
     }
 
     private static boolean isSlashBlade(Item item) {
@@ -108,11 +118,11 @@ public final class BladeLoot {
         return false;
     }
 
-     
-    private static double damage(Item item) {
+    private static double damage(ItemStack stack) {
+        Item item = stack.getItem();
         try {
             Method method = item.getClass().getMethod("getDamage", ItemStack.class);
-            Object value = method.invoke(item, item.getDefaultInstance());
+            Object value = method.invoke(item, stack);
             if (value instanceof Number number) {
                 return number.doubleValue();
             }
@@ -120,7 +130,7 @@ public final class BladeLoot {
         }
         double bonus = 0.0D;
         for (Map.Entry<Attribute, AttributeModifier> entry
-                : item.getDefaultAttributeModifiers(EquipmentSlot.MAINHAND).entries()) {
+                : stack.getAttributeModifiers(EquipmentSlot.MAINHAND).entries()) {
             if (entry.getKey() == Attributes.ATTACK_DAMAGE) {
                 bonus += entry.getValue().getAmount();
             }
@@ -128,7 +138,7 @@ public final class BladeLoot {
         return 1.0D + bonus;
     }
 
-    private record Blade(Item item, double damage) {
+    private record Blade(ItemStack stack, double damage) {
     }
 
     private BladeLoot() {

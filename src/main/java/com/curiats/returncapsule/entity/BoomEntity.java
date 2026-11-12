@@ -294,6 +294,11 @@ public class BoomEntity extends Entity {
         return this.life;
     }
 
+    @Nullable
+    public java.util.UUID lockedEntity() {
+        return this.controller == null ? null : this.controller.lockedEntity();
+    }
+
     public boolean isImpacted() {
         return this.impacted;
     }

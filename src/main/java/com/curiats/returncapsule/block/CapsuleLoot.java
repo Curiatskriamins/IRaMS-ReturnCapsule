@@ -51,15 +51,6 @@ final class CapsuleLoot {
         
         RandomSource random = server.random;
         SummonTier tier = this.owner.getTier();
-        if (TieredLoot.allowsGunLoot(tier) && TaCZIntegration.isLoaded()
-                && TaCZIntegration.fill(this.owner, random, tier)) {
-            this.taczItems = true;
-            TransportLoot.fillVanilla(this.owner, server, random, tier);
-            this.owner.clearLootTable();
-            this.phase = Phase.FILLED;
-            this.owner.setChanged();
-            return;
-        }
         if (this.phase == Phase.UNASSIGNED) {
             this.owner.assignLootTable(tier.lootTable(), random.nextLong());
             this.phase = Phase.TABLE;
@@ -80,7 +71,11 @@ final class CapsuleLoot {
             Supplies.fill(this.owner, this.owner.getTier(), player.getRandom());
             BladeLoot.fill(this.owner, this.owner.getTier(), player.getRandom());
             BulkCargo.fill(this.owner, this.owner.getTier(), player.getRandom());
+            if (TieredLoot.allowsGunLoot(this.owner.getTier()) && TaCZIntegration.isLoaded()) {
+                this.taczItems = TaCZIntegration.fill(this.owner, player.getRandom(), this.owner.getTier());
+            }
             LootLayout.spread(this.owner, player.getRandom());
+            com.curiats.returncapsule.util.LootLimits.trimMusicDiscs(this.owner, 3);
             this.owner.clearLootTable();
             this.phase = Phase.READY;
             this.owner.setChanged();

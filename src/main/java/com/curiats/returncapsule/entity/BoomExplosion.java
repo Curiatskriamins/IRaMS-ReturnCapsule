@@ -6,6 +6,7 @@ import com.curiats.returncapsule.entity.fall.CapsuleParticles;
 import com.curiats.returncapsule.entity.fall.ShakeBurst;
 import com.curiats.returncapsule.registry.ModSounds;
 import com.curiats.returncapsule.util.TrueDamage;
+import com.curiats.returncapsule.util.TrueDot;
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.sounds.SoundSource;
@@ -67,6 +68,17 @@ public final class BoomExplosion {
             }
             if (!Config.BOOM_HURT_OWNER.get() && owner != null && target.getUUID().equals(owner.getUUID())) {
                 continue;
+            }
+            java.util.UUID locked = bomb == null ? null : bomb.lockedEntity();
+            if (locked != null && locked.equals(target.getUUID())) {
+                int hits = target.getPersistentData().getInt("returncapsule_bomb_hits") + 1;
+                target.getPersistentData().putInt("returncapsule_bomb_hits", hits);
+                if (hits > 5) {
+                    target.invulnerableTime = 0;
+                    target.hurt(TrueDamage.boom(level, bomb, owner), 500.0F);
+                    TrueDot.apply(level, target, bomb, owner, 10, 10.0F);
+                    continue;
+                }
             }
             double factor = occlusionFactor(level, center, target, bomb);
             float damage = (float) (base * factor);
