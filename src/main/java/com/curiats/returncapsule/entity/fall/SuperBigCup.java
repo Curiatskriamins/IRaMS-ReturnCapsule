@@ -33,10 +33,10 @@ public final class SuperBigCup {
     private static final DustParticleOptions MARKER_DUST =
             new DustParticleOptions(new Vector3f(1.0F, 1.0F, 1.0F), 1.2F);
      
-    private static final int SPIRAL_DURATION = 70;
-    private static final double SPIRAL_TURNS = 1.0D;
-    private static final double SPIRAL_RADIUS = 45.0D;
-    private static final double SPIRAL_HEIGHT = 25.0D;
+    private static final int SPIRAL_DURATION = 120;
+    private static final double SPIRAL_TURNS = 2.0D;
+    private static final double SPIRAL_RADIUS = 50.0D;
+    private static final double SPIRAL_HEIGHT = 30.0D;
 
     private static List<Double> incidenceSequence;
     private static int incidenceCursor;
@@ -157,8 +157,14 @@ public final class SuperBigCup {
         }
         double t = this.spiralTicks / (double) SPIRAL_DURATION;
         double angle = this.spiralAngle + t * SPIRAL_TURNS * Math.PI * 2.0D;
-        double radius = SPIRAL_RADIUS * (1.0D - t);
-        double height = SPIRAL_HEIGHT * (1.0D - t);
+        double orbit = 0.65D;
+        if (t < orbit) {
+            return this.targetPoint.add(Math.cos(angle) * SPIRAL_RADIUS, SPIRAL_HEIGHT,
+                    Math.sin(angle) * SPIRAL_RADIUS);
+        }
+        double dive = (t - orbit) / (1.0D - orbit);
+        double radius = SPIRAL_RADIUS * (1.0D - dive);
+        double height = SPIRAL_HEIGHT * (1.0D - dive);
         return this.targetPoint.add(Math.cos(angle) * radius, height, Math.sin(angle) * radius);
     }
 

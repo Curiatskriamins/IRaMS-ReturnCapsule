@@ -1,11 +1,13 @@
 package com.curiats.returncapsule.block;
 
+import com.curiats.returncapsule.registry.ModSounds;
 import com.curiats.returncapsule.util.HiddenPlayers;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.entity.Pose;
 import net.minecraft.world.phys.Vec3;
 
@@ -82,6 +84,8 @@ final class CapsuleSeats {
                 this.eject(player, index);
             } else if (this.owner.isClosed()) {
                 this.owner.startOpening();
+                this.owner.getLevel().playSound(null, this.owner.getBlockPos(),
+                        ModSounds.CAPSULE_OPEN.get(), SoundSource.BLOCKS, 1.0F, 1.0F);
             }
         }
     }
