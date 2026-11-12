@@ -29,6 +29,8 @@ public final class CapsuleInteraction {
                     capsule.startOpening();
                     level.playSound(null, pos, ModSounds.CAPSULE_OPEN.get(),
                             SoundSource.BLOCKS, 1.0F, 1.0F);
+                    com.curiats.returncapsule.ReturnCapsuleMod.LOGGER.info(
+                            "[sound] capsule_open interaction at {}", pos);
                 }
                 case OPEN -> player.openMenu(capsule);
                 case OPENING, CLOSING -> {

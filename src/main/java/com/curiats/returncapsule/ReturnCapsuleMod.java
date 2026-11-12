@@ -22,7 +22,7 @@ import org.slf4j.Logger;
 
 @Mod(ReturnCapsuleMod.MODID)
 public final class ReturnCapsuleMod {
-    public static final String MODID = "return-capsule";
+    public static final String MODID = "returncapsule";
     public static final Logger LOGGER = LogUtils.getLogger();
 
     public ReturnCapsuleMod() {

@@ -9,6 +9,7 @@ import net.minecraft.core.Direction;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.sounds.SoundSource;
+import net.minecraft.util.Mth;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.InteractionResultHolder;
@@ -31,10 +32,7 @@ import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
 
 import javax.annotation.Nullable;
-import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -42,7 +40,7 @@ import java.util.UUID;
  
 public class KillMarkerItem extends Item {
     private static final int USE_DURATION = 72000;
-    private static final Map<UUID, Volley> VOLLEYS = new HashMap<>();
+    private static final Map<UUID, BoomEntity> HELD = new HashMap<>();
 
     public KillMarkerItem(Properties properties) {
         super(properties);
@@ -62,6 +60,10 @@ public class KillMarkerItem extends Item {
     public InteractionResultHolder<ItemStack> use(Level level, Player player, InteractionHand hand) {
         ItemStack stack = player.getItemInHand(hand);
         player.startUsingItem(hand);
+        if (!level.isClientSide && player instanceof ServerPlayer server) {
+            server.playNotifySound(ModSounds.MISSILE_LOCK.get(), SoundSource.PLAYERS, 1.0F, 1.0F);
+            ReturnCapsuleMod.LOGGER.info("[sound] kill_marker use -> missile_lock");
+        }
         return InteractionResultHolder.consume(stack);
     }
 
@@ -72,6 +74,10 @@ public class KillMarkerItem extends Item {
             return InteractionResult.PASS;
         }
         player.startUsingItem(context.getHand());
+        if (!context.getLevel().isClientSide && player instanceof ServerPlayer server) {
+            server.playNotifySound(ModSounds.MISSILE_LOCK.get(), SoundSource.PLAYERS, 1.0F, 1.0F);
+            ReturnCapsuleMod.LOGGER.info("[sound] kill_marker useOn -> missile_lock");
+        }
         return InteractionResult.SUCCESS;
     }
 
@@ -81,31 +87,9 @@ public class KillMarkerItem extends Item {
             return;
         }
         int elapsed = this.getUseDuration(stack) - remainingUseDuration;
-        Volley volley = VOLLEYS.computeIfAbsent(player.getUUID(), id -> new Volley());
-        boolean sneaking = player.isShiftKeyDown();
-
-        
-        if (volley.sneaking && !sneaking) {
-            release(level, player, volley);
-            volley.sneaking = false;
+        if (elapsed != 0 || HELD.containsKey(player.getUUID())) {
             return;
         }
-        volley.sneaking = sneaking;
-
-        int charge = Math.max(1, Config.KILL_MARKER_CHARGE_TICKS.get());
-        if (elapsed < charge) {
-            return;
-        }
-        int interval = fireInterval(player);
-        if ((elapsed - charge) % interval != 0) {
-            return;
-        }
-
-        int maxQueued = Math.max(1, Config.KILL_MARKER_MAX_QUEUED.get());
-        if (sneaking && volley.shots.size() >= maxQueued) {
-            return;
-        }
-
         Shot shot = resolveShot(player, level);
         if (shot == null) {
             return;
@@ -114,13 +98,13 @@ public class KillMarkerItem extends Item {
         if (payment == null) {
             return;
         }
-
         double angle = SuperBigCup.nextIncidence();
-        if (sneaking) {
-            volley.shots.add(new QueuedShot(shot.point(), shot.entity(), angle, payment));
-        } else if (!spawnBomb(level, player, shot.point(), shot.entity(), angle, null)) {
+        BoomEntity bomb = spawnBomb(level, player, shot.point(), shot.entity(), angle, null);
+        if (bomb == null) {
             refund(player, payment);
+            return;
         }
+        HELD.put(player.getUUID(), bomb);
     }
 
     @Override
@@ -128,39 +112,23 @@ public class KillMarkerItem extends Item {
         if (level.isClientSide || !(living instanceof ServerPlayer player)) {
             return;
         }
-        Volley volley = VOLLEYS.remove(player.getUUID());
-        if (volley == null) {
+        BoomEntity bomb = HELD.remove(player.getUUID());
+        if (bomb == null) {
             return;
         }
-        
         if (player.isDeadOrDying()) {
-            refundShots(player, volley);
+            bomb.discard();
             return;
         }
-        release(level, player, volley);
+        bomb.release();
     }
 
-    private static void release(Level level, ServerPlayer player, Volley volley) {
-        if (volley.shots.isEmpty()) {
-            return;
-        }
-        Set<Double> reserved = new HashSet<>();
-        for (QueuedShot shot : volley.shots) {
-            reserved.add(shot.angle());
-        }
-        for (QueuedShot shot : volley.shots) {
-            if (!spawnBomb(level, player, shot.point(), shot.entity(), shot.angle(), reserved)) {
-                refund(player, shot.payment());
-            }
-        }
-        volley.shots.clear();
-    }
-
-    private static boolean spawnBomb(Level level, ServerPlayer player, Vec3 point,
-                                     @Nullable UUID entity, double angle,
-                                     @Nullable Set<Double> reservedAngles) {
+    @Nullable
+    private static BoomEntity spawnBomb(Level level, ServerPlayer player, Vec3 point,
+                                        @Nullable UUID entity, double angle,
+                                        @Nullable Set<Double> reservedAngles) {
         if (!(level instanceof ServerLevel server)) {
-            return false;
+            return null;
         }
         SuperBigCup controller;
         BoomEntity bomb;
@@ -171,30 +139,16 @@ public class KillMarkerItem extends Item {
             bomb = new BoomEntity(server, controller, player);
         } catch (RuntimeException exception) {
             ReturnCapsuleMod.LOGGER.warn("Failed to build a cruise bomb", exception);
-            return false;
+            return null;
         }
         if (!server.addFreshEntity(bomb)) {
-            return false;
+            return null;
         }
         if (reservedAngles != null) {
             reservedAngles.add(controller.incidenceDegrees());
         }
-        if (entity != null && server.getEntity(entity) instanceof LivingEntity) {
-            
-            player.playNotifySound(ModSounds.MISSILE_LOCK.get(), SoundSource.PLAYERS, 1.0F, 1.0F);
-        }
-        return true;
-    }
-
-     
-    private static int fireInterval(ServerPlayer player) {
-        int interval = Math.max(1, Config.KILL_MARKER_INTERVAL_TICKS.get());
-        int minimum = Math.max(1, Config.KILL_MARKER_MIN_SIMULATION_CHUNKS.get());
-        int simulation = Math.max(1, player.getServer().getPlayerList().getSimulationDistance());
-        if (simulation < minimum) {
-            interval += (minimum - simulation) * 20;
-        }
-        return interval;
+        bomb.hold();
+        return bomb;
     }
 
      
@@ -270,8 +224,8 @@ public class KillMarkerItem extends Item {
         Vec3 end = eye.add(player.getViewVector(1.0F).scale(range));
         AABB search = new AABB(eye, end).inflate(1.0D);
         EntityHitResult entityHit = ProjectileUtil.getEntityHitResult(level, player, eye, end, search,
-                entity -> entity != player && entity.isAlive() && !entity.isSpectator()
-                        && entity.isPickable());
+                entity -> entity != player && entity instanceof LivingEntity && entity.isAlive()
+                        && !entity.isSpectator() && entity.isPickable());
         BlockHitResult blockHit = level.clip(new ClipContext(eye, end,
                 ClipContext.Block.COLLIDER, ClipContext.Fluid.NONE, player));
 
@@ -280,6 +234,10 @@ public class KillMarkerItem extends Item {
                 <= blockHit.getLocation().distanceToSqr(eye))) {
             Entity entity = entityHit.getEntity();
             return new Shot(entity.getBoundingBox().getCenter(), entity.getUUID());
+        }
+        Shot crosshair = findCrosshairLiving(player, level, eye, player.getViewVector(1.0F), range);
+        if (crosshair != null) {
+            return crosshair;
         }
         if (blockHit.getType() != HitResult.Type.MISS) {
             Direction face = blockHit.getDirection();
@@ -290,24 +248,51 @@ public class KillMarkerItem extends Item {
         return null;
     }
 
+    @Nullable
+    private static Shot findCrosshairLiving(ServerPlayer player, Level level, Vec3 eye, Vec3 look,
+                                             double range) {
+        final double maxCone = Math.toRadians(20.0D);
+        AABB area = new AABB(eye, eye.add(look.scale(range))).inflate(2.0D);
+        LivingEntity best = null;
+        double bestAngle = maxCone;
+        for (LivingEntity entity : level.getEntitiesOfClass(LivingEntity.class, area,
+                e -> e != player && e.isAlive() && !e.isSpectator() && e.isPickable())) {
+            Vec3 center = entity.getBoundingBox().getCenter();
+            Vec3 delta = center.subtract(eye);
+            double distance = delta.length();
+            if (distance < 1.0E-4D || distance > range) {
+                continue;
+            }
+            double dot = Mth.clamp(delta.scale(1.0D / distance).dot(look), -1.0D, 1.0D);
+            double angle = Math.acos(dot);
+            if (angle >= bestAngle) {
+                continue;
+            }
+            BlockHitResult hit = level.clip(new ClipContext(eye, center,
+                    ClipContext.Block.COLLIDER, ClipContext.Fluid.NONE, player));
+            if (hit.getType() != HitResult.Type.MISS
+                    && hit.getLocation().distanceToSqr(eye) < center.distanceToSqr(eye) - 0.25D) {
+                continue;
+            }
+            best = entity;
+            bestAngle = angle;
+        }
+        return best == null ? null : new Shot(best.getBoundingBox().getCenter(), best.getUUID());
+    }
+
      
     public static void refundVolley(ServerPlayer player) {
-        Volley volley = VOLLEYS.remove(player.getUUID());
-        if (volley != null) {
-            refundShots(player, volley);
+        BoomEntity bomb = HELD.remove(player.getUUID());
+        if (bomb != null) {
+            bomb.discard();
         }
     }
 
-    private static void refundShots(ServerPlayer player, Volley volley) {
-        for (QueuedShot shot : volley.shots) {
-            refund(player, shot.payment());
-        }
-        volley.shots.clear();
-    }
-
-     
     public static void dropVolley(UUID playerId) {
-        VOLLEYS.remove(playerId);
+        BoomEntity bomb = HELD.remove(playerId);
+        if (bomb != null) {
+            bomb.discard();
+        }
     }
 
     @Override
@@ -318,15 +303,7 @@ public class KillMarkerItem extends Item {
     private record Shot(Vec3 point, @Nullable UUID entity) {
     }
 
-    private record QueuedShot(Vec3 point, @Nullable UUID entity, double angle, Payment payment) {
-    }
-
     private record Payment(@Nullable Item item, int count) {
         private static final Payment FREE = new Payment(null, 0);
-    }
-
-    private static final class Volley {
-        private final List<QueuedShot> shots = new ArrayList<>();
-        private boolean sneaking;
     }
 }

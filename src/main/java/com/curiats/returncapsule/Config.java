@@ -87,6 +87,7 @@ public final class Config {
     public static final ForgeConfigSpec.IntValue BOOM_MAX_LIFETIME_TICKS;
     public static final ForgeConfigSpec.DoubleValue BOOM_MODEL_SCALE;
     public static final ForgeConfigSpec.DoubleValue BOOM_MODEL_BASE_PITCH;
+    public static final ForgeConfigSpec.DoubleValue BOOM_FLARE_SCALE;
 
     public static final ForgeConfigSpec.IntValue KILL_MARKER_RANGE;
     public static final ForgeConfigSpec.IntValue KILL_MARKER_CHARGE_TICKS;
@@ -363,6 +364,9 @@ public final class Config {
         BOOM_MODEL_BASE_PITCH = builder
                 .comment("模型自身朝向的补偿角：模型默认朝下(-Y)时用 -90 把弹头转到 +Z；若模型在游戏里前后颠倒，改成 90(Base orientation of the model: -90 turns a nose-down (-Y) model to +Z; use 90 if the model flies backwards)")
                 .defineInRange("modelBasePitch", -90.0D, -180.0D, 180.0D);
+        BOOM_FLARE_SCALE = builder
+                .comment("巡航弹十字星光晕大小倍率(Cross flare size multiplier; 3.0 default)")
+                .defineInRange("flareScale", 3.0D, 0.1D, 16.0D);
         builder.pop();
 
         builder.push("kill_marker");

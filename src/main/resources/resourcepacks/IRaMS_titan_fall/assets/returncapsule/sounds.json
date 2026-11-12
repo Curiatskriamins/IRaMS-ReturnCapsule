@@ -26,6 +26,15 @@
       }
     ]
   },
+  "missile_lock_end": {
+    "subtitle": "subtitles.returncapsule.missile_lock_end",
+    "sounds": [
+      {
+        "name": "returncapsule:clock_end",
+        "stream": false
+      }
+    ]
+  },
   "boom_impact": {
     "subtitle": "subtitles.returncapsule.boom_impact",
     "sounds": [

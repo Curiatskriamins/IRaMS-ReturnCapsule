@@ -64,7 +64,8 @@ public final class ModItemPool {
                 continue;
             }
             
-            stack.setCount(Math.max(1, Math.min(maxPerStack(tier), stack.getMaxStackSize())));
+            stack.setCount(Math.max(1, Math.min(1 + random.nextInt(maxPerStack(tier)),
+                    stack.getMaxStackSize())));
             if (!inserter.insert(stack)) {
                 return;
             }

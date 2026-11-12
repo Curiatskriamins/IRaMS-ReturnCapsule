@@ -44,7 +44,7 @@ public final class BoomExplosion {
             level.explode(bomb, center.x, center.y, center.z, power, Level.ExplosionInteraction.BLOCK);
         } else {
             level.playSound(null, center.x, center.y, center.z, ModSounds.BOOM_IMPACT.get(),
-                    SoundSource.BLOCKS, 4.0F, 0.8F);
+                    SoundSource.BLOCKS, 16.0F, 0.8F);
         }
 
         spawnParticles(level, center, radius);

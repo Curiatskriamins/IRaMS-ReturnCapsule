@@ -14,6 +14,7 @@ import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 
+import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -47,6 +48,18 @@ public final class BladeLoot {
                 result.add(blade);
             }
         }
+        if (result.isEmpty()) {
+            List<Blade> all = all();
+            double max = Double.NEGATIVE_INFINITY;
+            for (Blade blade : all) {
+                max = Math.max(max, blade.damage());
+            }
+            for (Blade blade : all) {
+                if (blade.damage() >= max - 1.0E-4D) {
+                    result.add(blade);
+                }
+            }
+        }
         return result;
     }
 
@@ -71,12 +84,18 @@ public final class BladeLoot {
             if (id == null || !isBladeNamespace(id.getNamespace())) {
                 continue;
             }
-            if (item.getMaxStackSize() != 1 || item.getMaxDamage() <= 0) {
+            if (!isSlashBlade(item)) {
                 continue;
             }
             result.add(new Blade(item, damage(item)));
         }
         return List.copyOf(result);
+    }
+
+    private static boolean isSlashBlade(Item item) {
+        String name = item.getClass().getName();
+        return name.equals("mods.flammpfeil.slashblade.item.ItemSlashBlade")
+                || name.endsWith(".ItemSlashBlade");
     }
 
     private static boolean isBladeNamespace(String namespace) {
@@ -91,6 +110,14 @@ public final class BladeLoot {
 
      
     private static double damage(Item item) {
+        try {
+            Method method = item.getClass().getMethod("getDamage", ItemStack.class);
+            Object value = method.invoke(item, item.getDefaultInstance());
+            if (value instanceof Number number) {
+                return number.doubleValue();
+            }
+        } catch (ReflectiveOperationException ignored) {
+        }
         double bonus = 0.0D;
         for (Map.Entry<Attribute, AttributeModifier> entry
                 : item.getDefaultAttributeModifiers(EquipmentSlot.MAINHAND).entries()) {

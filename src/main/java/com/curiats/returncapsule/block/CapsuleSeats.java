@@ -86,6 +86,8 @@ final class CapsuleSeats {
                 this.owner.startOpening();
                 this.owner.getLevel().playSound(null, this.owner.getBlockPos(),
                         ModSounds.CAPSULE_OPEN.get(), SoundSource.BLOCKS, 1.0F, 1.0F);
+                com.curiats.returncapsule.ReturnCapsuleMod.LOGGER.info(
+                        "[sound] capsule_open seat at {}", this.owner.getBlockPos());
             }
         }
     }

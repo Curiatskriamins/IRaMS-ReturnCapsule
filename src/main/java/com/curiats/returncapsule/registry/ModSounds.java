@@ -22,6 +22,9 @@ public final class ModSounds {
     public static final RegistryObject<SoundEvent> MISSILE_LOCK = SOUNDS.register("missile_lock",
             () -> SoundEvent.createVariableRangeEvent(ReturnCapsuleMod.id("missile_lock")));
 
+    public static final RegistryObject<SoundEvent> MISSILE_LOCK_END = SOUNDS.register("missile_lock_end",
+            () -> SoundEvent.createVariableRangeEvent(ReturnCapsuleMod.id("missile_lock_end")));
+
      
     public static final RegistryObject<SoundEvent> BOOM_IMPACT = SOUNDS.register("boom_impact",
             () -> SoundEvent.createVariableRangeEvent(ReturnCapsuleMod.id("boom_impact")));

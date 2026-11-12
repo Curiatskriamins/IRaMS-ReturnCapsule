@@ -23,7 +23,8 @@ public final class BulkCargo {
             if (stack.isEmpty()) {
                 return;
             }
-            stack.setCount(Math.max(1, Math.min(countFor(tier), stack.getMaxStackSize())));
+            stack.setCount(Math.max(1, Math.min(1 + random.nextInt(countFor(tier)),
+                    stack.getMaxStackSize())));
             if (!inserter.insert(stack)) {
                 return;
             }

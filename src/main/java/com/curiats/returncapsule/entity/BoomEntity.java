@@ -42,6 +42,16 @@ public class BoomEntity extends Entity {
     private Vec3 moveDir = new Vec3(0.0D, -1.0D, 0.0D);
     private int life;
     private boolean impacted;
+    private boolean held;
+
+    public void hold() {
+        this.held = true;
+    }
+
+    public void release() {
+        this.held = false;
+        this.life = 0;
+    }
 
     public BoomEntity(EntityType<?> type, Level level) {
         super(type, level);
@@ -74,6 +84,9 @@ public class BoomEntity extends Entity {
             this.discard();
             return;
         }
+        if (this.held) {
+            return;
+        }
         if (!(this.level() instanceof ServerLevel server) || this.controller == null) {
             this.discard();
             return;
@@ -95,8 +108,13 @@ public class BoomEntity extends Entity {
         if (desired.lengthSqr() < 1.0E-6D) {
             desired = this.moveDir;
         }
-        Vec3 dir = this.controller.steer(from, desired.normalize(), this);
-        this.faceDirection(dir);
+        Vec3 dir;
+        if (this.life % 2 == 0) {
+            dir = this.controller.steer(from, desired.normalize(), this);
+            this.faceDirection(dir);
+        } else {
+            dir = this.moveDir;
+        }
 
         double speed = Config.TERMINAL_VELOCITY.get();
         Vec3 next = from.add(dir.scale(speed));
@@ -258,7 +276,7 @@ public class BoomEntity extends Entity {
         
         
         
-        super.lerpTo(x, y, z, yRot, xRot, teleport ? steps : Math.max(4, steps), teleport);
+        super.lerpTo(x, y, z, yRot, xRot, steps, teleport);
     }
 
     public Vec3 moveDirection() {

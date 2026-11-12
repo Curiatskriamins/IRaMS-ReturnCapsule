@@ -32,7 +32,7 @@ public final class Supplies {
         };
         for (int i = 0; i < stacks; i++) {
             Item food = FOODS[random.nextInt(FOODS.length)];
-            inserter.insert(new ItemStack(food, 64));
+            inserter.insert(new ItemStack(food, 16 + random.nextInt(49)));
         }
     }
 
