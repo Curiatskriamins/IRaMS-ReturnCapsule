@@ -17,9 +17,7 @@ import net.minecraftforge.fml.common.Mod;
 @Mod.EventBusSubscriber(modid = ReturnCapsuleMod.MODID, value = Dist.CLIENT)
 public final class MissileLockSound {
     private static final ResourceLocation LOCK = ReturnCapsuleMod.id("missile_lock");
-    private static final ResourceLocation BOOM = ReturnCapsuleMod.id("boom_impact");
     private static SoundInstance active;
-    private static boolean ending;
 
     @SubscribeEvent
     public static void onPlaySound(PlaySoundEvent event) {
@@ -27,35 +25,15 @@ public final class MissileLockSound {
         if (sound == null) {
             return;
         }
-        Minecraft minecraft = Minecraft.getInstance();
-        if (BOOM.equals(sound.getLocation())) {
-            if (active == null && !ending) {
-                return;
-            }
-            if (active != null) {
-                minecraft.getSoundManager().stop(active);
-                active = null;
-            }
-            ending = true;
-            active = SimpleSoundInstance.forUI(ModSounds.MISSILE_LOCK_END.get(), 1.0F);
-            minecraft.getSoundManager().play(active);
-            ReturnCapsuleMod.LOGGER.info("[sound] missile_lock ending on explosion");
-            return;
-        }
         if (!LOCK.equals(sound.getLocation())) {
             return;
         }
-        if (ending) {
-            event.setSound(null);
-            return;
-        }
+        Minecraft minecraft = Minecraft.getInstance();
         if (active != null && minecraft.getSoundManager().isActive(active)) {
             event.setSound(null);
-            ReturnCapsuleMod.LOGGER.info("[sound] missile_lock suppressed (active)");
             return;
         }
         active = sound;
-        ReturnCapsuleMod.LOGGER.info("[sound] missile_lock accepted {}", sound.getLocation());
     }
 
     @SubscribeEvent
@@ -64,13 +42,6 @@ public final class MissileLockSound {
             return;
         }
         Minecraft minecraft = Minecraft.getInstance();
-        if (ending) {
-            if (active == null || !minecraft.getSoundManager().isActive(active)) {
-                ending = false;
-                active = null;
-            }
-            return;
-        }
         LocalPlayer player = minecraft.player;
         if (player == null) {
             return;
@@ -83,7 +54,6 @@ public final class MissileLockSound {
         }
         active = SimpleSoundInstance.forUI(ModSounds.MISSILE_LOCK.get(), 1.0F);
         minecraft.getSoundManager().play(active);
-        ReturnCapsuleMod.LOGGER.info("[sound] missile_lock replay");
     }
 
     private MissileLockSound() {

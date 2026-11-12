@@ -31,6 +31,5 @@
   "death.attack.boom_impact.player": "%1$s was blown up by %2$s's cruise bomb",
   "subtitles.returncapsule.capsule_open": "Capsule opens",
   "subtitles.returncapsule.missile_lock": "Missile lock",
-  "subtitles.returncapsule.missile_lock_end": "Missile lock end",
   "subtitles.returncapsule.boom_impact": "Explosion"
 }

@@ -39,6 +39,7 @@ public final class KillMarkerEvents {
     @SubscribeEvent
     public static void onServerStopped(ServerStoppedEvent event) {
         KillMarkerItem.dropAll();
+        PetLaunch.releaseAll(event.getServer());
     }
 
     @SubscribeEvent

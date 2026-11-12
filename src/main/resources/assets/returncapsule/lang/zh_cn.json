@@ -31,6 +31,5 @@
   "death.attack.boom_impact.player": "%1$s 被 %2$s 的巡航弹炸死了",
   "subtitles.returncapsule.capsule_open": "返回舱开启",
   "subtitles.returncapsule.missile_lock": "导弹锁定",
-  "subtitles.returncapsule.missile_lock_end": "导弹锁定结束",
   "subtitles.returncapsule.boom_impact": "爆炸"
 }
