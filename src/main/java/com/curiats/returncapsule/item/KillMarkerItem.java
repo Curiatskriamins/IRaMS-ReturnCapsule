@@ -6,6 +6,7 @@ import com.curiats.returncapsule.entity.BoomEntity;
 import com.curiats.returncapsule.entity.fall.SuperBigCup;
 import com.curiats.returncapsule.registry.ModSounds;
 import net.minecraft.core.Direction;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.sounds.SoundSource;
@@ -33,7 +34,10 @@ import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
 
 import javax.annotation.Nullable;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.Iterator;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -41,7 +45,7 @@ import java.util.UUID;
  
 public class KillMarkerItem extends Item {
     private static final int USE_DURATION = 72000;
-    private static final Map<UUID, BoomEntity> HELD = new HashMap<>();
+    private static final Map<UUID, Volley> VOLLEYS = new HashMap<>();
 
     public KillMarkerItem(Properties properties) {
         super(properties);
@@ -87,8 +91,25 @@ public class KillMarkerItem extends Item {
         if (level.isClientSide || !(living instanceof ServerPlayer player)) {
             return;
         }
+        Volley volley = VOLLEYS.computeIfAbsent(player.getUUID(), id -> new Volley());
+        boolean sneaking = player.isShiftKeyDown();
+        if (volley.sneaking && !sneaking) {
+            volley.sneaking = false;
+            startFiring(volley);
+            return;
+        }
+        volley.sneaking = sneaking;
         int elapsed = this.getUseDuration(stack) - remainingUseDuration;
-        if (elapsed != 0 || HELD.containsKey(player.getUUID())) {
+        int charge = Math.max(1, Config.KILL_MARKER_CHARGE_TICKS.get());
+        if (elapsed < charge) {
+            return;
+        }
+        int interval = fireInterval(player);
+        if ((elapsed - charge) % interval != 0) {
+            return;
+        }
+        int maxQueued = Math.max(1, Config.KILL_MARKER_MAX_QUEUED.get());
+        if (sneaking && volley.shots.size() >= maxQueued) {
             return;
         }
         Shot shot = resolveShot(player, level);
@@ -107,12 +128,16 @@ public class KillMarkerItem extends Item {
             return;
         }
         double angle = SuperBigCup.nextIncidence();
-        BoomEntity bomb = spawnBomb(level, player, shot.point(), shot.entity(), angle, null);
-        if (bomb == null) {
-            refund(player, payment);
-            return;
+        if (sneaking) {
+            volley.shots.add(new QueuedShot(shot.point(), shot.entity(), angle, payment));
+        } else {
+            BoomEntity bomb = spawnBomb(level, player, shot.point(), shot.entity(), angle, null);
+            if (bomb != null) {
+                bomb.release();
+            } else {
+                refund(player, payment);
+            }
         }
-        HELD.put(player.getUUID(), bomb);
     }
 
     @Override
@@ -120,15 +145,68 @@ public class KillMarkerItem extends Item {
         if (level.isClientSide || !(living instanceof ServerPlayer player)) {
             return;
         }
-        BoomEntity bomb = HELD.remove(player.getUUID());
-        if (bomb == null) {
+        Volley volley = VOLLEYS.get(player.getUUID());
+        if (volley != null) {
+            volley.sneaking = false;
+            startFiring(volley);
+        }
+    }
+
+    private static void startFiring(Volley volley) {
+        if (volley.shots.isEmpty()) {
             return;
         }
-        if (player.isDeadOrDying()) {
-            bomb.discard();
-            return;
+        volley.firing = true;
+        volley.cooldown = 0;
+    }
+
+    public static void tickQueues(MinecraftServer server) {
+        Iterator<Map.Entry<UUID, Volley>> iterator = VOLLEYS.entrySet().iterator();
+        while (iterator.hasNext()) {
+            Map.Entry<UUID, Volley> entry = iterator.next();
+            Volley volley = entry.getValue();
+            if (!volley.firing) {
+                continue;
+            }
+            ServerPlayer player = server.getPlayerList().getPlayer(entry.getKey());
+            if (player == null || player.isDeadOrDying()) {
+                if (player != null) {
+                    refundShots(player, volley);
+                }
+                iterator.remove();
+                continue;
+            }
+            if (volley.cooldown > 0) {
+                volley.cooldown--;
+                continue;
+            }
+            if (volley.shots.isEmpty()) {
+                iterator.remove();
+                continue;
+            }
+            QueuedShot shot = volley.shots.remove(0);
+            BoomEntity bomb = spawnBomb(player.serverLevel(), player, shot.point(),
+                    shot.entity(), shot.angle(), null);
+            if (bomb != null) {
+                bomb.release();
+            } else {
+                refund(player, shot.payment());
+            }
+            volley.cooldown = fireInterval(player);
+            if (volley.shots.isEmpty()) {
+                iterator.remove();
+            }
         }
-        bomb.release();
+    }
+
+    private static int fireInterval(ServerPlayer player) {
+        int interval = Math.max(1, Config.KILL_MARKER_INTERVAL_TICKS.get());
+        int minimum = Math.max(1, Config.KILL_MARKER_MIN_SIMULATION_CHUNKS.get());
+        int simulation = Math.max(1, player.getServer().getPlayerList().getSimulationDistance());
+        if (simulation < minimum) {
+            interval += (minimum - simulation) * 20;
+        }
+        return interval;
     }
 
     @Nullable
@@ -260,7 +338,7 @@ public class KillMarkerItem extends Item {
     private static Shot findCrosshairLiving(ServerPlayer player, Level level, Vec3 eye, Vec3 look,
                                              double range) {
         final double maxCone = Math.toRadians(20.0D);
-        AABB area = new AABB(eye, eye.add(look.scale(range))).inflate(2.0D);
+        AABB area = new AABB(eye, eye).inflate(range);
         LivingEntity best = null;
         double bestAngle = maxCone;
         Vec3 rayEnd = eye.add(look.scale(range));
@@ -296,25 +374,37 @@ public class KillMarkerItem extends Item {
 
      
     public static void refundVolley(ServerPlayer player) {
-        BoomEntity bomb = HELD.remove(player.getUUID());
-        if (bomb != null) {
-            bomb.discard();
+        Volley volley = VOLLEYS.remove(player.getUUID());
+        if (volley != null) {
+            refundShots(player, volley);
         }
     }
 
     public static void dropAll() {
-        for (BoomEntity bomb : HELD.values()) {
-            if (bomb != null) {
-                bomb.discard();
-            }
+        VOLLEYS.clear();
+    }
+
+    private static void refundShots(ServerPlayer player, Volley volley) {
+        for (QueuedShot shot : volley.shots) {
+            refund(player, shot.payment());
         }
-        HELD.clear();
+        volley.shots.clear();
     }
 
     private record Shot(Vec3 point, @Nullable UUID entity) {
     }
 
+    private record QueuedShot(Vec3 point, @Nullable UUID entity, double angle, Payment payment) {
+    }
+
     private record Payment(@Nullable Item item, int count) {
         private static final Payment FREE = new Payment(null, 0);
+    }
+
+    private static final class Volley {
+        private final List<QueuedShot> shots = new ArrayList<>();
+        private boolean sneaking;
+        private boolean firing;
+        private int cooldown;
     }
 }

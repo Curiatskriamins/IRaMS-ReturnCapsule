@@ -93,8 +93,12 @@ public final class Config {
     public static final ForgeConfigSpec.DoubleValue BOOM_FLARE_SCALE;
 
     public static final ForgeConfigSpec.IntValue KILL_MARKER_RANGE;
+    public static final ForgeConfigSpec.IntValue KILL_MARKER_CHARGE_TICKS;
+    public static final ForgeConfigSpec.IntValue KILL_MARKER_INTERVAL_TICKS;
     public static final ForgeConfigSpec.IntValue KILL_MARKER_DIAMONDS;
     public static final ForgeConfigSpec.IntValue KILL_MARKER_DIAMOND_BLOCKS;
+    public static final ForgeConfigSpec.IntValue KILL_MARKER_MIN_SIMULATION_CHUNKS;
+    public static final ForgeConfigSpec.IntValue KILL_MARKER_MAX_QUEUED;
 
     static {
         ForgeConfigSpec.Builder builder = new ForgeConfigSpec.Builder();
@@ -378,12 +382,20 @@ public final class Config {
         KILL_MARKER_RANGE = builder
                 .comment("击杀指示器的准星标记距离，会被服务器模拟距离截断，保证目标在弹体可 tick 的范围内(Crosshair marking range of the kill indicator; clamped to the server simulation distance so the target is inside the ticking area)")
                 .defineInRange("range", 128, 8, 512);
+        KILL_MARKER_CHARGE_TICKS = builder
+                .defineInRange("chargeTicks", 20, 1, 200);
+        KILL_MARKER_INTERVAL_TICKS = builder
+                .defineInRange("intervalTicks", 10, 1, 400);
         KILL_MARKER_DIAMONDS = builder
                 .comment("每枚巡航弹消耗的钻石数量(Diamonds consumed by one bomb)")
                 .defineInRange("diamonds", 9, 1, 64);
         KILL_MARKER_DIAMOND_BLOCKS = builder
                 .comment("钻石不足时改为消耗的钻石块数量(Diamond blocks consumed instead when there are not enough diamonds)")
                 .defineInRange("diamondBlocks", 1, 1, 9);
+        KILL_MARKER_MIN_SIMULATION_CHUNKS = builder
+                .defineInRange("minSimulationChunks", 8, 1, 32);
+        KILL_MARKER_MAX_QUEUED = builder
+                .defineInRange("maxQueued", 50, 1, 256);
         builder.pop();
 
         SPEC = builder.build();

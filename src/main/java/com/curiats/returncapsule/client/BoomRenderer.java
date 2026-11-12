@@ -3,18 +3,12 @@ package com.curiats.returncapsule.client;
 import com.curiats.returncapsule.Config;
 import com.curiats.returncapsule.ReturnCapsuleMod;
 import com.curiats.returncapsule.entity.BoomEntity;
-import com.mojang.blaze3d.platform.GlStateManager;
-import com.mojang.blaze3d.systems.RenderSystem;
-import com.mojang.blaze3d.vertex.DefaultVertexFormat;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
-import com.mojang.blaze3d.vertex.VertexFormat;
 import com.mojang.math.Axis;
 import net.minecraft.client.Camera;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.renderer.GameRenderer;
 import net.minecraft.client.renderer.MultiBufferSource;
-import net.minecraft.client.renderer.RenderStateShard;
 import net.minecraft.client.renderer.RenderType;
 import net.minecraft.client.renderer.entity.EntityRenderer;
 import net.minecraft.client.renderer.entity.EntityRendererProvider;
@@ -27,31 +21,6 @@ import org.joml.Matrix4f;
 public class BoomRenderer extends EntityRenderer<BoomEntity> {
     private static final ResourceLocation FLARE =
             ReturnCapsuleMod.id("textures/entity/boom_flare.png");
-    private static final RenderType FLARE_LAYER = RenderType.create(
-            "returncapsule_boom_flare",
-            DefaultVertexFormat.POSITION_COLOR_TEX_LIGHTMAP,
-            VertexFormat.Mode.QUADS,
-            256,
-            false,
-            true,
-            RenderType.CompositeState.builder()
-                    .setShaderState(new RenderStateShard.ShaderStateShard(
-                            GameRenderer::getPositionColorTexLightmapShader))
-                    .setTextureState(new RenderStateShard.TextureStateShard(FLARE, false, false))
-                    .setTransparencyState(new RenderStateShard.TransparencyStateShard(
-                            "returncapsule_additive",
-                            () -> {
-                                RenderSystem.enableBlend();
-                                RenderSystem.blendFunc(GlStateManager.SourceFactor.SRC_ALPHA,
-                                        GlStateManager.DestFactor.ONE);
-                            },
-                            () -> {
-                                RenderSystem.disableBlend();
-                                RenderSystem.defaultBlendFunc();
-                            }))
-                    .setCullState(new RenderStateShard.CullStateShard(false))
-                    .setLightmapState(new RenderStateShard.LightmapStateShard(true))
-                    .createCompositeState(false));
     private static final float MODEL_CENTER = 1.8F;
     private static final float MIN_SIZE = 2.0F;
     private static final float MAX_SIZE = 256.0F;
@@ -97,7 +66,7 @@ public class BoomRenderer extends EntityRenderer<BoomEntity> {
                 MIN_SIZE * scale, MAX_SIZE * scale)
                 * Config.BOOM_FLARE_SCALE.get().floatValue();
         float half = size * 0.5F;
-        VertexConsumer consumer = buffer.getBuffer(FLARE_LAYER);
+        VertexConsumer consumer = buffer.getBuffer(RenderType.entityTranslucent(FLARE));
         consumer.vertex(matrix, -half, -half, 0.0F)
                 .color(255, 255, 255, 255).uv(0.0F, 1.0F)
                 .overlayCoords(OverlayTexture.NO_OVERLAY).uv2(0xF000F0)

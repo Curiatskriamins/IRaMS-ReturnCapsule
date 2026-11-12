@@ -50,6 +50,7 @@ public final class KillMarkerEvents {
         for (ServerLevel level : event.getServer().getAllLevels()) {
             PetLaunch.tick(level);
         }
+        KillMarkerItem.tickQueues(event.getServer());
     }
 
     private static void refund(Player player) {

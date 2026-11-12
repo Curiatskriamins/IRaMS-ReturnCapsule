@@ -102,7 +102,7 @@ public class BoomEntity extends Entity {
             this.controller.markerParticles();
         }
         Vec3 target = this.controller.targetPoint();
-        boolean locked = this.controller.lockedEntity() != null;
+        boolean locked = this.controller.hasTarget();
         Vec3 aim = locked ? this.controller.aimPoint()
                 : from.add(this.moveDir.scale(100.0D));
 
@@ -223,7 +223,7 @@ public class BoomEntity extends Entity {
         if (this.level() instanceof ServerLevel server) {
             UUID locked = tag.hasUUID(TAG_LOCKED_ENTITY) ? tag.getUUID(TAG_LOCKED_ENTITY) : null;
             this.controller = SuperBigCup.restore(server, locked, fallback, approach,
-                    tag.getDouble(TAG_INCIDENCE));
+                    tag.getDouble(TAG_INCIDENCE), tag.getBoolean("PointTarget"));
         }
     }
 
@@ -241,6 +241,7 @@ public class BoomEntity extends Entity {
         if (this.controller.lockedEntity() != null) {
             tag.putUUID(TAG_LOCKED_ENTITY, this.controller.lockedEntity());
         }
+        tag.putBoolean("PointTarget", this.controller.isPointTarget());
         Vec3 target = this.controller.targetPoint();
         tag.putDouble(TAG_TARGET_X, target.x);
         tag.putDouble(TAG_TARGET_Y, target.y);

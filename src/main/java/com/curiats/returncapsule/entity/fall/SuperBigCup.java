@@ -45,6 +45,7 @@ public final class SuperBigCup {
     @Nullable
     private UUID lockedEntity;
     private Vec3 targetPoint;
+    private boolean pointTarget;
      
     private final Vec3 approachOffset;
     private final double incidenceDegrees;
@@ -53,30 +54,25 @@ public final class SuperBigCup {
     private int spiralTicks;
 
     private SuperBigCup(ServerLevel level, @Nullable UUID lockedEntity, Vec3 targetPoint,
-                        Vec3 approachOffset, double incidenceDegrees) {
+                        Vec3 approachOffset, double incidenceDegrees, boolean pointTarget) {
         this.level = level;
         this.lockedEntity = lockedEntity;
         this.targetPoint = targetPoint;
         this.approachOffset = approachOffset;
         this.incidenceDegrees = incidenceDegrees;
         this.spiralAngle = Math.atan2(approachOffset.z, approachOffset.x);
+        this.pointTarget = pointTarget;
     }
 
      
     public static synchronized double nextIncidence() {
         if (incidenceSequence == null) {
-            double base = Mth.clamp(Config.BOOM_INCIDENCE_DEGREES.get(), MIN_INCIDENCE, MAX_INCIDENCE);
-            List<Double> list = new ArrayList<>(802);
-            list.add(base);
-            List<Double> rest = new ArrayList<>(801);
-            for (double angle = MIN_INCIDENCE; angle <= MAX_INCIDENCE + 1.0E-6D; angle += 0.1D) {
+            List<Double> list = new ArrayList<>(201);
+            for (double angle = 10.0D; angle <= 30.0D + 1.0E-6D; angle += 0.1D) {
                 double rounded = Math.round(angle * 10.0D) / 10.0D;
-                if (Math.abs(rounded - base) > 1.0E-4D) {
-                    rest.add(rounded);
-                }
+                list.add(rounded);
             }
-            Collections.shuffle(rest);
-            list.addAll(rest);
+            Collections.shuffle(list);
             incidenceSequence = List.copyOf(list);
         }
         double angle = incidenceSequence.get(incidenceCursor % incidenceSequence.size());
@@ -105,12 +101,14 @@ public final class SuperBigCup {
                 : Math.atan2(playerPos.z - targetPoint.z, playerPos.x - targetPoint.x);
         Approach approach = chooseApproach(level, targetPoint, baseAngle, distance, baseAzimuth,
                 reservedAngles);
-        return new SuperBigCup(level, lockedEntity, targetPoint, approach.offset(), approach.angle());
+        return new SuperBigCup(level, lockedEntity, targetPoint, approach.offset(), approach.angle(),
+                lockedEntity == null);
     }
 
      
     public static SuperBigCup restore(ServerLevel level, @Nullable UUID lockedEntity,
-                                      Vec3 fallbackPoint, Vec3 approachOffset, double incidenceDegrees) {
+                                      Vec3 fallbackPoint, Vec3 approachOffset, double incidenceDegrees,
+                                      boolean pointTarget) {
         Vec3 point = fallbackPoint;
         if (lockedEntity != null) {
             Entity entity = level.getEntity(lockedEntity);
@@ -118,7 +116,7 @@ public final class SuperBigCup {
                 point = entity.getBoundingBox().getCenter();
             }
         }
-        return new SuperBigCup(level, lockedEntity, point, approachOffset, incidenceDegrees);
+        return new SuperBigCup(level, lockedEntity, point, approachOffset, incidenceDegrees, pointTarget);
     }
 
      
@@ -138,6 +136,7 @@ public final class SuperBigCup {
         Entity entity = this.level.getEntity(this.lockedEntity);
         if (entity == null || !entity.isAlive()) {
             this.lockedEntity = null;
+            this.pointTarget = false;
             return;
         }
         this.targetPoint = entity.getBoundingBox().getCenter();
@@ -153,16 +152,25 @@ public final class SuperBigCup {
             return this.targetPoint;
         }
         double t = this.spiralTicks / (double) SPIRAL_DURATION;
-        double angle = this.spiralAngle + t * SPIRAL_TURNS * Math.PI * 2.0D;
-        double orbit = 0.65D;
-        if (t < orbit) {
-            return this.targetPoint.add(Math.cos(angle) * SPIRAL_RADIUS, SPIRAL_HEIGHT,
-                    Math.sin(angle) * SPIRAL_RADIUS);
-        }
-        double dive = (t - orbit) / (1.0D - orbit);
-        double radius = SPIRAL_RADIUS * (1.0D - dive);
-        double height = SPIRAL_HEIGHT * (1.0D - dive);
-        return this.targetPoint.add(Math.cos(angle) * radius, height, Math.sin(angle) * radius);
+        Vec3 start = this.launchPoint();
+        Vec3 end = this.targetPoint;
+        Vec3 delta = end.subtract(start);
+        double horizontal = Math.sqrt(delta.x * delta.x + delta.z * delta.z);
+        double curve = Math.tan(Math.toRadians(this.incidenceDegrees)) * horizontal * 0.5D;
+        double sideX = horizontal < 1.0E-4D ? 0.0D : -delta.z / horizontal;
+        double sideZ = horizontal < 1.0E-4D ? 0.0D : delta.x / horizontal;
+        Vec3 control = new Vec3(
+                start.x + delta.x * 0.5D + sideX * curve,
+                start.y + delta.y * 0.5D + Math.abs(delta.y) * 0.15D,
+                start.z + delta.z * 0.5D + sideZ * curve);
+        double u = 1.0D - t;
+        double w0 = u * u;
+        double w1 = 2.0D * u * t;
+        double w2 = t * t;
+        return new Vec3(
+                start.x * w0 + control.x * w1 + end.x * w2,
+                start.y * w0 + control.y * w1 + end.y * w2,
+                start.z * w0 + control.z * w1 + end.z * w2);
     }
 
      
@@ -177,6 +185,14 @@ public final class SuperBigCup {
     @Nullable
     public UUID lockedEntity() {
         return this.lockedEntity;
+    }
+
+    public boolean hasTarget() {
+        return this.lockedEntity != null || this.pointTarget;
+    }
+
+    public boolean isPointTarget() {
+        return this.pointTarget;
     }
 
     public boolean isLockedEntity(UUID uuid) {
