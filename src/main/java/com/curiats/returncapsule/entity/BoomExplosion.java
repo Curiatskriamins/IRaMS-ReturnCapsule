@@ -69,11 +69,14 @@ public final class BoomExplosion {
             if (!Config.BOOM_HURT_OWNER.get() && owner != null && target.getUUID().equals(owner.getUUID())) {
                 continue;
             }
+            if (target instanceof net.minecraft.world.entity.TamableAnimal pet && pet.isTame()) {
+                continue;
+            }
             java.util.UUID locked = bomb == null ? null : bomb.lockedEntity();
             if (locked != null && locked.equals(target.getUUID())) {
                 int hits = target.getPersistentData().getInt("returncapsule_bomb_hits") + 1;
                 target.getPersistentData().putInt("returncapsule_bomb_hits", hits);
-                if (hits > 5) {
+                if (hits > 5 && target instanceof net.minecraft.world.entity.monster.Enemy) {
                     target.invulnerableTime = 0;
                     target.hurt(TrueDamage.boom(level, bomb, owner), 500.0F);
                     TrueDot.apply(level, target, bomb, owner, 10, 10.0F);

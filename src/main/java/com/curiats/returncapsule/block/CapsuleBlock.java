@@ -146,8 +146,7 @@ public class CapsuleBlock extends BaseEntityBlock {
             level.playSound(null, pos, net.minecraft.sounds.SoundEvents.METAL_BREAK,
                     net.minecraft.sounds.SoundSource.BLOCKS, 1.0F, 0.8F);
         }
-        if (!level.isClientSide && player.hasCorrectToolForDrops(state)
-                && level.getBlockEntity(pos) instanceof CapsuleBlockEntity capsule) {
+        if (!level.isClientSide && level.getBlockEntity(pos) instanceof CapsuleBlockEntity capsule) {
             capsule.prepareLoot(player);
             Containers.dropContents(level, pos, capsule);
             capsule.clearContent();

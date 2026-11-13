@@ -36,7 +36,9 @@ public final class LandingSite {
                         CapsuleStructure.crush(level, cursor);
                         break;
                     }
-                    level.destroyBlock(cursor.immutable(), false);
+                    if (Config.CAPSULE_BREAK_BLOCKS.get()) {
+                        level.destroyBlock(cursor.immutable(), false);
+                    }
                 }
             }
         }
@@ -47,6 +49,9 @@ public final class LandingSite {
     }
 
     public static void clearArea(ServerLevel level, BlockPos anchor) {
+        if (!Config.CAPSULE_BREAK_BLOCKS.get()) {
+            return;
+        }
         BlockPos.MutableBlockPos cursor = new BlockPos.MutableBlockPos();
         for (int dx = -1; dx <= 1; dx++) {
             for (int dz = -1; dz <= 1; dz++) {
@@ -67,6 +72,9 @@ public final class LandingSite {
     }
 
     public static int scatterDrops(ServerLevel level, BlockPos anchor, RandomSource random) {
+        if (!Config.CAPSULE_BREAK_BLOCKS.get()) {
+            return 0;
+        }
         int drops = 0;
         BlockPos.MutableBlockPos cursor = new BlockPos.MutableBlockPos();
         for (int dx = -DROP_RADIUS; dx <= DROP_RADIUS && drops < MAX_DROPS; dx++) {

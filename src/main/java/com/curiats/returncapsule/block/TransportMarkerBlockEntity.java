@@ -37,9 +37,6 @@ public class TransportMarkerBlockEntity extends BlockEntity {
         this.token = token;
         this.platformCenter = platformCenter.immutable();
         this.setChanged();
-        if (this.level instanceof ServerLevel server) {
-            this.forceChunks(server);
-        }
     }
 
     @Nullable
@@ -68,9 +65,6 @@ public class TransportMarkerBlockEntity extends BlockEntity {
     @Override
     public void onLoad() {
         super.onLoad();
-        if (this.level instanceof ServerLevel server) {
-            this.forceChunks(server);
-        }
     }
 
     public void serverTick(ServerLevel server) {
@@ -116,7 +110,6 @@ public class TransportMarkerBlockEntity extends BlockEntity {
     }
 
     private void removeMarker(ServerLevel server) {
-        this.releaseChunks();
         server.removeBlock(this.worldPosition, false);
     }
 
@@ -150,7 +143,6 @@ public class TransportMarkerBlockEntity extends BlockEntity {
 
     @Override
     public void setRemoved() {
-        this.releaseChunks();
         super.setRemoved();
     }
 

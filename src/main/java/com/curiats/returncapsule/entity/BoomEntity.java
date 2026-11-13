@@ -43,6 +43,21 @@ public class BoomEntity extends Entity {
     private int life;
     private boolean impacted;
     private boolean held;
+    private double lerpPrevX;
+    private double lerpPrevY;
+    private double lerpPrevZ;
+    private double lerpFromX;
+    private double lerpFromY;
+    private double lerpFromZ;
+    private double lerpToX;
+    private double lerpToY;
+    private double lerpToZ;
+    private float lerpFromYaw;
+    private float lerpFromPitch;
+    private float lerpToYaw;
+    private float lerpToPitch;
+    private int lerpTotal;
+    private int lerpTick;
 
     public void hold() {
         this.held = true;
@@ -75,8 +90,22 @@ public class BoomEntity extends Entity {
     public void tick() {
         super.tick();
         if (this.level().isClientSide) {
-            
-            
+            if (this.lerpTotal > 0) {
+                this.lerpTick++;
+                double t = Math.min(1.0D, this.lerpTick / (double) this.lerpTotal);
+                double p3x = this.lerpToX + (this.lerpToX - this.lerpFromX);
+                double p3y = this.lerpToY + (this.lerpToY - this.lerpFromY);
+                double p3z = this.lerpToZ + (this.lerpToZ - this.lerpFromZ);
+                this.setPos(
+                        catmull(this.lerpPrevX, this.lerpFromX, this.lerpToX, p3x, t),
+                        catmull(this.lerpPrevY, this.lerpFromY, this.lerpToY, p3y, t),
+                        catmull(this.lerpPrevZ, this.lerpFromZ, this.lerpToZ, p3z, t));
+                this.setRot(Mth.rotLerp((float) t, this.lerpFromYaw, this.lerpToYaw),
+                        Mth.lerp((float) t, this.lerpFromPitch, this.lerpToPitch));
+                if (this.lerpTick >= this.lerpTotal) {
+                    this.lerpTotal = 0;
+                }
+            }
             BoomClientHooks.onTick(this);
             return;
         }
@@ -111,7 +140,7 @@ public class BoomEntity extends Entity {
             desired = this.moveDir;
         }
         Vec3 dir;
-        if (locked && this.life % 2 == 0) {
+        if (locked) {
             dir = this.controller.steer(from, desired.normalize(), this);
             this.faceDirection(dir);
         } else {
@@ -207,6 +236,38 @@ public class BoomEntity extends Entity {
     }
 
     @Override
+    public void lerpTo(double x, double y, double z, float yRot, float xRot, int steps, boolean teleport) {
+        if (teleport || steps <= 0) {
+            super.lerpTo(x, y, z, yRot, xRot, steps, teleport);
+            return;
+        }
+        this.lerpPrevX = this.lerpTotal > 0 ? this.lerpFromX : this.getX();
+        this.lerpPrevY = this.lerpTotal > 0 ? this.lerpFromY : this.getY();
+        this.lerpPrevZ = this.lerpTotal > 0 ? this.lerpFromZ : this.getZ();
+        this.lerpFromX = this.getX();
+        this.lerpFromY = this.getY();
+        this.lerpFromZ = this.getZ();
+        this.lerpToX = x;
+        this.lerpToY = y;
+        this.lerpToZ = z;
+        this.lerpFromYaw = this.getYRot();
+        this.lerpFromPitch = this.getXRot();
+        this.lerpToYaw = yRot;
+        this.lerpToPitch = xRot;
+        this.lerpTotal = steps;
+        this.lerpTick = 0;
+    }
+
+    private static double catmull(double p0, double p1, double p2, double p3, double t) {
+        double t2 = t * t;
+        double t3 = t2 * t;
+        return 0.5D * (2.0D * p1
+                + (-p0 + p2) * t
+                + (2.0D * p0 - 5.0D * p1 + 4.0D * p2 - p3) * t2
+                + (-p0 + 3.0D * p1 - 3.0D * p2 + p3) * t3);
+    }
+
+    @Override
     protected void defineSynchedData() {
     }
 
@@ -276,14 +337,6 @@ public class BoomEntity extends Entity {
     @Override
     public boolean shouldRenderAtSqrDistance(double distance) {
         return distance < 512.0D * 512.0D;
-    }
-
-    @Override
-    public void lerpTo(double x, double y, double z, float yRot, float xRot, int steps, boolean teleport) {
-        
-        
-        
-        super.lerpTo(x, y, z, yRot, xRot, steps, teleport);
     }
 
     public Vec3 moveDirection() {

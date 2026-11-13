@@ -17,6 +17,9 @@ public final class CapsuleBreaker {
 
     public static int smash(Level level, double centerX, double centerZ, double capsuleBottomY,
                             double capsuleHeight, int floorY, @Nullable net.minecraft.world.entity.Entity source) {
+        if (!Config.CAPSULE_BREAK_BLOCKS.get()) {
+            return 0;
+        }
         if (isAirborne(level, centerX, centerZ, capsuleBottomY, capsuleHeight)) {
             return 0;
         }

@@ -357,7 +357,8 @@ public class KillMarkerItem extends Item {
     private static Shot findCrosshairLiving(ServerPlayer player, Level level, Vec3 eye, Vec3 look,
                                              double range) {
         final double maxCone = Math.toRadians(20.0D);
-        AABB area = new AABB(eye, eye).inflate(range);
+        AABB area = new AABB(eye, eye.add(look.scale(range)))
+                .inflate(Math.tan(maxCone) * range);
         LivingEntity best = null;
         double bestAngle = maxCone;
         Vec3 rayEnd = eye.add(look.scale(range));

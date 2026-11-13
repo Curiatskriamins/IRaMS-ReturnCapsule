@@ -94,6 +94,9 @@ public class TransportDesignatorItem extends Item {
             return InteractionResult.FAIL;
         }
         BlockPos markerPos = platform.above();
+        if (!hasNetherPortal(level, markerPos)) {
+            return InteractionResult.FAIL;
+        }
 
         TransportCapsuleEntity inFlight = TransportCapsuleEntity.find(level, markerPos);
         if (inFlight != null) {
@@ -166,6 +169,31 @@ public class TransportDesignatorItem extends Item {
     private static void consumeNetherStar(ServerPlayer player) {
         player.getInventory().clearOrCountMatchingItems(stack -> stack.is(Items.NETHER_STAR),
                 1, player.getInventory());
+    }
+
+    private static boolean hasNetherPortal(Level level, BlockPos center) {
+        int chunkX = center.getX() >> 4;
+        int chunkZ = center.getZ() >> 4;
+        int minY = level.getMinBuildHeight();
+        int maxY = level.getMaxBuildHeight();
+        BlockPos.MutableBlockPos cursor = new BlockPos.MutableBlockPos();
+        for (int dx = -1; dx <= 1; dx++) {
+            for (int dz = -1; dz <= 1; dz++) {
+                int baseX = (chunkX + dx) << 4;
+                int baseZ = (chunkZ + dz) << 4;
+                for (int x = 0; x < 16; x++) {
+                    for (int z = 0; z < 16; z++) {
+                        for (int y = minY; y < maxY; y++) {
+                            cursor.set(baseX + x, y, baseZ + z);
+                            if (level.getBlockState(cursor).is(net.minecraft.world.level.block.Blocks.NETHER_PORTAL)) {
+                                return true;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        return false;
     }
 
     private static BlockPos getMarkerPos(ItemStack stack) {

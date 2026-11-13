@@ -42,25 +42,6 @@ final class CapsuleSeats {
     }
 
     boolean add(ServerPlayer player) {
-        if (this.owner.getLevel() == null || this.owner.getLevel().isClientSide
-                || !this.owner.isOpenOrClosing()) {
-            return false;
-        }
-        if (HiddenPlayers.isHidden(player)) {
-            return false;
-        }
-        for (int index = 0; index < CAPACITY; index++) {
-            if (this.occupants[index] == null) {
-                this.occupants[index] = player.getUUID();
-                HiddenPlayers.put(player.getUUID(), this.owner);
-                this.lock(player, index);
-                if (this.owner.isOpen()) {
-                    this.owner.startClosing();
-                }
-                this.owner.syncToClients();
-                return true;
-            }
-        }
         return false;
     }
 

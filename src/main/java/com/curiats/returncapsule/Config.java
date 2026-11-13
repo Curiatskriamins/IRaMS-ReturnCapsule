@@ -24,6 +24,7 @@ public final class Config {
     public static final ForgeConfigSpec.DoubleValue TRUE_DAMAGE;
     public static final ForgeConfigSpec.BooleanValue DAMAGE_OWNER;
     public static final ForgeConfigSpec.BooleanValue CLEAR_LANDING_AREA;
+    public static final ForgeConfigSpec.BooleanValue CAPSULE_BREAK_BLOCKS;
     public static final ForgeConfigSpec.DoubleValue LANDING_DROP_CHANCE;
     public static final ForgeConfigSpec.DoubleValue LANDING_FIRE_CHANCE;
     public static final ForgeConfigSpec.IntValue LANDING_FIRE_RADIUS;
@@ -156,6 +157,8 @@ public final class Config {
         CLEAR_LANDING_AREA = builder
                 .comment("放置返回舱方块前，清空锚点上方空间(Clear a 3x3x2 space above the anchor before placing the capsule block)")
                 .define("clearLandingArea", true);
+        CAPSULE_BREAK_BLOCKS = builder
+                .define("capsuleBreakBlocks", true);
         LANDING_DROP_CHANCE = builder
                 .comment("弹坑周围的地表方块被破坏并掉落物品的概率(Probability that a surface block around the crater is broken and drops its items)")
                 .defineInRange("landingDropChance", 0.4D, 0.0D, 1.0D);

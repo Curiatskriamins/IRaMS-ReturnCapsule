@@ -39,14 +39,20 @@ public final class TaczLootFiller {
         int gunCount = Math.min(pool.size(), minGuns + random.nextInt(maxGuns - minGuns + 1));
 
         List<ResourceLocation> attachments = catalog.attachmentsByPack().getOrDefault(pack, List.of());
-        ItemInserter.clear(container);
         ItemInserter inserter = new ItemInserter(container);
 
         for (int i = 0; i < gunCount; i++) {
             GunInfo gun = pool.get(i);
             inserter.insert(buildGun(gun));
             insertAttachments(inserter, attachments, random);
-            addAmmo(inserter, gun.ammoId(), ammoCount(gun.type(), random, tier));
+            if (com.curiats.returncapsule.compat.AmmoSupplyCompat.isLoaded()) {
+                ItemStack box = com.curiats.returncapsule.compat.AmmoSupplyCompat.box(tier);
+                if (!box.isEmpty()) {
+                    inserter.insert(box);
+                }
+            } else {
+                addAmmo(inserter, gun.ammoId(), ammoCount(gun.type(), random, tier));
+            }
         }
 
         if (LrSupport.isLoaded()) {

@@ -50,6 +50,9 @@ public final class KillMarkerEvents {
         for (ServerLevel level : event.getServer().getAllLevels()) {
             PetLaunch.tick(level);
         }
+        if (event.getServer().getTickCount() % 20 == 0) {
+            PetLaunch.recover(event.getServer());
+        }
         KillMarkerItem.tickQueues(event.getServer());
         com.curiats.returncapsule.util.TrueDot.tick(event.getServer());
     }
