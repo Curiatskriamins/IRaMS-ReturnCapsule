@@ -14,10 +14,6 @@ public final class LootLayout {
         for (int i = 0; i < container.getContainerSize(); i++) {
             ItemStack stack = container.getItem(i);
             if (!stack.isEmpty()) {
-                if (stack.getItem() instanceof BlockItem) {
-                    container.setItem(i, ItemStack.EMPTY);
-                    continue;
-                }
                 stacks.add(stack);
                 container.setItem(i, ItemStack.EMPTY);
             }

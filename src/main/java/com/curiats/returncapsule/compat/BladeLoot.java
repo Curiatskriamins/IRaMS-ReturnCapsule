@@ -3,7 +3,9 @@ package com.curiats.returncapsule.compat;
 import com.curiats.returncapsule.Config;
 import com.curiats.returncapsule.progress.SummonTier;
 import com.curiats.returncapsule.util.ItemInserter;
+import net.minecraft.core.Registry;
 import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.Container;
@@ -14,7 +16,9 @@ import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.item.CreativeModeTab;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.Level;
 
+import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.List;
@@ -24,11 +28,11 @@ import java.util.Map;
 public final class BladeLoot {
     private static volatile List<Blade> cache;
 
-    public static void fill(Container container, SummonTier tier, RandomSource random) {
-        if (random.nextDouble() > Config.UNIQUE_WEAPON_CHANCE.get()) {
+    public static void fill(Container container, SummonTier tier, RandomSource random, Level level) {
+        if (tier != SummonTier.ELITE && random.nextDouble() > Config.UNIQUE_WEAPON_CHANCE.get()) {
             return;
         }
-        List<Blade> pool = pool(tier);
+        List<Blade> pool = pool(tier, level);
         if (pool.isEmpty()) {
             return;
         }
@@ -36,9 +40,9 @@ public final class BladeLoot {
         new ItemInserter(container).insert(blade.stack().copy());
     }
 
-    private static List<Blade> pool(SummonTier tier) {
+    private static List<Blade> pool(SummonTier tier, Level level) {
         List<Blade> result = new ArrayList<>();
-        for (Blade blade : all()) {
+        for (Blade blade : all(level)) {
             boolean match = switch (tier) {
                 case BASIC -> blade.damage() < 7.0D;
                 case ADVANCED -> blade.damage() >= 7.0D && blade.damage() <= 19.0D;
@@ -49,7 +53,7 @@ public final class BladeLoot {
             }
         }
         if (result.isEmpty()) {
-            List<Blade> all = all();
+            List<Blade> all = all(level);
             double max = Double.NEGATIVE_INFINITY;
             for (Blade blade : all) {
                 max = Math.max(max, blade.damage());
@@ -63,13 +67,13 @@ public final class BladeLoot {
         return result;
     }
 
-    private static List<Blade> all() {
+    private static List<Blade> all(Level level) {
         List<Blade> local = cache;
         if (local == null) {
             synchronized (BladeLoot.class) {
                 local = cache;
                 if (local == null) {
-                    local = build();
+                    local = build(level);
                     cache = local;
                 }
             }
@@ -77,7 +81,7 @@ public final class BladeLoot {
         return local;
     }
 
-    private static List<Blade> build() {
+    private static List<Blade> build(Level level) {
         List<Blade> result = new ArrayList<>();
         for (Item item : BuiltInRegistries.ITEM) {
             if (!isAllowed(item)) {
@@ -94,7 +98,31 @@ public final class BladeLoot {
                 result.add(new Blade(stack.copy(), damage(stack)));
             }
         }
+        addRegistryBlades(result, level);
         return List.copyOf(result);
+    }
+
+    private static void addRegistryBlades(List<Blade> result, Level level) {
+        if (level == null) {
+            return;
+        }
+        try {
+            Class<?> definition = Class.forName("mods.flammpfeil.slashblade.registry.slashblade.SlashBladeDefinition");
+            Field keyField = definition.getField("REGISTRY_KEY");
+            Object key = keyField.get(null);
+            if (!(key instanceof ResourceKey<?> resourceKey)) {
+                return;
+            }
+            Registry<?> registry = level.registryAccess().registryOrThrow((ResourceKey<? extends Registry<?>>) resourceKey);
+            Method getBlade = definition.getMethod("getBlade");
+            for (Object entry : registry) {
+                Object value = getBlade.invoke(entry);
+                if (value instanceof ItemStack stack && isAllowed(stack.getItem())) {
+                    result.add(new Blade(stack.copy(), damage(stack)));
+                }
+            }
+        } catch (ReflectiveOperationException | RuntimeException ignored) {
+        }
     }
 
     private static boolean isAllowed(Item item) {
@@ -119,15 +147,6 @@ public final class BladeLoot {
     }
 
     private static double damage(ItemStack stack) {
-        Item item = stack.getItem();
-        try {
-            Method method = item.getClass().getMethod("getDamage", ItemStack.class);
-            Object value = method.invoke(item, stack);
-            if (value instanceof Number number) {
-                return number.doubleValue();
-            }
-        } catch (ReflectiveOperationException ignored) {
-        }
         double bonus = 0.0D;
         for (Map.Entry<Attribute, AttributeModifier> entry
                 : stack.getAttributeModifiers(EquipmentSlot.MAINHAND).entries()) {

@@ -26,7 +26,7 @@ public final class TransportLoot {
         fillVanilla(container, server, random, tier);
         TieredLoot.fillModItems(container, tier, random);
         Supplies.fill(container, tier, random);
-        BladeLoot.fill(container, tier, random);
+        BladeLoot.fill(container, tier, random, server);
         BulkCargo.fill(container, tier, random);
         if (TieredLoot.allowsGunLoot(tier) && TaCZIntegration.isLoaded()) {
             TaCZIntegration.fill(container, random, tier);

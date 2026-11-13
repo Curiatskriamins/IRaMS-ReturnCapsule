@@ -16,9 +16,9 @@ public final class BulkCargo {
         }
         int size = container.getContainerSize();
         int goal = (int) Math.round(size * target);
+        int remaining = Math.max(0, goal - occupied(container));
         ItemInserter inserter = new ItemInserter(container);
-        int guard = goal * 2 + size;
-        while (occupied(container) < goal && guard-- > 0) {
+        for (int i = 0; i < remaining; i++) {
             ItemStack stack = ModItemPool.random(random, tier);
             if (stack.isEmpty()) {
                 return;
@@ -26,11 +26,11 @@ public final class BulkCargo {
             stack.setCount(Math.max(1, Math.min(1 + random.nextInt(countFor(tier)),
                     stack.getMaxStackSize())));
             if (com.curiats.returncapsule.util.LootLimits.isMusicDisc(stack)) {
-                int remaining = 3 - com.curiats.returncapsule.util.LootLimits.musicDiscCount(container);
-                if (remaining <= 0) {
+                int left = 3 - com.curiats.returncapsule.util.LootLimits.musicDiscCount(container);
+                if (left <= 0) {
                     continue;
                 }
-                stack.setCount(Math.min(stack.getCount(), remaining));
+                stack.setCount(Math.min(stack.getCount(), left));
             }
             if (!inserter.insert(stack)) {
                 return;

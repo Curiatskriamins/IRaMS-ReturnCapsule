@@ -7,25 +7,28 @@ import net.minecraft.world.item.Rarity;
 public final class LootRarity {
     public static int weight(SummonTier tier, ItemStack stack) {
         Rarity rarity = stack.getRarity();
-        return switch (tier) {
-            case BASIC -> switch (rarity) {
-                case COMMON -> 8;
-                case UNCOMMON -> 2;
-                default -> 0;
-            };
-            case ADVANCED -> switch (rarity) {
-                case COMMON -> 3;
-                case UNCOMMON -> 6;
-                case RARE -> 2;
-                default -> 0;
-            };
-            case ELITE -> switch (rarity) {
-                case COMMON -> 0;
-                case UNCOMMON -> 3;
-                case RARE -> 6;
-                case EPIC -> 4;
-            };
-        };
+        if (tier == SummonTier.BASIC) {
+            if (rarity == Rarity.COMMON) {
+                return 8;
+            }
+            return rarity == Rarity.UNCOMMON ? 2 : 0;
+        }
+        if (tier == SummonTier.ADVANCED) {
+            if (rarity == Rarity.COMMON) {
+                return 3;
+            }
+            if (rarity == Rarity.UNCOMMON) {
+                return 6;
+            }
+            return rarity == Rarity.RARE ? 2 : 0;
+        }
+        if (rarity == Rarity.UNCOMMON) {
+            return 3;
+        }
+        if (rarity == Rarity.RARE) {
+            return 6;
+        }
+        return rarity == Rarity.EPIC ? 4 : 0;
     }
 
     private LootRarity() {

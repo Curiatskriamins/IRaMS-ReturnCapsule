@@ -1,8 +1,10 @@
-{
+﻿{
   "itemGroup.returncapsule": "Supply Return Capsule",
   "item.returncapsule.capsule_caller": "Capsule Caller",
   "item.returncapsule.capsule_caller.tooltip.progress": "Defeating the Ender Dragon or the Wither raises supply drops to tier II",
-  "item.returncapsule.capsule_caller.tooltip.beacon": "At tier II, summoning inside an active beacon's range guarantees tier III supplies",
+  "item.returncapsule.capsule_caller.tooltip.beacon": "At tier II, put a Nether Star in your offhand and summon inside an active beacon's range to guarantee tier III supplies",
+  "item.returncapsule.capsule_caller.tooltip.shift": "Hold Shift for details",
+  "item.returncapsule.capsule_caller.warning": "[Warning] You meet the tier III summon conditions. Put a Nether Star in your offhand and use the caller again. This message only appears once.",
   "block.returncapsule.capsule": "Supply Return Capsule",
   "container.returncapsule.capsule": "Supply Return Capsule",
   "container.returncapsule.capsule.basic": "Tier I Return Capsule",
@@ -33,3 +35,4 @@
   "subtitles.returncapsule.missile_lock": "Missile lock",
   "subtitles.returncapsule.boom_impact": "Explosion"
 }
+

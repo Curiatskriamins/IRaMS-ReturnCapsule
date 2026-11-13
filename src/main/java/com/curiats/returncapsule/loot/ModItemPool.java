@@ -134,7 +134,7 @@ public final class ModItemPool {
                 if (weight > 0) {
                     result.add(new Entry(stack, weight));
                 }
-            } catch (RuntimeException exception) {
+            } catch (RuntimeException | LinkageError exception) {
                 ReturnCapsuleMod.LOGGER.debug("Skipping mod item {}: {}", item, exception.toString());
             }
         }

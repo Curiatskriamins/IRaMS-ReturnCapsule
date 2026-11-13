@@ -132,8 +132,7 @@ public class BoomEntity extends Entity {
         }
         Vec3 target = this.controller.targetPoint();
         boolean locked = this.controller.hasTarget();
-        Vec3 aim = locked ? this.controller.aimPoint()
-                : from.add(this.moveDir.scale(100.0D));
+        Vec3 aim = locked ? target : from.add(this.moveDir.scale(100.0D));
 
         Vec3 desired = aim.subtract(from);
         if (desired.lengthSqr() < 1.0E-6D) {
@@ -141,7 +140,7 @@ public class BoomEntity extends Entity {
         }
         Vec3 dir;
         if (locked) {
-            dir = this.controller.steer(from, desired.normalize(), this);
+            dir = desired.normalize();
             this.faceDirection(dir);
         } else {
             dir = this.moveDir;

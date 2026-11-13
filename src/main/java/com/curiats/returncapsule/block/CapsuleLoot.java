@@ -69,7 +69,7 @@ final class CapsuleLoot {
         if (this.phase == Phase.FILLED) {
             TieredLoot.fillModItems(this.owner, this.owner.getTier(), player.getRandom());
             Supplies.fill(this.owner, this.owner.getTier(), player.getRandom());
-            BladeLoot.fill(this.owner, this.owner.getTier(), player.getRandom());
+            BladeLoot.fill(this.owner, this.owner.getTier(), player.getRandom(), this.owner.getLevel());
             BulkCargo.fill(this.owner, this.owner.getTier(), player.getRandom());
             if (TieredLoot.allowsGunLoot(this.owner.getTier()) && TaCZIntegration.isLoaded()) {
                 this.taczItems = TaCZIntegration.fill(this.owner, player.getRandom(), this.owner.getTier());
