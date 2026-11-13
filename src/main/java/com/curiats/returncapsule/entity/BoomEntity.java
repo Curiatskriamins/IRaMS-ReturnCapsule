@@ -34,6 +34,7 @@ public class BoomEntity extends Entity {
     private static final String TAG_APPROACH_Z = "ApproachZ";
     private static final double CONTACT_RADIUS = 1.0D;
     private static final double GRAZE_RADIUS = 2.5D;
+    private static final int SPAWN_GRACE_TICKS = 5;
 
     @Nullable
     private SuperBigCup controller;
@@ -58,6 +59,7 @@ public class BoomEntity extends Entity {
     private float lerpToPitch;
     private int lerpTotal;
     private int lerpTick;
+    private final java.util.Set<net.minecraft.world.level.ChunkPos> forcedChunks = new java.util.HashSet<>();
 
     public void hold() {
         this.held = true;
@@ -124,9 +126,14 @@ public class BoomEntity extends Entity {
             this.detonate(server, BoomExplosion.Mode.PREMATURE);
             return;
         }
+        if (this.life <= SPAWN_GRACE_TICKS) {
+            this.controller.markerParticles();
+            return;
+        }
 
         Vec3 from = this.position();
         this.controller.update(from);
+        this.forceTargetChunk(server);
         if (this.life % 2 == 0) {
             this.controller.markerParticles();
         }
@@ -340,6 +347,38 @@ public class BoomEntity extends Entity {
 
     public Vec3 moveDirection() {
         return this.moveDir;
+    }
+
+    private void forceTargetChunk(ServerLevel server) {
+        if (this.controller == null) {
+            return;
+        }
+        this.forceChunk(server, new net.minecraft.world.level.ChunkPos(
+                net.minecraft.core.BlockPos.containing(this.controller.targetPoint())));
+        this.forceChunk(server, new net.minecraft.world.level.ChunkPos(this.blockPosition()));
+        this.forceChunk(server, new net.minecraft.world.level.ChunkPos(
+                net.minecraft.core.BlockPos.containing(this.position().add(this.moveDir.scale(32.0D)))));
+    }
+
+    private void forceChunk(ServerLevel server, net.minecraft.world.level.ChunkPos chunk) {
+        if (this.forcedChunks.add(chunk)) {
+            BombChunkLoader.force(server, chunk);
+        }
+    }
+
+    private void releaseForcedChunk(ServerLevel server) {
+        for (net.minecraft.world.level.ChunkPos chunk : this.forcedChunks) {
+            BombChunkLoader.release(server, chunk);
+        }
+        this.forcedChunks.clear();
+    }
+
+    @Override
+    public void onRemovedFromWorld() {
+        if (this.level() instanceof ServerLevel server) {
+            this.releaseForcedChunk(server);
+        }
+        super.onRemovedFromWorld();
     }
 
     public int getLife() {

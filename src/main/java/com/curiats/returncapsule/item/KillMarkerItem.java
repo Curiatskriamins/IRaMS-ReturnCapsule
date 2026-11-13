@@ -64,6 +64,12 @@ public class KillMarkerItem extends Item {
     @Override
     public InteractionResultHolder<ItemStack> use(Level level, Player player, InteractionHand hand) {
         ItemStack stack = player.getItemInHand(hand);
+        if (!player.isShiftKeyDown()) {
+            if (!level.isClientSide && player instanceof ServerPlayer server) {
+                fireInstant(server, 1);
+            }
+            return InteractionResultHolder.success(stack);
+        }
         player.startUsingItem(hand);
         if (!level.isClientSide && player instanceof ServerPlayer server) {
             server.playNotifySound(ModSounds.MISSILE_LOCK.get(), SoundSource.PLAYERS, 1.0F, 1.0F);
@@ -78,12 +84,52 @@ public class KillMarkerItem extends Item {
         if (player == null) {
             return InteractionResult.PASS;
         }
+        if (!player.isShiftKeyDown()) {
+            if (!context.getLevel().isClientSide && player instanceof ServerPlayer server) {
+                fireInstant(server, 1);
+            }
+            return InteractionResult.SUCCESS;
+        }
         player.startUsingItem(context.getHand());
         if (!context.getLevel().isClientSide && player instanceof ServerPlayer server) {
             server.playNotifySound(ModSounds.MISSILE_LOCK.get(), SoundSource.PLAYERS, 1.0F, 1.0F);
             ReturnCapsuleMod.LOGGER.info("[sound] kill_marker useOn -> missile_lock");
         }
         return InteractionResult.SUCCESS;
+    }
+
+    private static void fireInstant(ServerPlayer player, int count) {
+        Level level = player.serverLevel();
+        Set<Double> reserved = new java.util.HashSet<>();
+        Set<UUID> excluded = new java.util.HashSet<>();
+        player.playNotifySound(ModSounds.MISSILE_LOCK.get(), SoundSource.PLAYERS, 1.0F, 1.0F);
+        for (int i = 0; i < count; i++) {
+            Shot shot = resolveShot(player, level, excluded);
+            if (shot == null) {
+                break;
+            }
+            if (shot.entity() != null
+                    && level instanceof ServerLevel server
+                    && server.getEntity(shot.entity()) instanceof TamableAnimal pet
+                    && pet.isTame()) {
+                PetLaunch.launch(pet);
+                break;
+            }
+            Payment payment = pay(player);
+            if (payment == null) {
+                break;
+            }
+            double angle = SuperBigCup.nextIncidence();
+            BoomEntity bomb = spawnBomb(level, player, shot.point(), shot.entity(), angle, reserved);
+            if (bomb != null) {
+                bomb.release();
+            } else {
+                refund(player, payment);
+            }
+            if (shot.entity() != null) {
+                excluded.add(shot.entity());
+            }
+        }
     }
 
     @Override
@@ -118,7 +164,7 @@ public class KillMarkerItem extends Item {
         if (!sneaking && volley.normalFired) {
             return;
         }
-        Shot shot = resolveShot(player, level);
+        Shot shot = resolveShot(player, level, queued(volley));
         if (shot == null) {
             return;
         }
@@ -157,17 +203,24 @@ public class KillMarkerItem extends Item {
         if (volley == null) {
             return;
         }
-        if (volley.normalBomb != null) {
-            BoomEntity bomb = volley.normalBomb;
-            volley.normalBomb = null;
-            if (player.isDeadOrDying()) {
-                bomb.discard();
-            } else {
-                bomb.release();
-            }
+        int elapsed = this.getUseDuration(stack) - timeLeft;
+        int charge = Math.max(1, Config.KILL_MARKER_CHARGE_TICKS.get());
+        if (volley.sneaking && volley.shots.isEmpty() && elapsed < charge) {
+            fireInstant(player, 6);
+        } else {
+            startFiring(volley);
         }
         volley.sneaking = false;
-        startFiring(volley);
+    }
+
+    private static Set<UUID> queued(Volley volley) {
+        Set<UUID> excluded = new java.util.HashSet<>();
+        for (QueuedShot shot : volley.shots) {
+            if (shot.entity() != null) {
+                excluded.add(shot.entity());
+            }
+        }
+        return excluded;
     }
 
     private static void startFiring(Volley volley) {
@@ -317,7 +370,7 @@ public class KillMarkerItem extends Item {
 
      
     @Nullable
-    private static Shot resolveShot(ServerPlayer player, Level level) {
+    private static Shot resolveShot(ServerPlayer player, Level level, Set<UUID> excluded) {
         
         
         int simulation = Math.max(1, player.getServer().getPlayerList().getSimulationDistance());
@@ -330,7 +383,8 @@ public class KillMarkerItem extends Item {
         AABB search = new AABB(eye, end).inflate(1.0D);
         EntityHitResult entityHit = ProjectileUtil.getEntityHitResult(level, player, eye, end, search,
                 entity -> entity != player && entity instanceof LivingEntity && entity.isAlive()
-                        && !entity.isSpectator() && entity.isPickable());
+                        && !entity.isSpectator() && entity.isPickable()
+                        && !excluded.contains(entity.getUUID()));
         BlockHitResult blockHit = level.clip(new ClipContext(eye, end,
                 ClipContext.Block.COLLIDER, ClipContext.Fluid.NONE, player));
 
@@ -340,7 +394,7 @@ public class KillMarkerItem extends Item {
             Entity entity = entityHit.getEntity();
             return new Shot(entity.getBoundingBox().getCenter(), entity.getUUID());
         }
-        Shot crosshair = findCrosshairLiving(player, level, eye, player.getViewVector(1.0F), range);
+        Shot crosshair = findCrosshairLiving(player, level, eye, player.getViewVector(1.0F), range, excluded);
         if (crosshair != null) {
             return crosshair;
         }
@@ -355,7 +409,7 @@ public class KillMarkerItem extends Item {
 
     @Nullable
     private static Shot findCrosshairLiving(ServerPlayer player, Level level, Vec3 eye, Vec3 look,
-                                             double range) {
+                                             double range, Set<UUID> excluded) {
         final double maxCone = Math.toRadians(20.0D);
         AABB area = new AABB(eye, eye.add(look.scale(range)))
                 .inflate(Math.tan(maxCone) * range);
@@ -363,7 +417,8 @@ public class KillMarkerItem extends Item {
         double bestAngle = maxCone;
         Vec3 rayEnd = eye.add(look.scale(range));
         for (LivingEntity entity : level.getEntitiesOfClass(LivingEntity.class, area,
-                e -> e != player && e.isAlive() && !e.isSpectator() && e.isPickable())) {
+                e -> e != player && e.isAlive() && !e.isSpectator() && e.isPickable()
+                        && !excluded.contains(e.getUUID()))) {
             AABB box = entity.getBoundingBox();
             java.util.Optional<Vec3> clip = box.clip(eye, rayEnd);
             Vec3 point = clip.orElseGet(box::getCenter);

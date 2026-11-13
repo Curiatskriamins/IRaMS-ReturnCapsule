@@ -89,6 +89,7 @@ public final class Config {
     public static final ForgeConfigSpec.IntValue BOOM_SPAWN_MARGIN_CHUNKS;
     public static final ForgeConfigSpec.BooleanValue BOOM_HURT_OWNER;
     public static final ForgeConfigSpec.IntValue BOOM_MAX_LIFETIME_TICKS;
+    public static final ForgeConfigSpec.IntValue BOOM_SPAWN_HEIGHT;
     public static final ForgeConfigSpec.DoubleValue BOOM_MODEL_SCALE;
     public static final ForgeConfigSpec.DoubleValue BOOM_MODEL_BASE_PITCH;
     public static final ForgeConfigSpec.DoubleValue BOOM_FLARE_SCALE;
@@ -368,6 +369,9 @@ public final class Config {
         BOOM_MAX_LIFETIME_TICKS = builder
                 .comment("巡航弹最长飞行时间，超时自爆；默认 1200 tick = 1 分钟(Maximum flight time in ticks before the bomb self destructs; 1200 ticks = 1 minute)")
                 .defineInRange("maxLifetimeTicks", 1200, 40, 12000);
+        BOOM_SPAWN_HEIGHT = builder
+                .comment("巡航弹发射点相对目标的垂直高度，越高到达越慢；默认 600(Bomb launch height above the target; higher means a longer descent; default 600)")
+                .defineInRange("spawnHeight", 600, 100, 4096);
         BOOM_FIRE_CHANCE = builder
                 .defineInRange("boomFireChance", 0.4D, 0.0D, 1.0D);
         BOOM_MODEL_SCALE = builder

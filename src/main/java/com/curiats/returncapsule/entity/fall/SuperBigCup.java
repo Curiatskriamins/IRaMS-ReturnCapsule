@@ -101,7 +101,9 @@ public final class SuperBigCup {
                 : Math.atan2(playerPos.z - targetPoint.z, playerPos.x - targetPoint.x);
         Approach approach = chooseApproach(level, targetPoint, baseAngle, distance, baseAzimuth,
                 reservedAngles);
-        return new SuperBigCup(level, lockedEntity, targetPoint, approach.offset(), approach.angle(),
+        Vec3 offset = approach.offset();
+        Vec3 highOffset = new Vec3(offset.x, Config.BOOM_SPAWN_HEIGHT.get(), offset.z);
+        return new SuperBigCup(level, lockedEntity, targetPoint, highOffset, approach.angle(),
                 lockedEntity == null);
     }
 
