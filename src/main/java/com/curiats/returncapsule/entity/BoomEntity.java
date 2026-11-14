@@ -132,7 +132,6 @@ public class BoomEntity extends Entity {
             return;
         }
         if (this.life <= SPAWN_GRACE_TICKS) {
-            this.controller.markerParticles();
             return;
         }
 
@@ -140,9 +139,6 @@ public class BoomEntity extends Entity {
         this.controller.update(from);
         this.syncLockedTarget();
         this.forceTargetChunk(server);
-        if (this.life % 2 == 0) {
-            this.controller.markerParticles();
-        }
         Vec3 target = this.controller.targetPoint();
         boolean locked = this.controller.hasTarget();
         Vec3 aim = locked ? target : from.add(this.moveDir.scale(100.0D));
