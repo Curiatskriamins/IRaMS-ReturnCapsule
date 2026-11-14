@@ -145,10 +145,10 @@ public class KillMarkerItem extends Item {
             return;
         }
         volley.sneaking = sneaking;
-        int elapsed = this.getUseDuration(stack) - remainingUseDuration;
-        if (elapsed == 0) {
-            volley.normalFired = false;
+        if (!sneaking) {
+            return;
         }
+        int elapsed = this.getUseDuration(stack) - remainingUseDuration;
         int charge = Math.max(1, Config.KILL_MARKER_CHARGE_TICKS.get());
         if (elapsed < charge) {
             return;
@@ -158,10 +158,7 @@ public class KillMarkerItem extends Item {
             return;
         }
         int maxQueued = Math.max(1, Config.KILL_MARKER_MAX_QUEUED.get());
-        if (sneaking && volley.shots.size() >= maxQueued) {
-            return;
-        }
-        if (!sneaking && volley.normalFired) {
+        if (volley.shots.size() >= maxQueued) {
             return;
         }
         Shot shot = resolveShot(player, level, queued(volley));
@@ -172,7 +169,6 @@ public class KillMarkerItem extends Item {
                 && level instanceof ServerLevel server
                 && server.getEntity(shot.entity()) instanceof TamableAnimal pet
                 && pet.isTame()) {
-            volley.normalFired = true;
             PetLaunch.launch(pet);
             return;
         }
@@ -181,17 +177,7 @@ public class KillMarkerItem extends Item {
             return;
         }
         double angle = SuperBigCup.nextIncidence();
-        if (sneaking) {
-            volley.shots.add(new QueuedShot(shot.point(), shot.entity(), angle, payment));
-        } else {
-            volley.normalFired = true;
-            BoomEntity bomb = spawnBomb(level, player, shot.point(), shot.entity(), angle, null);
-            if (bomb != null) {
-                volley.normalBomb = bomb;
-            } else {
-                refund(player, payment);
-            }
-        }
+        volley.shots.add(new QueuedShot(shot.point(), shot.entity(), angle, payment));
     }
 
     @Override
@@ -450,18 +436,10 @@ public class KillMarkerItem extends Item {
         if (volley == null) {
             return;
         }
-        if (volley.normalBomb != null) {
-            volley.normalBomb.discard();
-        }
         refundShots(player, volley);
     }
 
     public static void dropAll() {
-        for (Volley volley : VOLLEYS.values()) {
-            if (volley.normalBomb != null) {
-                volley.normalBomb.discard();
-            }
-        }
         VOLLEYS.clear();
     }
 
@@ -486,8 +464,6 @@ public class KillMarkerItem extends Item {
         private final List<QueuedShot> shots = new ArrayList<>();
         private boolean sneaking;
         private boolean firing;
-        private boolean normalFired;
         private int cooldown;
-        private BoomEntity normalBomb;
     }
 }

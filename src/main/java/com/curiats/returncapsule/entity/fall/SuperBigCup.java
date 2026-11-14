@@ -98,7 +98,8 @@ public final class SuperBigCup {
         double distance = horizontal / cos;
         double baseAzimuth = playerPos == null
                 ? random.nextDouble() * Math.PI * 2.0D
-                : Math.atan2(playerPos.z - targetPoint.z, playerPos.x - targetPoint.x);
+                : Math.atan2(playerPos.z - targetPoint.z, playerPos.x - targetPoint.x)
+                + (random.nextDouble() - 0.5D) * Math.toRadians(70.0D);
         Approach approach = chooseApproach(level, targetPoint, baseAngle, distance, baseAzimuth,
                 reservedAngles);
         Vec3 offset = approach.offset();

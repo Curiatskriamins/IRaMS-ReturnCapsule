@@ -4,6 +4,9 @@ import com.curiats.returncapsule.Config;
 import com.curiats.returncapsule.entity.fall.SuperBigCup;
 import com.curiats.returncapsule.registry.ModEntities;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.network.syncher.EntityDataAccessor;
+import net.minecraft.network.syncher.EntityDataSerializers;
+import net.minecraft.network.syncher.SynchedEntityData;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.Entity;
@@ -35,6 +38,8 @@ public class BoomEntity extends Entity {
     private static final double CONTACT_RADIUS = 1.0D;
     private static final double GRAZE_RADIUS = 2.5D;
     private static final int SPAWN_GRACE_TICKS = 5;
+    private static final EntityDataAccessor<Integer> DATA_TARGET =
+            SynchedEntityData.defineId(BoomEntity.class, EntityDataSerializers.INT);
 
     @Nullable
     private SuperBigCup controller;
@@ -133,6 +138,7 @@ public class BoomEntity extends Entity {
 
         Vec3 from = this.position();
         this.controller.update(from);
+        this.syncLockedTarget();
         this.forceTargetChunk(server);
         if (this.life % 2 == 0) {
             this.controller.markerParticles();
@@ -147,7 +153,7 @@ public class BoomEntity extends Entity {
         }
         Vec3 dir;
         if (locked) {
-            dir = desired.normalize();
+            dir = this.controller.steer(from, desired.normalize(), this);
             this.faceDirection(dir);
         } else {
             dir = this.moveDir;
@@ -275,6 +281,7 @@ public class BoomEntity extends Entity {
 
     @Override
     protected void defineSynchedData() {
+        this.entityData.define(DATA_TARGET, 0);
     }
 
     @Override
@@ -342,7 +349,25 @@ public class BoomEntity extends Entity {
 
     @Override
     public boolean shouldRenderAtSqrDistance(double distance) {
-        return distance < 512.0D * 512.0D;
+        return distance < 4096.0D * 4096.0D;
+    }
+
+    private void syncLockedTarget() {
+        int targetId = 0;
+        if (this.controller != null && this.controller.lockedEntity() != null
+                && this.level() instanceof ServerLevel server) {
+            Entity target = server.getEntity(this.controller.lockedEntity());
+            if (target != null) {
+                targetId = target.getId();
+            }
+        }
+        if (this.entityData.get(DATA_TARGET) != targetId) {
+            this.entityData.set(DATA_TARGET, targetId);
+        }
+    }
+
+    public int clientLockedEntity() {
+        return this.entityData.get(DATA_TARGET);
     }
 
     public Vec3 moveDirection() {

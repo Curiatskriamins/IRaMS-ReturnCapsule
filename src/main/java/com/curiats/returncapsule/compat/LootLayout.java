@@ -2,7 +2,6 @@ package com.curiats.returncapsule.compat;
 
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.Container;
-import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.ItemStack;
 
 import java.util.ArrayList;
