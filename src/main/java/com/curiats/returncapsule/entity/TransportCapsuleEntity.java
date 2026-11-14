@@ -170,8 +170,7 @@ public class TransportCapsuleEntity extends FallingCapsuleEntity implements Menu
             excluded.add(passenger.getUUID());
         }
         this.ejectPassengers(server);
-        Entity source = this.ownerUuid == null ? this : server.getEntity(this.ownerUuid);
-        ShockManager.impact(server, new Vec3(x, y, z), Config.IMPACT_HALF_SIZE.get(), source, excluded);
+        ShockManager.impact(server, new Vec3(x, y, z), Config.IMPACT_HALF_SIZE.get(), this, excluded);
 
         CapsuleParticles.broadcast(server, ParticleTypes.EXPLOSION_EMITTER, x, y, z, 4, 2.0D, 1.0D, 2.0D, 0.0D);
         CapsuleParticles.broadcast(server, ParticleTypes.EXPLOSION, x, y, z, 30, 4.5D, 1.0D, 4.5D, 0.0D);

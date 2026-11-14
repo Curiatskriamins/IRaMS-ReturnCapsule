@@ -131,15 +131,12 @@ public final class ShockProtection {
 
     @SubscribeEvent
     public static void onLivingAttack(LivingAttackEvent event) {
-        Entity source = event.getSource().getEntity();
-        if (source == null) {
-            source = event.getSource().getDirectEntity();
-        }
-        if (shocked(source)) {
+        Entity direct = event.getSource().getDirectEntity();
+        if (shocked(direct)) {
             event.setCanceled(true);
             return;
         }
-        if (source instanceof Projectile projectile && shocked(projectile.getOwner())) {
+        if (direct instanceof Projectile projectile && shocked(projectile.getOwner())) {
             event.setCanceled(true);
         }
     }

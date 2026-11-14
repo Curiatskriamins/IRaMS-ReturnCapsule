@@ -110,7 +110,7 @@ public class SupplyCapsuleEntity extends FallingCapsuleEntity {
         if (!Config.DAMAGE_OWNER.get() && owner != null) {
             excluded.add(owner.getUUID());
         }
-        ShockManager.impact(server, new Vec3(x, y, z), Config.IMPACT_HALF_SIZE.get(), owner, excluded);
+        ShockManager.impact(server, new Vec3(x, y, z), Config.IMPACT_HALF_SIZE.get(), this, excluded);
 
         this.spawnExplosionCloud(server, x, y, z);
         LandingSite.scatterDrops(server, landing, this.random);
