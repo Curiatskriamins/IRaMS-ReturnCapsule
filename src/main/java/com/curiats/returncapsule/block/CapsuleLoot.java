@@ -74,6 +74,7 @@ final class CapsuleLoot {
             if (TieredLoot.allowsGunLoot(this.owner.getTier()) && TaCZIntegration.isLoaded()) {
                 this.taczItems = TaCZIntegration.fill(this.owner, player.getRandom(), this.owner.getTier());
             }
+            com.curiats.returncapsule.util.ItemInserter.compact(this.owner);
             LootLayout.spread(this.owner, player.getRandom());
             com.curiats.returncapsule.util.LootLimits.trimMusicDiscs(this.owner, 3);
             this.owner.clearLootTable();

@@ -4,14 +4,10 @@ import com.curiats.returncapsule.Config;
 import com.curiats.returncapsule.compat.LrSupport;
 import com.curiats.returncapsule.progress.SummonTier;
 import com.curiats.returncapsule.util.ItemInserter;
-import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.nbt.CompoundTag;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.Container;
-import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.Items;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -19,10 +15,6 @@ import java.util.Locale;
 import java.util.Map;
 
 public final class TaczLootFiller {
-    private static final ResourceLocation GUN_ITEM = new ResourceLocation("tacz", "modern_kinetic_gun");
-    private static final ResourceLocation ATTACHMENT_ITEM = new ResourceLocation("tacz", "attachment");
-    private static final ResourceLocation AMMO_ITEM = new ResourceLocation("tacz", "ammo");
-
     public static boolean fill(Container container, RandomSource random, SummonTier tier) {
         TaczCatalog.Snapshot catalog = TaczCatalog.snapshot();
         if (catalog.isEmpty()) {
@@ -43,12 +35,12 @@ public final class TaczLootFiller {
 
         for (int i = 0; i < gunCount; i++) {
             GunInfo gun = pool.get(i);
-            inserter.insert(buildGun(gun));
+            inserter.insertNoMerge(buildGun(gun));
             insertAttachments(inserter, attachments, random);
             if (com.curiats.returncapsule.compat.AmmoSupplyCompat.isLoaded()) {
                 ItemStack box = com.curiats.returncapsule.compat.AmmoSupplyCompat.box(tier);
                 if (!box.isEmpty()) {
-                    inserter.insert(box);
+                    inserter.insertNoMerge(box);
                 }
             } else {
                 addAmmo(inserter, gun.ammoId(), ammoCount(gun.type(), random, tier));
@@ -79,7 +71,7 @@ public final class TaczLootFiller {
             List<ResourceLocation> all = new ArrayList<>(attachments);
             shuffle(all, random);
             for (ResourceLocation id : all) {
-                inserter.insert(buildAttachment(id));
+                inserter.insertNoMerge(buildAttachment(id));
             }
             return;
         }
@@ -92,7 +84,7 @@ public final class TaczLootFiller {
             }
         }
         for (int index : picked) {
-            inserter.insert(buildAttachment(attachments.get(index)));
+            inserter.insertNoMerge(buildAttachment(attachments.get(index)));
         }
     }
 
@@ -106,49 +98,28 @@ public final class TaczLootFiller {
     }
 
     private static ItemStack buildGun(GunInfo gun) {
-        Item item = BuiltInRegistries.ITEM.get(GUN_ITEM);
-        if (item == Items.AIR) {
-            return ItemStack.EMPTY;
-        }
-        ItemStack stack = new ItemStack(item);
-        CompoundTag tag = stack.getOrCreateTag();
-        tag.putString("GunId", gun.id().toString());
-        tag.putString("GunFireMode", gun.fireMode());
-        tag.putInt("GunCurrentAmmoCount", 0);
-        tag.putBoolean("HasBulletInBarrel", false);
-        return stack;
+        return TaczItems.gun(gun, 0);
     }
 
     private static ItemStack buildAttachment(ResourceLocation attachmentId) {
-        Item item = BuiltInRegistries.ITEM.get(ATTACHMENT_ITEM);
-        if (item == Items.AIR) {
-            return ItemStack.EMPTY;
-        }
-        ItemStack stack = new ItemStack(item);
-        stack.getOrCreateTag().putString("AttachmentId", attachmentId.toString());
-        return stack;
+        return TaczItems.attachment(attachmentId);
     }
 
     private static void addAmmo(ItemInserter inserter, ResourceLocation ammoId, int count) {
         if (ammoId == null || count <= 0) {
             return;
         }
-        Item item = BuiltInRegistries.ITEM.get(AMMO_ITEM);
-        if (item == Items.AIR) {
-            return;
-        }
-        ItemStack template = new ItemStack(item);
-        template.getOrCreateTag().putString("AmmoId", ammoId.toString());
-        int maxStack = Math.max(1, template.getMaxStackSize());
         int remaining = count;
         while (remaining > 0) {
-            int stackCount = Math.min(maxStack, remaining);
-            ItemStack stack = template.copy();
-            stack.setCount(stackCount);
-            if (!inserter.insert(stack)) {
+            ItemStack stack = TaczItems.ammo(ammoId, remaining);
+            if (stack.isEmpty()) {
                 return;
             }
-            remaining -= stackCount;
+            int moved = stack.getCount();
+            if (!inserter.insertNoMerge(stack)) {
+                return;
+            }
+            remaining -= moved;
         }
     }
 

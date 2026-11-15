@@ -21,6 +21,7 @@ public final class ModTabs {
                         output.accept(ModItems.TRANSPORT_DESIGNATOR.get());
                         output.accept(ModItems.KILL_MARKER_INDICATOR.get());
                         output.accept(ModItems.CAPSULE.get());
+                        output.accept(ModItems.BASE_HUMANOID_SPAWN_EGG.get());
                     })
                     .build());
 

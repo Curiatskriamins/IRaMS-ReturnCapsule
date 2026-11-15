@@ -12,6 +12,7 @@ final class TaczApi {
     private static final String API_CLASS = "com.tacz.guns.api.TimelessAPI";
     private static final String GUN_INDEX = "getAllCommonGunIndex";
     private static final String ATTACHMENT_INDEX = "getAllCommonAttachmentIndex";
+    static final String ATTACHMENT_TYPE_CLASS = "com.tacz.guns.api.item.attachment.AttachmentType";
 
     private static volatile boolean resolved;
     private static volatile boolean available;
@@ -68,6 +69,81 @@ final class TaczApi {
     static Collection<Map.Entry<?, ?>> attachmentIndex() {
         return entries(attachmentIndexMethod);
     }
+
+    // ---------------------------------------------------------------- attachment fitting
+
+    private static final String IGUN_CLASS = "com.tacz.guns.api.item.IGun";
+    private static final String IATTACHMENT_CLASS = "com.tacz.guns.api.item.IAttachment";
+
+    private static volatile Method gunOrNull;
+    private static volatile Method allowAttachmentType;
+    private static volatile Method allowAttachment;
+    private static volatile Method installAttachment;
+    private static volatile Method attachmentTypeOf;
+
+    /** The {@code IGun} handle for a gun stack, or {@code null} when it is not a gun. */
+    static Object gunOrNull(net.minecraft.world.item.ItemStack stack) throws ReflectiveOperationException {
+        if (gunOrNull == null) {
+            Class<?> type = Class.forName(IGUN_CLASS);
+            gunOrNull = type.getMethod("getIGunOrNull", net.minecraft.world.item.ItemStack.class);
+            allowAttachmentType = type.getMethod("allowAttachmentType",
+                    net.minecraft.world.item.ItemStack.class, Class.forName(ATTACHMENT_TYPE_CLASS));
+            allowAttachment = type.getMethod("allowAttachment",
+                    net.minecraft.world.item.ItemStack.class, net.minecraft.world.item.ItemStack.class);
+            installAttachment = type.getMethod("installAttachment",
+                    net.minecraft.world.item.ItemStack.class, net.minecraft.world.item.ItemStack.class);
+        }
+        return gunOrNull.invoke(null, stack);
+    }
+
+    /** False for a slot this gun disables outright. */
+    static boolean allowAttachmentType(Object gunHandle, Object attachmentType) {
+        try {
+            return allowAttachmentType != null
+                    && Boolean.TRUE.equals(allowAttachmentType.invoke(gunHandle, attachmentType));
+        } catch (ReflectiveOperationException | RuntimeException exception) {
+            return false;
+        }
+    }
+
+    /** Whether this particular attachment fits the gun. */
+    static boolean allowAttachment(Object gunHandle, net.minecraft.world.item.ItemStack attachment) {
+        try {
+            return allowAttachment != null && Boolean.TRUE.equals(allowAttachment.invoke(gunHandle, attachment));
+        } catch (ReflectiveOperationException | RuntimeException exception) {
+            return false;
+        }
+    }
+
+    static void installAttachment(Object gunHandle, net.minecraft.world.item.ItemStack gun,
+                                  net.minecraft.world.item.ItemStack attachment) {
+        try {
+            if (installAttachment != null) {
+                installAttachment.invoke(gunHandle, gun, attachment);
+            }
+        } catch (ReflectiveOperationException | RuntimeException exception) {
+            ReturnCapsuleMod.LOGGER.debug("TaCZ refused an attachment: {}", exception.toString());
+        }
+    }
+
+    /** Slot type of an attachment item, used to match it against the slot being filled. */
+    static Object attachmentType(net.minecraft.world.item.ItemStack attachment) {
+        try {
+            if (attachmentTypeOf == null) {
+                Class<?> type = Class.forName(IATTACHMENT_CLASS);
+                Class<?> instance = Class.forName("com.tacz.guns.api.item.IAttachment");
+                Method orNull = instance.getMethod("getIAttachmentOrNull", net.minecraft.world.item.ItemStack.class);
+                attachmentTypeOf = instance.getMethod("getType", net.minecraft.world.item.ItemStack.class);
+                handleLookup = orNull;
+            }
+            Object handle = handleLookup.invoke(null, attachment);
+            return handle == null ? null : attachmentTypeOf.invoke(handle, attachment);
+        } catch (ReflectiveOperationException | RuntimeException exception) {
+            return null;
+        }
+    }
+
+    private static volatile Method handleLookup;
 
     private static Collection<Map.Entry<?, ?>> entries(Method method) {
         if (method == null) {

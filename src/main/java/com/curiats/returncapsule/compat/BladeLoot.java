@@ -37,7 +37,7 @@ public final class BladeLoot {
             return;
         }
         Blade blade = pool.get(random.nextInt(pool.size()));
-        new ItemInserter(container).insert(blade.stack().copy());
+        new ItemInserter(container).insertNoMerge(blade.stack().copy());
     }
 
     private static List<Blade> pool(SummonTier tier, Level level) {

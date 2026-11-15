@@ -5,6 +5,7 @@ import com.curiats.returncapsule.client.ClientTooltip;
 import com.curiats.returncapsule.entity.SupplyCapsuleEntity;
 import com.curiats.returncapsule.progress.SummonTier;
 import com.curiats.returncapsule.progress.TierResolver;
+import com.curiats.returncapsule.util.NetherStars;
 import net.minecraft.advancements.Advancement;
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
@@ -64,18 +65,17 @@ public class CapsuleCallerItem extends Item {
 
         SummonTier tier = TierResolver.resolve((ServerLevel) level, anchor, player);
         if (tier == SummonTier.ELITE) {
-            ItemStack offhand = player.getOffhandItem();
-            if (offhand.is(Items.NETHER_STAR)) {
-                offhand.shrink(1);
+            if (player.getOffhandItem().is(Items.NETHER_STAR)) {
+                NetherStars.consumeOne(player);
                 player.getPersistentData().putBoolean(TAG_TIER_THREE_DONE, true);
-            } else if (hasNetherStar(player)) {
+            } else if (NetherStars.has(player)) {
                 if (!player.getPersistentData().getBoolean(TAG_WARNING)) {
                     player.getPersistentData().putBoolean(TAG_WARNING, true);
                     player.displayClientMessage(
                             Component.translatable("item.returncapsule.capsule_caller.warning"), false);
                     return InteractionResult.FAIL;
                 }
-                consumeNetherStar(player);
+                NetherStars.consumeOne(player);
                 player.getPersistentData().putBoolean(TAG_TIER_THREE_DONE, true);
             } else {
                 return InteractionResult.FAIL;
@@ -102,7 +102,7 @@ public class CapsuleCallerItem extends Item {
         if (!tag.getBoolean(TAG_NETHER) && hasEnteredNether(player)) {
             tag.putBoolean(TAG_NETHER, true);
         }
-        if (!tag.getBoolean(TAG_STAR) && hasNetherStar(player)) {
+        if (!tag.getBoolean(TAG_STAR) && NetherStars.has(player)) {
             tag.putBoolean(TAG_STAR, true);
         }
         if (!tag.getBoolean(TAG_TIER_THREE) && player.getPersistentData().getBoolean(TAG_TIER_THREE_DONE)) {
@@ -132,20 +132,6 @@ public class CapsuleCallerItem extends Item {
         }
         Advancement advancement = player.getServer().getAdvancements().getAdvancement(NETHER_ADVANCEMENT);
         return advancement != null && player.getAdvancements().getOrStartProgress(advancement).isDone();
-    }
-
-    private static boolean hasNetherStar(Player player) {
-        for (int i = 0; i < player.getInventory().getContainerSize(); i++) {
-            if (player.getInventory().getItem(i).is(Items.NETHER_STAR)) {
-                return true;
-            }
-        }
-        return player.getOffhandItem().is(Items.NETHER_STAR);
-    }
-
-    private static void consumeNetherStar(Player player) {
-        player.getInventory().clearOrCountMatchingItems(
-                stack -> stack.is(Items.NETHER_STAR), 1, player.getInventory());
     }
 
     @Nullable

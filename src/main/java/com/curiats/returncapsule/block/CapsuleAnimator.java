@@ -21,19 +21,6 @@ final class CapsuleAnimator {
         return this.state;
     }
 
-    boolean isOpenOrClosing() {
-        return this.state == CapsuleBlockEntity.AnimState.OPEN
-                || this.state == CapsuleBlockEntity.AnimState.CLOSING;
-    }
-
-    boolean isOpen() {
-        return this.state == CapsuleBlockEntity.AnimState.OPEN;
-    }
-
-    boolean isClosed() {
-        return this.state == CapsuleBlockEntity.AnimState.CLOSED;
-    }
-
     void open() {
         if (this.owner.getLevel() == null || this.owner.getLevel().isClientSide
                 || this.state != CapsuleBlockEntity.AnimState.CLOSED) {

@@ -5,6 +5,7 @@ import com.curiats.returncapsule.block.TransportMarkerBlockEntity;
 import com.curiats.returncapsule.compat.BeaconRecords;
 import com.curiats.returncapsule.entity.TransportCapsuleEntity;
 import com.curiats.returncapsule.registry.ModBlocks;
+import com.curiats.returncapsule.util.NetherStars;
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.level.ServerLevel;
@@ -13,7 +14,6 @@ import net.minecraft.util.Mth;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.Items;
 import net.minecraft.world.item.context.UseOnContext;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Blocks;
@@ -137,7 +137,7 @@ public class TransportDesignatorItem extends Item {
             }
             if (TransportCapsuleEntity.spawn((ServerLevel) level, markerPos, player)) {
                 if (!player.isCreative()) {
-                    consumeNetherStar(player);
+                    NetherStars.consumeOne(player);
                 }
                 setCharge(stack, Math.min(1, max - 1));
                 tag.remove(TAG_CONFIRM_UNTIL);
@@ -154,21 +154,7 @@ public class TransportDesignatorItem extends Item {
     private static boolean canPay(ServerPlayer player) {
         return player.getServer() != null
                 && BeaconRecords.get(player.getServer()).hasActiveBeacon(player.getServer(), player.getUUID())
-                && hasNetherStar(player);
-    }
-
-    private static boolean hasNetherStar(ServerPlayer player) {
-        for (int i = 0, size = player.getInventory().getContainerSize(); i < size; i++) {
-            if (player.getInventory().getItem(i).is(Items.NETHER_STAR)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    private static void consumeNetherStar(ServerPlayer player) {
-        player.getInventory().clearOrCountMatchingItems(stack -> stack.is(Items.NETHER_STAR),
-                1, player.getInventory());
+                && NetherStars.has(player);
     }
 
     private static boolean hasNetherPortal(Level level, BlockPos center) {

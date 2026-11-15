@@ -54,7 +54,7 @@ public final class LrSupport {
             }
             Item item = BuiltInRegistries.ITEM.get(new ResourceLocation(MOD_ID, path));
             if (item != Items.AIR && added.add(item)) {
-                inserter.insert(new ItemStack(item));
+                inserter.insertNoMerge(new ItemStack(item));
             }
         }
         List<Item> pool = pool(marker);
@@ -62,7 +62,7 @@ public final class LrSupport {
         for (int i = 0; i < pool.size() && added.size() < amount; i++) {
             Item item = pool.get((offset + i) % pool.size());
             if (added.add(item)) {
-                inserter.insert(new ItemStack(item));
+                inserter.insertNoMerge(new ItemStack(item));
             }
         }
     }

@@ -49,10 +49,10 @@ public final class ArmorSets {
         };
         Set set = all.get(from + random.nextInt(Math.max(1, to - from)));
         ItemInserter inserter = new ItemInserter(container);
-        inserter.insert(set.helmet());
-        inserter.insert(set.chest());
-        inserter.insert(set.legs());
-        inserter.insert(set.boots());
+        inserter.insertNoMerge(set.helmet());
+        inserter.insertNoMerge(set.chest());
+        inserter.insertNoMerge(set.legs());
+        inserter.insertNoMerge(set.boots());
     }
 
     private record Set(ItemStack helmet, ItemStack chest, ItemStack legs, ItemStack boots, int power) {

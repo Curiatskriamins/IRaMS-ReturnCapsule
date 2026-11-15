@@ -15,7 +15,6 @@ import net.minecraft.network.protocol.game.ClientGamePacketListener;
 import net.minecraft.network.protocol.game.ClientboundBlockEntityDataPacket;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.ContainerHelper;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
@@ -43,7 +42,6 @@ public class CapsuleBlockEntity extends RandomizableContainerBlockEntity {
 
     private final int slots;
     private final CapsuleAnimator animator;
-    private final CapsuleSeats seats;
     private final CapsuleLoot loot;
     private final AABB renderBox;
 
@@ -58,17 +56,12 @@ public class CapsuleBlockEntity extends RandomizableContainerBlockEntity {
         this.slots = Config.containerSlots();
         this.items = NonNullList.withSize(this.slots, ItemStack.EMPTY);
         this.animator = new CapsuleAnimator(this);
-        this.seats = new CapsuleSeats(this);
         this.loot = new CapsuleLoot(this);
         this.renderBox = new AABB(pos.offset(-1, 0, -1), pos.offset(2, 3, 2));
     }
 
     public AnimState getAnimState() {
         return this.animator.state();
-    }
-
-    public float getLidProgress() {
-        return this.animator.lidProgress(0.0F);
     }
 
     public float getLidProgress(float partialTick) {
@@ -83,18 +76,6 @@ public class CapsuleBlockEntity extends RandomizableContainerBlockEntity {
         this.animator.close();
     }
 
-    boolean isOpen() {
-        return this.animator.isOpen();
-    }
-
-    boolean isClosed() {
-        return this.animator.isClosed();
-    }
-
-    public boolean isOpenOrClosing() {
-        return this.animator.isOpenOrClosing();
-    }
-
     void syncToClients() {
         this.setChanged();
         if (this.level != null) {
@@ -107,23 +88,12 @@ public class CapsuleBlockEntity extends RandomizableContainerBlockEntity {
             return;
         }
         this.animator.tick(server);
-        if (!this.seats.isEmpty()) {
-            this.seats.tick(server);
-        }
         if (--this.repairCooldown <= 0) {
             this.repairCooldown = SHELL_REPAIR_INTERVAL;
             if (!CapsuleStructure.isIntact(server, this.worldPosition)) {
                 CapsuleStructure.placeParts(server, this.worldPosition);
             }
         }
-    }
-
-    public boolean addHidden(ServerPlayer player) {
-        return this.seats.add(player);
-    }
-
-    public void ejectAll(ServerLevel server) {
-        this.seats.ejectAll(server);
     }
 
     public void markLootGenerated() {
@@ -213,22 +183,6 @@ public class CapsuleBlockEntity extends RandomizableContainerBlockEntity {
     }
 
     @Override
-    public void onLoad() {
-        super.onLoad();
-        if (this.level instanceof ServerLevel) {
-            this.seats.onLoad();
-        }
-    }
-
-    @Override
-    public void setRemoved() {
-        if (this.level instanceof ServerLevel server) {
-            this.seats.ejectAll(server);
-        }
-        super.setRemoved();
-    }
-
-    @Override
     public void load(CompoundTag tag) {
         super.load(tag);
         
@@ -244,7 +198,6 @@ public class CapsuleBlockEntity extends RandomizableContainerBlockEntity {
         this.tier = SummonTier.byName(tag.getString(TAG_TIER));
         this.loot.load(tag, hasLootTable);
         this.animator.load(tag);
-        this.seats.load(tag);
     }
 
     @Override
@@ -259,7 +212,6 @@ public class CapsuleBlockEntity extends RandomizableContainerBlockEntity {
         tag.putString(TAG_TIER, this.tier.id());
         this.loot.save(tag);
         this.animator.save(tag);
-        this.seats.save(tag);
     }
 
     @Override

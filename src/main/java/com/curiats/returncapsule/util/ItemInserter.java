@@ -14,26 +14,34 @@ public final class ItemInserter {
     }
 
     public boolean insert(ItemStack stack) {
+        return this.insert(stack, true);
+    }
+
+    public boolean insertNoMerge(ItemStack stack) {
+        return this.insert(stack, false);
+    }
+
+    public boolean insert(ItemStack stack, boolean merge) {
         if (stack.isEmpty()) {
             return true;
         }
         int remaining = stack.getCount();
         int maxStack = Math.max(1, stack.getMaxStackSize());
-        
-        
-        for (int i = 0; i < this.size && remaining > 0; i++) {
-            ItemStack existing = this.container.getItem(i);
-            if (existing.isEmpty() || !ItemStack.isSameItemSameTags(existing, stack)) {
-                continue;
+        if (merge) {
+            for (int i = 0; i < this.size && remaining > 0; i++) {
+                ItemStack existing = this.container.getItem(i);
+                if (existing.isEmpty() || !ItemStack.isSameItemSameTags(existing, stack)) {
+                    continue;
+                }
+                int room = Math.min(existing.getMaxStackSize(), maxStack) - existing.getCount();
+                if (room <= 0) {
+                    continue;
+                }
+                int moved = Math.min(room, remaining);
+                existing.grow(moved);
+                this.container.setItem(i, existing);
+                remaining -= moved;
             }
-            int room = Math.min(existing.getMaxStackSize(), maxStack) - existing.getCount();
-            if (room <= 0) {
-                continue;
-            }
-            int moved = Math.min(room, remaining);
-            existing.grow(moved);
-            this.container.setItem(i, existing);
-            remaining -= moved;
         }
         while (remaining > 0) {
             int slot = this.nextEmptySlot();
@@ -66,6 +74,35 @@ public final class ItemInserter {
             this.cursor++;
         }
         return this.cursor < this.size ? this.cursor : -1;
+    }
+
+    public static void compact(Container container) {
+        int size = container.getContainerSize();
+        for (int i = 0; i < size; i++) {
+            ItemStack source = container.getItem(i);
+            if (source.isEmpty()) {
+                continue;
+            }
+            for (int j = 0; j < i; j++) {
+                ItemStack target = container.getItem(j);
+                if (target.isEmpty() || !ItemStack.isSameItemSameTags(target, source)) {
+                    continue;
+                }
+                int room = Math.max(0, target.getMaxStackSize() - target.getCount());
+                if (room <= 0) {
+                    continue;
+                }
+                int moved = Math.min(room, source.getCount());
+                target.grow(moved);
+                source.shrink(moved);
+                container.setItem(j, target);
+                if (source.isEmpty()) {
+                    container.setItem(i, ItemStack.EMPTY);
+                    break;
+                }
+            }
+        }
+        container.setChanged();
     }
 
     public static void clear(Container container) {

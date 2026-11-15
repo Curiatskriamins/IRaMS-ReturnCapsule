@@ -64,7 +64,7 @@ public final class ModItemPool {
                 continue;
             }
             
-            stack.setCount(Math.max(1, Math.min(1 + random.nextInt(maxPerStack(tier)),
+            stack.setCount(Math.max(1, Math.min(1 + random.nextInt(tier.maxLootStack()),
                     stack.getMaxStackSize())));
             if (com.curiats.returncapsule.util.LootLimits.isMusicDisc(stack)) {
                 int remaining = 3 - com.curiats.returncapsule.util.LootLimits.musicDiscCount(container);
@@ -73,7 +73,7 @@ public final class ModItemPool {
                 }
                 stack.setCount(Math.min(stack.getCount(), remaining));
             }
-            if (!inserter.insert(stack)) {
+            if (!inserter.insertNoMerge(stack)) {
                 return;
             }
         }
@@ -94,14 +94,6 @@ public final class ModItemPool {
             }
         }
         return fallback;
-    }
-
-    private static int maxPerStack(SummonTier tier) {
-        return switch (tier) {
-            case BASIC -> 3;
-            case ADVANCED -> 8;
-            case ELITE -> 16;
-        };
     }
 
     private static List<Entry> templates(SummonTier tier) {

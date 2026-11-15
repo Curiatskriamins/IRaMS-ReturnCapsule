@@ -32,6 +32,15 @@ public enum SummonTier {
         return "container.returncapsule.transport." + this.id;
     }
 
+    /** Exclusive upper bound for the random stack size a loot draw is allowed to use at this tier. */
+    public int maxLootStack() {
+        return switch (this) {
+            case BASIC -> 3;
+            case ADVANCED -> 8;
+            case ELITE -> 16;
+        };
+    }
+
     public static SummonTier byName(String name) {
         for (SummonTier tier : values()) {
             if (tier.id.equals(name)) {

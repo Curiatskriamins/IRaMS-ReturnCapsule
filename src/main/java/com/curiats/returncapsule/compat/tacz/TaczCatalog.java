@@ -31,6 +31,12 @@ public final class TaczCatalog {
         return local;
     }
 
+    /** Attachments belonging to one pack, for fitting random accessories to a gun. */
+    static List<ResourceLocation> attachmentsOfPack(String pack) {
+        List<ResourceLocation> list = snapshot().attachmentsByPack().get(pack);
+        return list == null ? List.of() : list;
+    }
+
     public static void invalidate() {
         snapshot = null;
     }

@@ -40,6 +40,12 @@ public class BoomEntity extends Entity {
     private static final int SPAWN_GRACE_TICKS = 5;
     private static final EntityDataAccessor<Integer> DATA_TARGET =
             SynchedEntityData.defineId(BoomEntity.class, EntityDataSerializers.INT);
+    private static final EntityDataAccessor<Float> DATA_TARGET_X =
+            SynchedEntityData.defineId(BoomEntity.class, EntityDataSerializers.FLOAT);
+    private static final EntityDataAccessor<Float> DATA_TARGET_Y =
+            SynchedEntityData.defineId(BoomEntity.class, EntityDataSerializers.FLOAT);
+    private static final EntityDataAccessor<Float> DATA_TARGET_Z =
+            SynchedEntityData.defineId(BoomEntity.class, EntityDataSerializers.FLOAT);
 
     @Nullable
     private SuperBigCup controller;
@@ -278,6 +284,9 @@ public class BoomEntity extends Entity {
     @Override
     protected void defineSynchedData() {
         this.entityData.define(DATA_TARGET, 0);
+        this.entityData.define(DATA_TARGET_X, 0.0F);
+        this.entityData.define(DATA_TARGET_Y, 0.0F);
+        this.entityData.define(DATA_TARGET_Z, 0.0F);
     }
 
     @Override
@@ -360,10 +369,19 @@ public class BoomEntity extends Entity {
         if (this.entityData.get(DATA_TARGET) != targetId) {
             this.entityData.set(DATA_TARGET, targetId);
         }
+        Vec3 point = this.controller == null ? Vec3.ZERO : this.controller.targetPoint();
+        this.entityData.set(DATA_TARGET_X, (float) point.x);
+        this.entityData.set(DATA_TARGET_Y, (float) point.y);
+        this.entityData.set(DATA_TARGET_Z, (float) point.z);
     }
 
     public int clientLockedEntity() {
         return this.entityData.get(DATA_TARGET);
+    }
+
+    public Vec3 clientTargetPoint() {
+        return new Vec3(this.entityData.get(DATA_TARGET_X),
+                this.entityData.get(DATA_TARGET_Y), this.entityData.get(DATA_TARGET_Z));
     }
 
     public Vec3 moveDirection() {

@@ -7,6 +7,7 @@ import com.curiats.returncapsule.item.KillMarkerItem;
 import com.curiats.returncapsule.item.TransportDesignatorItem;
 import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.Item;
+import net.minecraftforge.common.ForgeSpawnEggItem;
 import net.minecraftforge.registries.DeferredRegister;
 import net.minecraftforge.registries.ForgeRegistries;
 import net.minecraftforge.registries.RegistryObject;
@@ -26,6 +27,10 @@ public final class ModItems {
 
     public static final RegistryObject<Item> KILL_MARKER_INDICATOR = ITEMS.register("kill_marker_indicator",
             () -> new KillMarkerItem(new Item.Properties().stacksTo(1)));
+
+    public static final RegistryObject<Item> BASE_HUMANOID_SPAWN_EGG = ITEMS.register("base_humanoid_spawn_egg",
+            () -> new ForgeSpawnEggItem(ModEntities.BASE_HUMANOID, 0xE4E4E4, 0x2A2A2A,
+                    new Item.Properties()));
 
     private ModItems() {
     }

@@ -23,7 +23,7 @@ public final class BulkCargo {
             if (stack.isEmpty()) {
                 return;
             }
-            stack.setCount(Math.max(1, Math.min(1 + random.nextInt(countFor(tier)),
+            stack.setCount(Math.max(1, Math.min(1 + random.nextInt(tier.maxLootStack()),
                     stack.getMaxStackSize())));
             if (com.curiats.returncapsule.util.LootLimits.isMusicDisc(stack)) {
                 int left = 3 - com.curiats.returncapsule.util.LootLimits.musicDiscCount(container);
@@ -32,19 +32,11 @@ public final class BulkCargo {
                 }
                 stack.setCount(Math.min(stack.getCount(), left));
             }
-            if (!inserter.insert(stack)) {
+            if (!inserter.insertNoMerge(stack)) {
                 return;
             }
         }
         container.setChanged();
-    }
-
-    private static int countFor(SummonTier tier) {
-        return switch (tier) {
-            case BASIC -> 3;
-            case ADVANCED -> 8;
-            case ELITE -> 16;
-        };
     }
 
     private static int occupied(Container container) {

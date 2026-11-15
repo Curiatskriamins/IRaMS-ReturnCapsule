@@ -77,10 +77,6 @@ public class CapsuleBlock extends BaseEntityBlock {
     @Override
     public void onRemove(BlockState state, Level level, BlockPos pos, BlockState newState, boolean isMoving) {
         if (!level.isClientSide && state.getBlock() != newState.getBlock()) {
-            if (level instanceof ServerLevel server
-                    && level.getBlockEntity(pos) instanceof CapsuleBlockEntity capsule) {
-                capsule.ejectAll(server);
-            }
             CapsuleStructure.removeParts(level, pos);
         }
         super.onRemove(state, level, pos, newState, isMoving);

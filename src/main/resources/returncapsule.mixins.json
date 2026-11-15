@@ -5,8 +5,11 @@
   "compatibilityLevel": "JAVA_17",
   "refmap": "returncapsule.refmap.json",
   "mixins": [
-    "LivingEntitySetHealthMixin",
-    "ThrownEnderpearlMixin"
+    "LivingEntitySetHealthMixin"
+  ],
+  "client": [
+    "TaczPlayerAnimatorMixin",
+    "MobendsLoadedCrossbowMixin"
   ],
   "injectors": {
     "defaultRequire": 1

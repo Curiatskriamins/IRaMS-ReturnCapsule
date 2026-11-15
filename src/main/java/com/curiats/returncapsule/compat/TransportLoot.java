@@ -31,6 +31,7 @@ public final class TransportLoot {
         if (TieredLoot.allowsGunLoot(tier) && TaCZIntegration.isLoaded()) {
             TaCZIntegration.fill(container, random, tier);
         }
+        ItemInserter.compact(container);
         LootLayout.spread(container, random);
         com.curiats.returncapsule.util.LootLimits.trimMusicDiscs(container, 3);
     }
@@ -52,7 +53,7 @@ public final class TransportLoot {
         int limit = keep <= 0 ? rolled.size() : Math.min(keep, rolled.size());
         ItemInserter inserter = new ItemInserter(container);
         for (int i = 0; i < limit; i++) {
-            inserter.insert(rolled.get(i));
+            inserter.insertNoMerge(rolled.get(i));
         }
         container.setChanged();
     }

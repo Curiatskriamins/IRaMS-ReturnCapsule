@@ -27,6 +27,7 @@ public final class ClientSetup {
         event.registerEntityRenderer(ModEntities.SUPPLY_CAPSULE.get(), CapsuleRenderer::new);
         event.registerEntityRenderer(ModEntities.TRANSPORT_CAPSULE.get(), TransportCapsuleRenderer::new);
         event.registerEntityRenderer(ModEntities.BOOM.get(), BoomRenderer::new);
+        event.registerEntityRenderer(ModEntities.BASE_HUMANOID.get(), HumanoidRenderer::new);
         event.registerBlockEntityRenderer(ModBlockEntities.CAPSULE.get(), CapsuleBlockRenderer::new);
         event.registerBlockEntityRenderer(ModBlockEntities.TRANSPORT_MARKER.get(), TransportMarkerRenderer::new);
     }
@@ -38,6 +39,9 @@ public final class ClientSetup {
             
             CapsuleClientHooks.install(ClientTrail::onFallingTick);
             BoomClientHooks.install(BoomClientTrail::onTick);
+            net.minecraftforge.common.MinecraftForge.EVENT_BUS.register(KillMarkerRenderer.class);
+            ReturnCapsuleMod.LOGGER.info("[kill-marker] renderer registered");
+            com.curiats.returncapsule.compat.mobends.MobendsAddon.registerIfPresent();
         });
     }
 

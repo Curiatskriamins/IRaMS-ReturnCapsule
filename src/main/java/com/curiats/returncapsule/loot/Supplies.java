@@ -19,8 +19,8 @@ public final class Supplies {
         ItemInserter inserter = new ItemInserter(container);
         fillFood(inserter, tier, random);
         ArmorSets.fill(container, tier, random);
-        inserter.insert(new ItemStack(swordFor(tier)));
-        inserter.insert(new ItemStack(Items.SHIELD));
+        inserter.insertNoMerge(new ItemStack(swordFor(tier)));
+        inserter.insertNoMerge(new ItemStack(Items.SHIELD));
         container.setChanged();
     }
 
@@ -32,7 +32,7 @@ public final class Supplies {
         };
         for (int i = 0; i < stacks; i++) {
             Item food = FOODS[random.nextInt(FOODS.length)];
-            inserter.insert(new ItemStack(food, 16 + random.nextInt(49)));
+            inserter.insertNoMerge(new ItemStack(food, 16 + random.nextInt(49)));
         }
     }
 
