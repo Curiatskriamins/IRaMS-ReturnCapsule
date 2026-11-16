@@ -20,7 +20,7 @@ public final class WorldProgress extends SavedData {
     private static final String TAG_DRAGON = "DragonDefeated";
     private static final String TAG_WITHER = "WitherDefeated";
     private static final ResourceLocation DRAGON_ADVANCEMENT =
-            new ResourceLocation("minecraft", "end/kill_dragon");
+            ResourceLocation.tryBuild("minecraft", "end/kill_dragon");
 
     private boolean dragonDefeated;
     private boolean witherDefeated;

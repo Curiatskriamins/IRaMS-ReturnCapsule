@@ -9,7 +9,7 @@ import net.minecraft.world.entity.player.Inventory;
 
 public class CapsuleScreen extends AbstractContainerScreen<CapsuleMenu> {
     private static final ResourceLocation CHEST_TEXTURE =
-            new ResourceLocation("textures/gui/container/generic_54.png");
+            ResourceLocation.tryParse("textures/gui/container/generic_54.png");
 
     public CapsuleScreen(CapsuleMenu menu, Inventory inventory, Component title) {
         super(menu, inventory, title);

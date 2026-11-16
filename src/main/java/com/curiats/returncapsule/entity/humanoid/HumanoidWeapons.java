@@ -4,7 +4,6 @@ import com.curiats.returncapsule.Config;
 
 import com.curiats.returncapsule.compat.tacz.TaczRifles;
 import com.google.common.collect.Multimap;
-import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.entity.EquipmentSlot;
@@ -22,6 +21,7 @@ import net.minecraft.world.level.Level;
 
 import java.util.Locale;
 import java.util.Map;
+import net.minecraftforge.registries.ForgeRegistries;
 
 public final class HumanoidWeapons {
 
@@ -51,7 +51,7 @@ public final class HumanoidWeapons {
         if (stack.isEmpty() || !stack.isDamageableItem()) {
             return false;
         }
-        ResourceLocation id = BuiltInRegistries.ITEM.getKey(stack.getItem());
+        ResourceLocation id = ForgeRegistries.ITEMS.getKey(stack.getItem());
         return id != null && matchesBladeNamespace(id.getNamespace());
     }
 
@@ -149,7 +149,7 @@ public final class HumanoidWeapons {
         if (stack.isEmpty()) {
             return false;
         }
-        ResourceLocation id = BuiltInRegistries.ITEM.getKey(stack.getItem());
+        ResourceLocation id = ForgeRegistries.ITEMS.getKey(stack.getItem());
         return id != null && id.getNamespace().startsWith("slashblade");
     }
 

@@ -7,6 +7,7 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.level.block.state.BlockState;
 
+@SuppressWarnings({"deprecation"})
 public final class LandingSite {
     private static final int SURFACE_SEARCH_DEPTH = 8;
     private static final int DROP_RADIUS = 2;

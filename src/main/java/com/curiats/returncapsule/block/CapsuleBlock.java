@@ -34,6 +34,8 @@ import net.minecraft.world.phys.shapes.VoxelShape;
 
 import javax.annotation.Nullable;
 
+@SuppressWarnings({"this-escape",
+        "deprecation"})
 public class CapsuleBlock extends BaseEntityBlock {
     public static final DirectionProperty FACING = BlockStateProperties.HORIZONTAL_FACING;
 

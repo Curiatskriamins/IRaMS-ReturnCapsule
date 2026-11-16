@@ -22,6 +22,8 @@ import net.minecraft.world.phys.shapes.VoxelShape;
 
 import javax.annotation.Nullable;
 
+@SuppressWarnings({"this-escape",
+        "deprecation"})
 public class CapsulePartBlock extends Block {
 
     public static final IntegerProperty PART = IntegerProperty.create("part", 0, 17);

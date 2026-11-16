@@ -8,6 +8,7 @@ import javax.annotation.Nullable;
 import java.util.EnumSet;
 import java.util.List;
 
+@SuppressWarnings({"this-escape"})
 public class HumanoidIdleGoal extends Goal {
 
     private static final double FOLLOW_START = 12.0D;

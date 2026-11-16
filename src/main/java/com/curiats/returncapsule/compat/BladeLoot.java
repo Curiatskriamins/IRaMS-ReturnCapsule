@@ -24,7 +24,9 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import net.minecraftforge.registries.ForgeRegistries;
 
+@SuppressWarnings("unchecked")
 public final class BladeLoot {
     private static volatile List<Blade> cache;
 
@@ -83,7 +85,7 @@ public final class BladeLoot {
 
     private static List<Blade> build(Level level) {
         List<Blade> result = new ArrayList<>();
-        for (Item item : BuiltInRegistries.ITEM) {
+        for (Item item : ForgeRegistries.ITEMS) {
             if (!isAllowed(item)) {
                 continue;
             }
@@ -126,7 +128,7 @@ public final class BladeLoot {
     }
 
     private static boolean isAllowed(Item item) {
-        ResourceLocation id = BuiltInRegistries.ITEM.getKey(item);
+        ResourceLocation id = ForgeRegistries.ITEMS.getKey(item);
         return id != null && isBladeNamespace(id.getNamespace()) && isSlashBlade(item);
     }
 

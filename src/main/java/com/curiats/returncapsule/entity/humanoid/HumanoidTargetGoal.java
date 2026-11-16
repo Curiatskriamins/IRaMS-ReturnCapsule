@@ -11,6 +11,7 @@ import javax.annotation.Nullable;
 import java.util.EnumSet;
 import java.util.UUID;
 
+@SuppressWarnings({"this-escape"})
 public class HumanoidTargetGoal extends Goal {
 
     private static final double CLOSE_RADIUS = 16.0D;

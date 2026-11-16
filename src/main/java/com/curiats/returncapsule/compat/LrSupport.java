@@ -2,7 +2,6 @@ package com.curiats.returncapsule.compat;
 
 import com.curiats.returncapsule.ReturnCapsuleMod;
 import com.curiats.returncapsule.util.ItemInserter;
-import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.item.Item;
@@ -16,6 +15,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import net.minecraftforge.registries.ForgeRegistries;
 
 public final class LrSupport {
     private static final String MOD_ID = "lrtactical";
@@ -52,7 +52,7 @@ public final class LrSupport {
             if (added.size() >= amount) {
                 break;
             }
-            Item item = BuiltInRegistries.ITEM.get(new ResourceLocation(MOD_ID, path));
+            Item item = ForgeRegistries.ITEMS.getValue(ResourceLocation.tryBuild(MOD_ID, path));
             if (item != Items.AIR && added.add(item)) {
                 inserter.insertNoMerge(new ItemStack(item));
             }
@@ -73,11 +73,11 @@ public final class LrSupport {
             return cached;
         }
         List<Item> built = new ArrayList<>();
-        for (ResourceLocation id : BuiltInRegistries.ITEM.keySet()) {
+        for (ResourceLocation id : ForgeRegistries.ITEMS.getKeys()) {
             if (!MOD_ID.equals(id.getNamespace()) || SKIPPED_PATHS.contains(id.getPath())) {
                 continue;
             }
-            Item candidate = BuiltInRegistries.ITEM.get(id);
+            Item candidate = ForgeRegistries.ITEMS.getValue(id);
             if (candidate != Items.AIR && candidate.getClass().getName().contains(marker)) {
                 built.add(candidate);
             }

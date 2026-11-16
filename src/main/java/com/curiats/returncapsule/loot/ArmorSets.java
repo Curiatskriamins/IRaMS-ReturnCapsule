@@ -3,7 +3,6 @@ package com.curiats.returncapsule.loot;
 import com.curiats.returncapsule.ReturnCapsuleMod;
 import com.curiats.returncapsule.progress.SummonTier;
 import com.curiats.returncapsule.util.ItemInserter;
-import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.Container;
@@ -22,7 +21,9 @@ import java.util.EnumMap;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
+import net.minecraftforge.registries.ForgeRegistries;
 
+@SuppressWarnings({"deprecation"})
 public final class ArmorSets {
     private static final List<ArmorItem.Type> SLOTS = List.of(
             ArmorItem.Type.HELMET, ArmorItem.Type.CHESTPLATE,
@@ -74,11 +75,11 @@ public final class ArmorSets {
     private static List<Set> build() {
 
         Map<ArmorMaterial, EnumMap<ArmorItem.Type, Item>> byMaterial = new IdentityHashMap<>();
-        for (Item item : BuiltInRegistries.ITEM) {
+        for (Item item : ForgeRegistries.ITEMS) {
             if (!(item instanceof ArmorItem armor)) {
                 continue;
             }
-            ResourceLocation id = BuiltInRegistries.ITEM.getKey(item);
+            ResourceLocation id = ForgeRegistries.ITEMS.getKey(item);
             if (id == null || ReturnCapsuleMod.MODID.equals(id.getNamespace())) {
                 continue;
             }

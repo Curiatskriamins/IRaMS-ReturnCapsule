@@ -36,7 +36,7 @@ public class CapsuleCallerItem extends Item {
     private static final String TAG_WARNING = "returncapsule_caller_warning";
     private static final String TAG_TIER_THREE_DONE = "returncapsule_tier3_done";
     private static final ResourceLocation NETHER_ADVANCEMENT =
-            new ResourceLocation("minecraft", "story/enter_the_nether");
+            ResourceLocation.tryBuild("minecraft", "story/enter_the_nether");
 
     public CapsuleCallerItem(Properties properties) {
         super(properties);

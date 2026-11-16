@@ -4,7 +4,6 @@ import com.curiats.returncapsule.ReturnCapsuleMod;
 import com.curiats.returncapsule.compat.tacz.TaczRifles;
 import com.curiats.returncapsule.compat.tacz.TaczShooter;
 import net.minecraft.core.BlockPos;
-import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.sounds.SoundEvent;
 import net.minecraft.sounds.SoundEvents;
@@ -32,7 +31,9 @@ import net.minecraft.world.item.Items;
 import net.minecraft.world.level.Level;
 
 import javax.annotation.Nullable;
+import net.minecraftforge.registries.ForgeRegistries;
 
+@SuppressWarnings({"deprecation", "this-escape"})
 public class NeutralHumanoid extends PathfinderMob implements RangedAttackMob {
 
     public enum Stance {
@@ -218,7 +219,7 @@ public class NeutralHumanoid extends PathfinderMob implements RangedAttackMob {
     }
 
     private static String describe(ItemStack stack) {
-        return stack.isEmpty() ? "none" : BuiltInRegistries.ITEM.getKey(stack.getItem()).toString();
+        return stack.isEmpty() ? "none" : ForgeRegistries.ITEMS.getKey(stack.getItem()).toString();
     }
 
     private void makeConversionImmune() {

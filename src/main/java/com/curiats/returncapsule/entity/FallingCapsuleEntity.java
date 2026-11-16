@@ -17,6 +17,7 @@ import net.minecraft.world.level.Level;
 import javax.annotation.Nullable;
 import java.util.UUID;
 
+@SuppressWarnings({"this-escape"})
 public abstract class FallingCapsuleEntity extends Entity {
     protected static final String TAG_ANCHOR = "Anchor";
     protected static final String TAG_LEGACY_TARGET = "Target";

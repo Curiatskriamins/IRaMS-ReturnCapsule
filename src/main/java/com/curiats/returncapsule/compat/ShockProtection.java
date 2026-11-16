@@ -24,6 +24,7 @@ import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 
 @Mod.EventBusSubscriber(modid = ReturnCapsuleMod.MODID, bus = Mod.EventBusSubscriber.Bus.FORGE)
+@SuppressWarnings({"removal"})
 public final class ShockProtection {
     private static boolean shocked(Entity entity) {
         return entity instanceof LivingEntity living && living.hasEffect(ModEffects.SHOCK.get());

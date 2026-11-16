@@ -38,6 +38,8 @@ import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
+@SuppressWarnings({"this-escape",
+        "deprecation"})
 public class TransportCapsuleEntity extends FallingCapsuleEntity implements MenuProvider {
     private static final double[][] SEAT_OFFSETS_SINGLE = {{0.0D, 0.0D}};
     private static final double[][] SEAT_OFFSETS_PAIR = {{-0.5D, 0.0D}, {0.5D, 0.0D}};

@@ -1,6 +1,5 @@
 package com.curiats.returncapsule.compat.tacz;
 
-import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.nbt.CompoundTag;
 import com.curiats.returncapsule.ReturnCapsuleMod;
 import net.minecraft.resources.ResourceLocation;
@@ -11,14 +10,15 @@ import net.minecraft.world.item.Items;
 
 import java.util.ArrayList;
 import java.util.List;
+import net.minecraftforge.registries.ForgeRegistries;
 
 final class TaczItems {
-    static final ResourceLocation GUN_ITEM = new ResourceLocation("tacz", "modern_kinetic_gun");
-    static final ResourceLocation ATTACHMENT_ITEM = new ResourceLocation("tacz", "attachment");
+    static final ResourceLocation GUN_ITEM = ResourceLocation.tryBuild("tacz", "modern_kinetic_gun");
+    static final ResourceLocation ATTACHMENT_ITEM = ResourceLocation.tryBuild("tacz", "attachment");
 
     private static final float ATTACHMENT_CHANCE = 0.65F;
     private static final String ATTACHMENT_TYPE_CLASS = TaczApi.ATTACHMENT_TYPE_CLASS;
-    static final ResourceLocation AMMO_ITEM = new ResourceLocation("tacz", "ammo");
+    static final ResourceLocation AMMO_ITEM = ResourceLocation.tryBuild("tacz", "ammo");
 
     static ItemStack gun(GunInfo info, int magazine) {
         return gun(info, magazine, 0);
@@ -29,8 +29,8 @@ final class TaczItems {
     }
 
     private static ItemStack gun(GunInfo info, int magazine, int dummyAmmo) {
-        Item item = BuiltInRegistries.ITEM.get(GUN_ITEM);
-        if (item == Items.AIR) {
+        Item item = ForgeRegistries.ITEMS.getValue(GUN_ITEM);
+        if (item == null || item == Items.AIR) {
             return ItemStack.EMPTY;
         }
         ItemStack stack = new ItemStack(item);
@@ -47,8 +47,8 @@ final class TaczItems {
     }
 
     static ItemStack attachment(ResourceLocation attachmentId) {
-        Item item = BuiltInRegistries.ITEM.get(ATTACHMENT_ITEM);
-        if (item == Items.AIR) {
+        Item item = ForgeRegistries.ITEMS.getValue(ATTACHMENT_ITEM);
+        if (item == null || item == Items.AIR) {
             return ItemStack.EMPTY;
         }
         ItemStack stack = new ItemStack(item);
@@ -144,8 +144,8 @@ final class TaczItems {
         if (ammoId == null || count <= 0) {
             return ItemStack.EMPTY;
         }
-        Item item = BuiltInRegistries.ITEM.get(AMMO_ITEM);
-        if (item == Items.AIR) {
+        Item item = ForgeRegistries.ITEMS.getValue(AMMO_ITEM);
+        if (item == null || item == Items.AIR) {
             return ItemStack.EMPTY;
         }
         ItemStack stack = new ItemStack(item);

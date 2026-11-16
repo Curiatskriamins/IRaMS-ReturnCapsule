@@ -13,6 +13,7 @@ import net.minecraft.world.phys.Vec3;
 
 import javax.annotation.Nullable;
 
+@SuppressWarnings("deprecation")
 public final class CapsuleBreaker {
 
     public static int smash(Level level, double centerX, double centerZ, double capsuleBottomY,

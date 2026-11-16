@@ -28,6 +28,7 @@ import net.minecraft.world.phys.AABB;
 import javax.annotation.Nullable;
 import java.util.UUID;
 
+@SuppressWarnings({"this-escape"})
 public class CapsuleBlockEntity extends RandomizableContainerBlockEntity {
     public enum AnimState {
         CLOSED,

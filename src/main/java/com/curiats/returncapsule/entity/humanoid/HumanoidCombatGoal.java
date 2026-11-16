@@ -8,6 +8,7 @@ import net.minecraft.world.entity.ai.goal.Goal;
 
 import java.util.EnumSet;
 
+@SuppressWarnings({"this-escape"})
 public class HumanoidCombatGoal extends Goal {
 
     private static final double STANCE_HYSTERESIS = 1.5D;

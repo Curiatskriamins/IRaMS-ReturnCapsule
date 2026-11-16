@@ -29,6 +29,7 @@ import java.util.HashSet;
 import java.util.Set;
 import java.util.UUID;
 
+@SuppressWarnings({"this-escape"})
 public class SupplyCapsuleEntity extends FallingCapsuleEntity {
     private static final DustParticleOptions MARKER_DUST =
             new DustParticleOptions(new Vector3f(1.0F, 0.02F, 0.02F), 1.2F);

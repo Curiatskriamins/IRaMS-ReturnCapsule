@@ -27,6 +27,7 @@ import java.util.Set;
 import java.util.UUID;
 
 @Mod.EventBusSubscriber(modid = ReturnCapsuleMod.MODID, bus = Mod.EventBusSubscriber.Bus.FORGE)
+@SuppressWarnings({"removal"})
 public final class BeaconRecords extends SavedData {
     private static final String DATA_NAME = "returncapsule_beacons";
     private static final String OWNER = "Owner";

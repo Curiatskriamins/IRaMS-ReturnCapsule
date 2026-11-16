@@ -23,6 +23,7 @@ import net.minecraft.world.phys.Vec3;
 import javax.annotation.Nullable;
 import java.util.UUID;
 
+@SuppressWarnings({"this-escape"})
 public class BoomEntity extends Entity {
     private static final String TAG_OWNER = "Owner";
     private static final String TAG_LOCKED_ENTITY = "LockedEntity";

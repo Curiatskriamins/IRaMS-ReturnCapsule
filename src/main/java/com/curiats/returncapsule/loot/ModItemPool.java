@@ -4,7 +4,6 @@ import com.curiats.returncapsule.Config;
 import com.curiats.returncapsule.ReturnCapsuleMod;
 import com.curiats.returncapsule.progress.SummonTier;
 import com.curiats.returncapsule.util.ItemInserter;
-import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.Container;
@@ -21,6 +20,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import net.minecraftforge.registries.ForgeRegistries;
 
 public final class ModItemPool {
     private static final Set<String> INTERNAL_NAMESPACES =
@@ -110,9 +110,9 @@ public final class ModItemPool {
 
     private static List<Entry> build(SummonTier tier) {
         List<Entry> result = new ArrayList<>();
-        for (Item item : BuiltInRegistries.ITEM) {
+        for (Item item : ForgeRegistries.ITEMS) {
             try {
-                ResourceLocation id = BuiltInRegistries.ITEM.getKey(item);
+                ResourceLocation id = ForgeRegistries.ITEMS.getKey(item);
                 if (id == null || !isSafeModItem(id, item)) {
                     continue;
                 }

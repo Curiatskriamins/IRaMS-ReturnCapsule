@@ -14,6 +14,7 @@ import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.ItemStack;
 
+@SuppressWarnings({"this-escape"})
 public class CapsuleMenu extends AbstractContainerMenu {
     public static final int PAGE_SLOTS = 54;
     public static final int COLUMNS = 9;

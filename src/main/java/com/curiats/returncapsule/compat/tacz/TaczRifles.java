@@ -1,7 +1,6 @@
 package com.curiats.returncapsule.compat.tacz;
 
 import com.curiats.returncapsule.ReturnCapsuleMod;
-import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.item.ItemStack;
@@ -14,7 +13,9 @@ import java.util.LinkedHashSet;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import net.minecraftforge.registries.ForgeRegistries;
 
+@SuppressWarnings({"removal"})
 public final class TaczRifles {
     private static final String TAG_GUN_ID = "GunId";
     private static final String IGUN_CLASS = "com.tacz.guns.api.item.IGun";
@@ -47,7 +48,7 @@ public final class TaczRifles {
 
             }
         }
-        return TaczItems.GUN_ITEM.equals(BuiltInRegistries.ITEM.getKey(stack.getItem()));
+        return TaczItems.GUN_ITEM.equals(ForgeRegistries.ITEMS.getKey(stack.getItem()));
     }
 
     public static ResourceLocation gunId(ItemStack stack) {

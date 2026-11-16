@@ -1,11 +1,11 @@
 package com.curiats.returncapsule.util;
 
-import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.Container;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.RecordItem;
+import net.minecraftforge.registries.ForgeRegistries;
 
 public final class LootLimits {
     public static boolean isMusicDisc(ItemStack stack) {
@@ -20,7 +20,7 @@ public final class LootLimits {
         if (name.contains("RecordItem") || name.contains("MusicDisc")) {
             return true;
         }
-        ResourceLocation id = BuiltInRegistries.ITEM.getKey(item);
+        ResourceLocation id = ForgeRegistries.ITEMS.getKey(item);
         return id != null && (id.getPath().contains("music_disc") || id.getPath().contains("record"));
     }
 

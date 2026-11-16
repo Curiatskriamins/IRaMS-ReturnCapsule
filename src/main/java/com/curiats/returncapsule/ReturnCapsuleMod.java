@@ -21,6 +21,7 @@ import net.minecraftforge.fml.javafmlmod.FMLJavaModLoadingContext;
 import org.slf4j.Logger;
 
 @Mod(ReturnCapsuleMod.MODID)
+@SuppressWarnings({"removal"})
 public final class ReturnCapsuleMod {
     public static final String MODID = "returncapsule";
     public static final Logger LOGGER = LogUtils.getLogger();
@@ -44,6 +45,6 @@ public final class ReturnCapsuleMod {
     }
 
     public static ResourceLocation id(String path) {
-        return new ResourceLocation(MODID, path);
+        return ResourceLocation.tryBuild(MODID, path);
     }
 }
