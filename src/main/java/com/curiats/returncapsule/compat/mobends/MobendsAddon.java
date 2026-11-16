@@ -45,6 +45,7 @@ public final class MobendsAddon {
     private static final String MUTATED_RENDERER = "goblinbob.mobends.core.client.MutatedRenderer";
     private static final String I_PREVIEWER = "goblinbob.mobends.core.bender.IPreviewer";
     private static final String HUMANOID_DATA = "goblinbob.mobends.standard.data.HumanoidMobData";
+    /** Our own mutator: the stock humanoid one mis-binds the wear sleeves of a {@code PlayerModel}. */
     private static final String HUMANOID_MUTATOR = "goblinbob.mobends.standard.mutators.HumanoidMobMutator";
     private static final String BIPED_RENDERER = "goblinbob.mobends.standard.client.renderer.entity.mutated.BipedRenderer";
     private static final String BIPED_PREVIEWER = "goblinbob.mobends.standard.previewer.BipedPreviewer";
@@ -70,11 +71,54 @@ public final class MobendsAddon {
     private static volatile Method onAttack;
     private static volatile Method isAnimated;
     private static volatile Object registryInstance;
+    /** Key returned by MoBends for our bender, used to toggle its animation at runtime. */
+    private static volatile String registeredKey;
 
     /**
      * Whether MoBends is currently driving this entity's model, i.e. it has a registered bender and the bender's
      * animation switch is on. Used to arbitrate against other animation systems that write the same model.
      */
+    /**
+     * Turns MoBends animation for our humanoids on or off at runtime.
+     * <p>
+     * This exists so the two hypotheses can be separated in game: with MoBends switched off the entity uses the plain
+     * vanilla player model. If the mirrored hands and the missing attack swing disappear, the fault is in MoBends'
+     * mutation of our model; if they stay, it is in how the entity is registered or rendered.
+     */
+    public static void setAnimationEnabled(boolean enabled) {
+        if (!ModList.get().isLoaded(MOD_ID) || registeredKey == null) {
+            return;
+        }
+        try {
+            ClassLoader loader = MobendsAddon.class.getClassLoader();
+            Class<?> registryClass = Class.forName(BENDER_REGISTRY, false, loader);
+            Object registry = registryClass.getField("instance").get(null);
+            registryClass.getMethod("setAnimateForKey", String.class, boolean.class)
+                    .invoke(registry, registeredKey, enabled);
+            registryClass.getMethod("clearCache").invoke(registry);
+            ReturnCapsuleMod.LOGGER.info("[humanoid] MoBends animation for {} set to {}", registeredKey, enabled);
+        } catch (ReflectiveOperationException | RuntimeException exception) {
+            ReturnCapsuleMod.LOGGER.warn("Could not toggle MoBends animation", exception);
+        }
+    }
+
+    /**
+     * True when this entity has started a new swing since the last call.
+     * <p>
+     * Edge detection on the {@code swinging} flag: it is true for the whole swing (about six ticks), and the client tick
+     * runs twenty times a second, so a swing cannot be missed. Comparing {@code swingTime} values instead relied on the
+     * exact numbers observed at whatever moment the caller happened to run, which is why most swings went unnoticed.
+     */
+    public static boolean isNewSwing(LivingEntity entity) {
+        if (!entity.swinging) {
+            swingingEntities.remove(entity.getId());
+            return false;
+        }
+        return swingingEntities.add(entity.getId());
+    }
+
+    private static final java.util.Set<Integer> swingingEntities = java.util.concurrent.ConcurrentHashMap.newKeySet();
+
     public static boolean isAnimating(@Nullable LivingEntity entity) {
         if (entity == null || !ModList.get().isLoaded(MOD_ID)) {
             return false;
@@ -129,16 +173,20 @@ public final class MobendsAddon {
                         Class.forName("net.minecraft.client.renderer.entity.LivingEntityRenderer"));
                 Class<?> mutatorClass = Class.forName(MUTATOR, false, loader);
                 getOrMakeData = mutatorClass.getMethod("getOrMakeData", LivingEntity.class);
-                onAttack = Class.forName(LIVING_ENTITY_DATA, false, loader).getMethod("onAttack");
+                // Hand-aware entry point: it flags the attack as externally driven and routes to the main hand, which is
+                // what the biped controller reads. The no-argument onAttack() left the swing on the wrong arm.
+                onAttack = Class.forName(LIVING_ENTITY_DATA, false, loader)
+                        .getMethod("onExternalAttack", net.minecraft.world.InteractionHand.class);
             }
             Object mutator = getMutator.invoke(bender, renderer);
             if (mutator == null) {
                 return;
             }
             Object data = getOrMakeData.invoke(mutator, entity);
-            if (data != null) {
-                onAttack.invoke(data);
+            if (data == null) {
+                return;
             }
+            onAttack.invoke(data, net.minecraft.world.InteractionHand.MAIN_HAND);
         } catch (ReflectiveOperationException | RuntimeException exception) {
             ReturnCapsuleMod.LOGGER.debug("Could not drive the MoBends attack animation: {}", exception.toString());
         }
@@ -155,6 +203,12 @@ public final class MobendsAddon {
         }
         try {
             register();
+            // The gun mods ship MoBends animation packs, and a pack drives the arm bones itself — anything written after
+            // it still loses, which is why writing the pose in three different places changed nothing on screen. This is
+            // exactly what the standalone gun-fix mod does: drop those packs so the pose written by this mod is the last
+            // word. Unregistering a name that was never registered is harmless.
+            goblinbob.mobends.api.animation.MoBendsAnimationControl.unregister("tacz");
+            goblinbob.mobends.api.animation.MoBendsAnimationControl.unregister("superbwarfare");
         } catch (ReflectiveOperationException | RuntimeException | LinkageError exception) {
             ReturnCapsuleMod.LOGGER.warn(
                     "MoBends is installed but its addon API could not be used; humanoids keep vanilla animation",
@@ -246,6 +300,7 @@ public final class MobendsAddon {
         // throws when the registry path does not happen to match.
         Object key = register.invoke(registry, ADDON_ID, "entity.returncapsule.base_humanoid", BaseHumanoid.class,
                 dataFactory, mutatorFactory, renderer, previewer, animations, parts);
+        registeredKey = key instanceof String name ? name : null;
         ReturnCapsuleMod.LOGGER.info("[humanoid] MoBends bender registered as {} (animations={}, parts={})",
                 key, animations.length, parts.length);
         enableAnimation(key, loader);

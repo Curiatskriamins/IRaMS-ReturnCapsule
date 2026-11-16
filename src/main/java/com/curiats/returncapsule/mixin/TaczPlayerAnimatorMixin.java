@@ -68,7 +68,13 @@ public class TaczPlayerAnimatorMixin {
                 return false;
             }
             Object type = getStateType.invoke(state);
-            return type instanceof Enum<?> value && !RELOADING.equals(value.name());
+            // Only an actively running reload owns the model. END and INTERRUPTED are leftovers of a finished reload and
+            // used to keep the gate open forever, which is why the gun stopped being raised.
+            if (!(type instanceof Enum<?> value)) {
+                return false;
+            }
+            String stateName = value.name();
+            return "START".equals(stateName) || "LOOP".equals(stateName);
         } catch (ReflectiveOperationException | RuntimeException exception) {
             return false;
         }

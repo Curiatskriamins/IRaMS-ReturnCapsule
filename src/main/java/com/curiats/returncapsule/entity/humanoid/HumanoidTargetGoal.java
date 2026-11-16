@@ -78,7 +78,9 @@ public class HumanoidTargetGoal extends Goal {
     public void start() {
         if (this.chosen != null) {
             this.mob.setTarget(this.chosen);
-            HumanoidSquad.report(this.mob.level(), this.chosen);
+            // No squad broadcast when a target is picked. Sharing made the whole group converge on one enemy, so a pack
+            // of parasites was fought one at a time while the rest attacked freely; each humanoid now picks its own.
+            // Alerts are still shared when someone is actually hurt, which is when help matters.
         }
         this.chosen = null;
     }
@@ -99,7 +101,7 @@ public class HumanoidTargetGoal extends Goal {
             if (!this.worthEngaging(candidate)) {
                 continue;
             }
-            double priority = HumanoidCombatRules.priority(candidate);
+            double priority = HumanoidCombatRules.priority(this.mob, candidate);
             if (priority > bestPriority) {
                 bestPriority = priority;
                 best = candidate;
@@ -116,7 +118,7 @@ public class HumanoidTargetGoal extends Goal {
                 if (!this.worthEngaging(candidate)) {
                     continue;
                 }
-                double priority = HumanoidCombatRules.priority(candidate);
+                double priority = HumanoidCombatRules.priority(this.mob, candidate);
                 if (priority > bestPriority) {
                     bestPriority = priority;
                     best = candidate;

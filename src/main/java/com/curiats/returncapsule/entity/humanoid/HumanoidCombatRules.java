@@ -48,6 +48,8 @@ public final class HumanoidCombatRules {
      * squad does not cross the map over one stray hit.
      */
     public static final double ALLY_RESCUE_RADIUS = 48.0D;
+    /** How far a humanoid will travel to stay with its player when it has nothing to fight. */
+    public static final double FOLLOW_RADIUS = 32.0D;
     /** Once engaged, a target may drift this much past its engagement range before being dropped. */
     public static final double LENIENCE = 1.5D;
     /** A shield is raised when the threat is inside this range. */
@@ -58,6 +60,11 @@ public final class HumanoidCombatRules {
      * never connected.
      */
     public static final double MELEE_REACH = 3.0D;
+    /**
+     * Distance at which a humanoid decides to close in and use its blade instead of a gun. This is not the swing reach:
+     * the blade still connects at {@link #MELEE_REACH}, this is how far away it is willing to start running in.
+     */
+    public static final double MELEE_SWITCH_DISTANCE = 8.0D;
 
     private static final double RADIUS_PER_SCORE = 0.362D;
     private static final double RADIUS_BASE = 10.5D;
@@ -100,8 +107,45 @@ public final class HumanoidCombatRules {
      * before clearing a Warden that is merely standing around.
      */
     public static double priority(LivingEntity target) {
-        return threatensAllies(target) ? score(target) + HOSTILITY_BONUS : score(target);
+        return priority(null, target);
     }
+
+    /** Ranked with the humanoid's own position, so the nearest threat wins among equally urgent ones. */
+    public static double priority(LivingEntity user, LivingEntity target) {
+        double value = score(target);
+        if (threatensAllies(target)) {
+            value += HOSTILITY_BONUS;
+        }
+        // Next, what is standing on the player's toes. An enemy a few blocks from a player is an immediate problem even
+        // if it has not attacked yet, and one that is locked onto a player has already been counted above.
+        double value2 = value + playerProximityBonus(target);
+        // Finally, distance from the humanoid itself: among equally urgent targets, the nearest is the one to shoot. Without
+        // this it could pick something far away and let a closer enemy walk into it untouched.
+        if (user == null) {
+            return value2;
+        }
+        double distanceSqr = user.distanceToSqr(target);
+        return value2 + NEAREST_BONUS * Math.max(0.0D, 1.0D - distanceSqr / (NEAREST_RADIUS * NEAREST_RADIUS));
+    }
+
+    /** Higher the closer the target is to a player, zero beyond {@link #GUARD_RADIUS}. */
+    private static double playerProximityBonus(LivingEntity target) {
+        Player nearest = target.level().getNearestPlayer(target, GUARD_RADIUS);
+        if (nearest == null) {
+            return 0.0D;
+        }
+        double distance = Math.sqrt(target.distanceToSqr(nearest));
+        return PROXIMITY_BONUS * Math.max(0.0D, 1.0D - distance / GUARD_RADIUS);
+    }
+
+    /** Radius around a player inside which enemies are considered urgent. */
+    private static final double GUARD_RADIUS = 24.0D;
+    /** Weight of that urgency, chosen to outweigh raw target value but not a call for help. */
+    private static final double PROXIMITY_BONUS = 600.0D;
+    /** Weight of being close to the humanoid itself. */
+    private static final double NEAREST_BONUS = 400.0D;
+    /** Distance over which that weight falls to zero. */
+    private static final double NEAREST_RADIUS = 32.0D;
 
     /** True when the mob is currently going after a player, or after one of the humanoids. */
     public static boolean threatensAllies(LivingEntity target) {

@@ -3,6 +3,7 @@ package com.curiats.returncapsule.entity.humanoid;
 import com.curiats.returncapsule.ReturnCapsuleMod;
 import com.curiats.returncapsule.compat.tacz.TaczRifles;
 import com.curiats.returncapsule.compat.tacz.TaczShooter;
+import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.sounds.SoundEvent;
@@ -56,12 +57,51 @@ public class NeutralHumanoid extends PathfinderMob implements RangedAttackMob {
 
     /** Ticks between regeneration ticks; one second, so the profile value reads as "health per second". */
     private static final int REGEN_INTERVAL = 20;
+    /** Largest share of max health one hit may remove; see hurt. */
+    private static final float MAX_HIT_FRACTION = 0.35F;
+    /** Hits below this are ignored outright, so swarms of tiny hits cannot grind the entity down. */
+    private static final float MIN_MEANINGFUL_HIT = 6.0F;
+    /** Ticks between accepted hits: the invulnerability window borrowed from the old Wulfrum Wither. */
+    private static final int HIT_GATE_TICKS = 4;
+    /** Ticks of grace after a last stand saves the entity. */
+    private static final int LAST_STAND_GRACE = 60;
+    /** Ticks before last stand can save it again. */
+    private static final int LAST_STAND_COOLDOWN = 1800;
+    /** Tick until which damage is ignored after a last stand. */
+    private int lastStandUntil = -1;
+    /** Tick from which last stand is available again. */
+    private int lastStandReadyAt;
+    /** Tick of the last hit that landed. */
+    private int lastAcceptedHit = -100;
+    /** Set while a creative player's hit is applied; see bypassesProtections. */
+    private boolean bypassProtections;
+    /** True while this entity's own hurt is being applied, so a real hit may still kill it. */
+    private boolean applyingHit;
+    /** True while a converted direct health write is being applied; such a drain is real even when tiny. */
+    private boolean convertedHit;
+    /** Distance the target must close before switching back to the rifle, so the choice does not oscillate. */
+    private static final double LONG_RANGE_HYSTERESIS = 8.0D;
+    /** A single incoming hit at least this large breaks the shield. */
+    private static final float SHIELD_BREAK_DAMAGE = 100.0F;
+    /** Ticks between slash arts: ten seconds, long enough that it reads as a special move. */
+    private static final int BLADE_SKILL_INTERVAL = 200;
+    /**
+     * Monotonic counter bumped on every melee swing. It is synched data, so the client sees the action even when the
+     * vanilla swing flags do not behave the way an animation mod expects.
+     */
+    private static final net.minecraft.network.syncher.EntityDataAccessor<Integer> DATA_ATTACK_SEQ =
+            net.minecraft.network.syncher.SynchedEntityData.defineId(NeutralHumanoid.class,
+                    net.minecraft.network.syncher.EntityDataSerializers.INT);
+
+    /** Extra distance past melee reach before the gun comes back out; see shouldHoldGun for why it is this wide. */
+    private static final double GUN_DRAW_DISTANCE = 3.0D;
     private static final float EYE_HEIGHT = 1.62F;
     /** Beyond this distance the humanoid sprints instead of walking, the way a player closes a gap. */
     private static final double SPRINT_DISTANCE = 20.0D;
     /** Vanilla caps target search at the follow range, so it has to clear the widest engagement radius. */
     private static final double FOLLOW_RANGE = 512.0D;
 
+    private static final String TAG_LONG_RANGED = "LongRangedWeapon";
     private static final String TAG_RANGED = "RangedWeapon";
     private static final String TAG_MELEE = "MeleeWeapon";
     private static final String TAG_STANCE = "Stance";
@@ -71,12 +111,39 @@ public class NeutralHumanoid extends PathfinderMob implements RangedAttackMob {
     private boolean loadoutLogged;
 
     private ItemStack rangedWeapon = ItemStack.EMPTY;
+    /**
+     * Second gun, meant for long range. A rifle reaches about sixty blocks; past that the falloff makes it useless, so a
+     * humanoid that owns both switches to this one when the target is far away.
+     */
+    private ItemStack longRangedWeapon = ItemStack.EMPTY;
     private ItemStack meleeWeapon = ItemStack.EMPTY;
     /** The off-hand shield, kept here while the gun is out so it can be put back. */
     private ItemStack shield = ItemStack.EMPTY;
+    /** Last observed off-hand contents, so {@code auditOffhand} only logs changes. */
+    private String lastOffhand = "";
     private Stance stance = Stance.MELEE;
+    /** Where it should walk to when idle; cleared on arrival. */
+    @Nullable
+    private BlockPos destination;
+    /** Where it idles around when it has neither a destination nor a player to follow. */
+    @Nullable
+    private BlockPos home;
+    /** Whether it trails the nearest player when idle. */
+    private boolean followEnabled = true;
+    /** Ticks the shield stays broken after an axe or mace hit. */
+    private int shieldBreakTicks;
+    /** How many times the shield has been broken; the third one destroys it. */
+    private int shieldBreaks;
 
     private int regenCooldown = REGEN_INTERVAL;
+    /** Ticks until the next slash art; blades are meant to feel like a power move, not a basic attack. */
+    private int bladeSkillCooldown;
+    /** How many arts have been performed, used to alternate between the common and the high-end one. */
+    private int bladeSkillUses;
+    /** Guns are issued once per life; see refreshLoadout. */
+    private boolean gunsIssued;
+    /** Which of the two guns is in hand; a flag, so hysteresis survives the stack being copied into the slot. */
+    private boolean usingLongGun;
     /** TaCZ needs one {@code draw} before the first shot; reset whenever the main hand changes. */
     private boolean gunDrawn;
     /** Cached classification of the main hand, so the per-tick goal/aim checks never re-run reflection. */
@@ -92,8 +159,28 @@ public class NeutralHumanoid extends PathfinderMob implements RangedAttackMob {
         this.setDropChance(EquipmentSlot.OFFHAND, 1.0F);
         if (!level.isClientSide) {
             this.makeConversionImmune();
-            this.refreshLoadout();
+            // Deliberately no refreshLoadout here: a new entity instance is created for every chunk load and dimension
+            // change, so issuing weapons in the constructor handed out a fresh random pair before the saved one was
+            // restored. It is issued in finalizeSpawn instead, which only runs for a genuinely new spawn.
         }
+    }
+
+    /**
+     * Issues the starting kit, once, when the entity is actually spawned into the world.
+     * <p>
+     * A constructor runs for every instance the game creates, including ones rebuilt from a save, so rolling weapons
+     * there re-randomised a humanoid's guns whenever it was reloaded.
+     */
+    @Override
+    public net.minecraft.world.entity.SpawnGroupData finalizeSpawn(net.minecraft.world.level.ServerLevelAccessor level,
+                                                                  net.minecraft.world.DifficultyInstance difficulty,
+                                                                  net.minecraft.world.entity.MobSpawnType spawnType,
+                                                                  @Nullable net.minecraft.world.entity.SpawnGroupData spawnGroupData,
+                                                                  @Nullable CompoundTag tag) {
+        net.minecraft.world.entity.SpawnGroupData data =
+                super.finalizeSpawn(level, difficulty, spawnType, spawnGroupData, tag);
+        this.refreshLoadout();
+        return data;
     }
 
     /**
@@ -109,15 +196,29 @@ public class NeutralHumanoid extends PathfinderMob implements RangedAttackMob {
         boolean blades = HumanoidToggles.isEnabled(HumanoidToggles.Slot.MELEE);
         if (!guns) {
             this.rangedWeapon = ItemStack.EMPTY;
-        } else if (this.rangedWeapon.isEmpty()) {
+            this.longRangedWeapon = ItemStack.EMPTY;
+        } else if (this.rangedWeapon.isEmpty() && !this.gunsIssued) {
             this.rangedWeapon = HumanoidWeapons.startingGun(this.random);
+            this.longRangedWeapon = HumanoidWeapons.startingLongGun(this.random);
+            // Issued once per life. Without this guard any path that emptied the slot — a reload from an old save, a
+            // toggle flip, a player swap that dropped the old gun — would hand out a brand new random weapon, which
+            // reads in game as the humanoid cycling through unrelated guns.
+            this.gunsIssued = true;
+            // The fire mode is part of the line: it is the difference between a rifle that feels automatic and one that
+            // fires a single round per trigger pull, and there is no other way to see what was actually written.
+            ReturnCapsuleMod.LOGGER.info("[humanoid] issued guns: rifle={} ({}) long={} ({})",
+                    com.curiats.returncapsule.compat.tacz.TaczRifles.gunId(this.rangedWeapon),
+                    fireModeOf(this.rangedWeapon),
+                    com.curiats.returncapsule.compat.tacz.TaczRifles.gunId(this.longRangedWeapon),
+                    fireModeOf(this.longRangedWeapon));
         }
         if (!blades) {
             this.meleeWeapon = ItemStack.EMPTY;
         } else if (this.meleeWeapon.isEmpty()) {
             this.meleeWeapon = HumanoidWeapons.startingMelee(this.profile, this.level(), this.random);
         }
-        if (!HumanoidToggles.isEnabled(HumanoidToggles.Slot.SHIELD)) {
+        if (!HumanoidToggles.isEnabled(HumanoidToggles.Slot.ITEM)
+                || !HumanoidToggles.isEnabled(HumanoidToggles.Slot.SHIELD)) {
             this.shield = ItemStack.EMPTY;
             this.setItemSlot(EquipmentSlot.OFFHAND, ItemStack.EMPTY);
         } else if (this.shield.isEmpty()) {
@@ -127,15 +228,35 @@ public class NeutralHumanoid extends PathfinderMob implements RangedAttackMob {
         this.logLoadout();
     }
 
+    /**
+     * Logs every change of the off-hand contents, with the stance at that moment.
+     * <p>
+     * Something has been putting a sword into the off hand and then leaving it there. Only two places in this class
+     * write that slot, and both are supposed to write a shield, so either a non-shield is being classified as one or
+     * a third writer exists. This turns that into a log line with the exact item, instead of guesswork.
+     */
+    private void auditOffhand() {
+        String now = describe(this.getOffhandItem());
+        if (now.equals(this.lastOffhand)) {
+            return;
+        }
+        this.lastOffhand = now;
+        ReturnCapsuleMod.LOGGER.info("[humanoid] offhand -> {} (stance={}, shieldSlot={})",
+                now, this.stance, describe(this.shield));
+    }
+
     /** One line per humanoid at spawn, so a missing gun is obvious from the log instead of guesswork. */
     private void logLoadout() {
         if (this.loadoutLogged) {
             return;
         }
         this.loadoutLogged = true;
-        ReturnCapsuleMod.LOGGER.info("[humanoid] spawned {}: ranged={} melee={} shield={}",
+        ReturnCapsuleMod.LOGGER.info("[humanoid] spawned {}: ranged={} gun={} long={} melee={} shield={}",
                 this.profile.id(),
-                describe(this.rangedWeapon), describe(this.meleeWeapon), describe(this.getOffhandItem()));
+                describe(this.rangedWeapon),
+                com.curiats.returncapsule.compat.tacz.TaczRifles.gunId(this.rangedWeapon),
+                describe(this.longRangedWeapon),
+                describe(this.meleeWeapon), describe(this.getOffhandItem()));
         if (this.rangedWeapon.isEmpty() && this.profile.weapons().allowsGun()) {
             ReturnCapsuleMod.LOGGER.warn("[humanoid] no usable TaCZ gun was available for {}; it will fight in melee",
                     this.profile.id());
@@ -184,6 +305,7 @@ public class NeutralHumanoid extends PathfinderMob implements RangedAttackMob {
         this.goalSelector.addGoal(8, new LookAtPlayerGoal(this, Player.class, 8.0F));
         this.goalSelector.addGoal(9, new RandomLookAroundGoal(this));
         // Retaliation first, then the squad's own target picking.
+        this.goalSelector.addGoal(6, new HumanoidIdleGoal(this));
         this.targetSelector.addGoal(0, new HurtByTargetGoal(this));
         this.targetSelector.addGoal(1, new HumanoidTargetGoal(this));
     }
@@ -218,8 +340,24 @@ public class NeutralHumanoid extends PathfinderMob implements RangedAttackMob {
         return this.stance == Stance.MELEE;
     }
 
+    /** Fire mode written into a gun's tag, for diagnostics. */
+    private static String fireModeOf(ItemStack stack) {
+        return stack.isEmpty() ? "none" : stack.getOrCreateTag().getString("GunFireMode");
+    }
+
+    /** Drop a fight and regroup once this far from the player. */
+    private static final double GROUP_REGROUP_DISTANCE = 24.0D;
+
+    /** Squared distance to the nearest player, or a very large value when there is none. */
+    private double distanceToNearestPlayerSqr() {
+        Player player = this.level().getNearestPlayer(this, 256.0D);
+        return player == null ? Double.MAX_VALUE : this.distanceToSqr(player);
+    }
+
     public boolean hasShield() {
-        return HumanoidToggles.isEnabled(HumanoidToggles.Slot.SHIELD)
+        // The item switch is the master switch for everything carried, shield included.
+        return HumanoidToggles.isEnabled(HumanoidToggles.Slot.ITEM)
+                && HumanoidToggles.isEnabled(HumanoidToggles.Slot.SHIELD)
                 && !this.shield.isEmpty();
     }
 
@@ -259,8 +397,11 @@ public class NeutralHumanoid extends PathfinderMob implements RangedAttackMob {
         if (!HumanoidToggles.isEnabled(HumanoidToggles.Slot.MELEE)) {
             return true;
         }
-        double keepGun = HumanoidCombatRules.MELEE_REACH;
-        double drawGun = HumanoidCombatRules.MELEE_REACH + hysteresis;
+        // Wide hysteresis on purpose. Switching weapons changes the held item, which changes the attack action type,
+        // which makes MoBends rebuild its action layer — so a stance that flips every few seconds also kills the attack
+        // animation. Putting three blocks between the two thresholds stops that churn.
+        double keepGun = HumanoidCombatRules.MELEE_SWITCH_DISTANCE;
+        double drawGun = HumanoidCombatRules.MELEE_SWITCH_DISTANCE + GUN_DRAW_DISTANCE;
         return distance > (this.stance == Stance.RANGED ? keepGun : drawGun);
     }
 
@@ -327,6 +468,11 @@ public class NeutralHumanoid extends PathfinderMob implements RangedAttackMob {
         if (desired.isEmpty()) {
             desired = this.meleeWeapon;
         }
+        if (this.stance == Stance.RANGED) {
+            // A stance change equips the rifle, so the long-gun flag has to be cleared with it. Leaving it set made the
+            // flag say sniper while the hand held the rifle, and every later switch was a pointless rifle-to-rifle swap.
+            this.usingLongGun = false;
+        }
         ItemStack current = this.getMainHandItem();
         if (!current.isEmpty() && !desired.isEmpty() && current.getItem() == desired.getItem()) {
             this.applyShieldSlot();
@@ -392,7 +538,24 @@ public class NeutralHumanoid extends PathfinderMob implements RangedAttackMob {
         if (currentTarget != null && !currentTarget.isAlive()) {
             this.setTarget(null);
         }
+        // Disengage when left behind. Holding a fight a long way from its player is how a humanoid gets picked off alone:
+        // it keeps trading with whatever it is hitting instead of falling back to the group.
+        LivingEntity held = this.getTarget();
+        if (held != null && this.distanceToNearestPlayerSqr() > GROUP_REGROUP_DISTANCE * GROUP_REGROUP_DISTANCE) {
+            this.setTarget(null);
+        }
         this.updateSprint();
+        if (this.bladeSkillCooldown > 0) {
+            this.bladeSkillCooldown--;
+        }
+        if (this.shieldBreakTicks > 0) {
+            // Without this the shield stayed broken forever after the first break, which is exactly what was reported.
+            this.shieldBreakTicks--;
+            if (this.shieldBreakTicks == 0) {
+                ReturnCapsuleMod.LOGGER.info("[humanoid] shield is back up");
+            }
+        }
+        this.auditOffhand();
         TaczShooter.tick(this);
         if (--this.regenCooldown > 0) {
             return;
@@ -415,12 +578,23 @@ public class NeutralHumanoid extends PathfinderMob implements RangedAttackMob {
         LivingEntity target = this.getTarget();
         double stopDistance = this.holdsGun() ? Math.max(SPRINT_DISTANCE, this.weaponRange()) : SPRINT_DISTANCE;
         boolean chasing = target != null && this.distanceToSqr(target) > stopDistance * stopDistance;
+        // Idle movement counts as well: a humanoid left behind sprints to catch up instead of strolling after its player.
+        boolean catchingUp = target == null && this.isFollowEnabled() && this.isFarFromPlayer();
         // Only sprint while a path is actually being followed, so a blocked guard does not run on the spot.
-        boolean sprint = chasing && !this.getNavigation().isDone();
+        boolean sprint = (chasing || catchingUp) && !this.getNavigation().isDone();
         if (sprint != this.isSprinting()) {
             this.setSprinting(sprint);
         }
     }
+
+    /** True when the nearest player is further away than a walk can comfortably close. */
+    private boolean isFarFromPlayer() {
+        Player player = this.level().getNearestPlayer(this, CATCH_UP_DISTANCE);
+        return player == null || this.distanceToSqr(player) > CATCH_UP_DISTANCE * CATCH_UP_DISTANCE;
+    }
+
+    /** Distance past which an idle humanoid runs to reach its player. */
+    private static final double CATCH_UP_DISTANCE = 16.0D;
 
     public boolean isGunDrawn() {
         return this.gunDrawn;
@@ -433,6 +607,22 @@ public class NeutralHumanoid extends PathfinderMob implements RangedAttackMob {
     @Override
     public void setItemSlot(EquipmentSlot slot, ItemStack stack) {
         if (slot == EquipmentSlot.MAINHAND) {
+            // Sentinel: any writer that replaces a gun with a different gun is named here, including ones outside this
+            // class. A single humanoid was seen cycling through guns it was never issued, and this is the only place
+            // the main hand is actually written, so one line with the caller settles where it came from.
+            if (this.tickCount > 0 && !this.level().isClientSide) {
+                net.minecraft.resources.ResourceLocation before =
+                        com.curiats.returncapsule.compat.tacz.TaczRifles.gunId(this.getMainHandItem());
+                net.minecraft.resources.ResourceLocation after =
+                        com.curiats.returncapsule.compat.tacz.TaczRifles.gunId(stack);
+                if (before != null && after != null && !before.equals(after)) {
+                    ReturnCapsuleMod.LOGGER.info("[humanoid] main hand gun {} -> {} from {}", before, after,
+                            StackWalker.getInstance().walk(frames -> frames
+                                    .skip(1).limit(1)
+                                    .map(frame -> frame.getClassName() + "." + frame.getMethodName())
+                                    .findFirst().orElse("?")));
+                }
+            }
             WeaponKind kind = HumanoidWeapons.kindOf(stack);
             this.gunDrawn = false;
             this.holdsGun = kind.isGun();
@@ -454,26 +644,338 @@ public class NeutralHumanoid extends PathfinderMob implements RangedAttackMob {
         if (this.level().isClientSide || this.isInvulnerableTo(source)) {
             return false;
         }
+        if (this.tickCount < this.lastStandUntil) {
+            return false;
+        }
+        // Friendly fire is off: another humanoid, or a player in survival, cannot hurt this thing at all. Creative mode
+        // stays lethal so it remains possible to remove one that is misbehaving.
+        if (isFriendlySource(source)) {
+            return false;
+        }
+        // A creative player gets through every guard below: no invulnerability window, no chip floor, no per-hit or
+        // per-second ceiling. That is the deliberate administrative channel.
+        if (isCreativeSource(source)) {
+            this.bypassProtections = true;
+            try {
+                return super.hurt(source, amount);
+            } finally {
+                this.bypassProtections = false;
+            }
+        }
+        // A raised shield stops everything except what no shield can stop: the void, magic, and administrative kills.
+        if (this.blocksWithShield(source)) {
+            // A single hit big enough to overwhelm the shield breaks it. Keying this on damage rather than on the
+            // attacker's weapon avoids handing every axe-carrying mob in the pack a shield-break for free.
+            boolean breaking = amount > SHIELD_BREAK_DAMAGE;
+            if (breaking) {
+                this.breakShield();
+            }
+            this.level().playSound(null, this.getX(), this.getY(), this.getZ(),
+                    breaking ? SoundEvents.SHIELD_BREAK : SoundEvents.SHIELD_BLOCK,
+                    net.minecraft.sounds.SoundSource.HOSTILE, 0.8F, 1.0F);
+            return false;
+        }
+        // Chip damage does nothing at all. Swarms that rely on many tiny hits — one point per tick, splash particles,
+        // burning — would otherwise grind a 200 HP guard down while every defensive layer above stays satisfied.
+        if (amount < MIN_MEANINGFUL_HIT && !this.convertedHit
+                && !source.is(net.minecraft.world.damagesource.DamageTypes.MAGIC)) {
+            return false;
+        }
+        // Invulnerability frames, the trick the old Wulfrum Wither uses: only one hit lands per window, so a stream of
+        // twenty hits a second is throttled to a handful. Only magic ignores the window; the void and administrative
+        // kills are ordinary damage here, which is what keeps them from deleting the entity in one call.
+        if (!source.is(net.minecraft.world.damagesource.DamageTypes.MAGIC)) {
+            int now = this.tickCount;
+            if (now - this.lastAcceptedHit < HIT_GATE_TICKS) {
+                return false;
+            }
+            this.lastAcceptedHit = now;
+        }
         float reduced = amount * (1.0F - (float) this.profile.damageReduction());
+        // The per-hit ceiling applies to everything except magic: an overcharged mod weapon, a scripted out-of-world
+        // damage source and an administrative kill all become ordinary 70-point hits instead of one-shot deletions.
+        if (!source.is(net.minecraft.world.damagesource.DamageTypes.MAGIC)) {
+            reduced = Math.min(reduced, this.getMaxHealth() * MAX_HIT_FRACTION);
+        }
         if (reduced <= 0.0F) {
             return false;
         }
-        boolean hurt = super.hurt(source, reduced);
+        // Last stand: survive one lethal hit per cooldown instead of dying to a burst. This is what keeps a 200 HP unit
+        // from being deleted the moment something lands a big hit; it is not invulnerability, because the shots after
+        // the grace period land normally and the cooldown is long.
+        if (!this.bypassProtections && this.tickCount >= this.lastStandReadyAt
+                && this.getHealth() - reduced <= 0.0F && reduced < this.getMaxHealth()) {
+            this.setHealth(1.0F);
+            this.lastStandUntil = this.tickCount + LAST_STAND_GRACE;
+            this.lastStandReadyAt = this.tickCount + LAST_STAND_COOLDOWN;
+            ReturnCapsuleMod.LOGGER.info("[humanoid] last stand triggered");
+            return true;
+        }
+        this.applyingHit = true;
+        boolean hurt;
+        try {
+            hurt = super.hurt(source, reduced);
+        } finally {
+            this.applyingHit = false;
+        }
         if (hurt && source.getEntity() instanceof LivingEntity attacker) {
             HumanoidSquad.report(this.level(), attacker);
         }
         return hurt;
     }
 
+    /** True while a real hit is being applied; only then may health reach zero. */
+    public void setConvertedHit(boolean converted) {
+        this.convertedHit = converted;
+    }
+
+    public boolean isApplyingHit() {
+        return this.applyingHit;
+    }
+
+    /** True while a hit from a creative player is being applied, so the setHealth budget stands aside. */
+    public boolean bypassesProtections() {
+        return this.bypassProtections;
+    }
+
+    /** True when the hit ultimately comes from a creative-mode player, directly or through a projectile. */
+    private static boolean isCreativeSource(DamageSource source) {
+        return source.getEntity() instanceof Player player && player.isCreative()
+                || source.getDirectEntity() instanceof Player shooter && shooter.isCreative();
+    }
+
+    /**
+     * True when the hit comes from something on the humanoid's own side: another humanoid, or a player who is not in
+     * creative mode.
+     * <p>
+     * Both the direct entity and the owner are checked, because a gun round or an arrow has the shooter as its owner
+     * rather than as the thing that physically touched the target.
+     */
+    private static boolean isFriendlySource(DamageSource source) {
+        // SlashBlade's attacks carry no proper attacker for parts of their damage, so the ownership check below misses
+        // them and a player holding a blade could cut a humanoid down. The source id is the reliable marker there.
+        String id = source.getMsgId();
+        if (id != null && (id.contains("slashblade") || id.contains("slash_blade"))) {
+            return true;
+        }
+        Entity attacker = source.getEntity();
+        Entity direct = source.getDirectEntity();
+        if (attacker instanceof NeutralHumanoid || direct instanceof NeutralHumanoid) {
+            return true;
+        }
+        if (attacker instanceof Player player) {
+            return !player.isCreative();
+        }
+        return direct instanceof Player player && !player.isCreative();
+    }
+
+    /**
+     * Whether the shield stops this hit.
+     * <p>
+     * The shield blocks every hit outright while it is up — that is the point of it — but the void, magic and an
+     * administrative kill go through, and so does anything for the five seconds after the shield was broken.
+     */
+    private boolean blocksWithShield(DamageSource source) {
+        if (!this.hasShield() || this.shieldBreakTicks > 0) {
+            return false;
+        }
+        // The shield has to actually be in the off hand. `hasShield` only says the humanoid owns one — while a gun is
+        // out the off hand is empty, and a two handed weapon cannot block in any case.
+        if (!HumanoidWeapons.isShield(this.getOffhandItem())) {
+            return false;
+        }
+        return !source.is(net.minecraft.world.damagesource.DamageTypes.FELL_OUT_OF_WORLD)
+                && !source.is(net.minecraft.world.damagesource.DamageTypes.MAGIC)
+                && !source.is(net.minecraft.world.damagesource.DamageTypes.GENERIC_KILL);
+    }
+
+    /**
+     * Breaks the shield for five seconds, and permanently destroys it on the third break.
+     * <p>
+     * A destroyed shield is not just hidden: the off-hand slot is emptied and the stack is gone, so nothing can bring
+     * it back short of a new one from a player.
+     */
+    private void breakShield() {
+        this.shieldBreakTicks = SHIELD_BREAK_TICKS;
+        this.shieldBreaks++;
+        if (this.shieldBreaks < SHIELD_BREAK_LIMIT) {
+            ReturnCapsuleMod.LOGGER.info("[humanoid] shield broken ({}/{}), down for {} ticks",
+                    this.shieldBreaks, SHIELD_BREAK_LIMIT, SHIELD_BREAK_TICKS);
+            return;
+        }
+        this.shield = ItemStack.EMPTY;
+        this.shieldBreaks = 0;
+        this.setItemSlot(EquipmentSlot.OFFHAND, ItemStack.EMPTY);
+        ReturnCapsuleMod.LOGGER.info("[humanoid] shield destroyed permanently");
+    }
+
+    /** Ticks the shield stays broken after a shield-breaking hit. */
+    private static final int SHIELD_BREAK_TICKS = 100;
+    /** Breaks needed to destroy the shield for good. */
+    private static final int SHIELD_BREAK_LIMIT = 3;
+
     /**
      * Mobs do not inherit weapon attribute modifiers the way players do, so the held weapon's attack damage is
      * added explicitly. Without this, a slashblade would hit for bare-hand damage.
      */
+    /** True when a slash art may be used right now. */
+    public boolean bladeSkillReady() {
+        return this.bladeSkillCooldown <= 0;
+    }
+
+    /** Starts the cooldown after an art was performed. */
+    public void onBladeSkillUsed() {
+        this.bladeSkillCooldown = BLADE_SKILL_INTERVAL;
+        this.bladeSkillUses++;
+    }
+
+    /** True when the next art should be the high-end one, so the expensive move shows up occasionally. */
+    public boolean wantsSuperArt() {
+        return this.bladeSkillUses % 3 == 2;
+    }
+
+    /**
+     * Puts the gun matching the distance into the main hand while keeping the ranged stance.
+     * <p>
+     * Called every tick from the combat loop, so it must be cheap: only the item types are compared, and the hand is
+     * touched only when the choice actually changes.
+     */
+    public void chooseGunFor(double distance) {
+        if (this.stance != Stance.RANGED) {
+            return;
+        }
+        // Hysteresis on the gun choice, for the same reason the stance has it: a target hovering at the threshold made
+        // the humanoid swap weapons every tick, and every swap forces a fresh draw, so it never got to fire.
+        double threshold = this.usingLongGun ? LONG_RANGE_SWITCH - LONG_RANGE_HYSTERESIS : LONG_RANGE_SWITCH;
+        boolean wantLong = distance > threshold && !this.longRangedWeapon.isEmpty();
+        ItemStack wanted = wantLong ? this.longRangedWeapon : this.rangedWeapon;
+        if (wanted.isEmpty()) {
+            return;
+        }
+        // An explicit flag, not an identity comparison against the field: the hand holds a copy, so the comparison was
+        // always false and the hysteresis never applied on the way back.
+        if (wantLong == this.usingLongGun) {
+            return;
+        }
+        this.usingLongGun = wantLong;
+        this.setItemSlot(EquipmentSlot.MAINHAND, wanted.copy());
+        ReturnCapsuleMod.LOGGER.info("[humanoid] gun switch at {} blocks: {} -> {}",
+                Math.round(distance),
+                com.curiats.returncapsule.compat.tacz.TaczRifles.gunId(this.getMainHandItem()),
+                com.curiats.returncapsule.compat.tacz.TaczRifles.gunId(wanted));
+    }
+
+    /** Target distance past which the long gun is preferred. */
+    private static final double LONG_RANGE_SWITCH = 64.0D;
+    /** Ticks between slash arts: ten seconds, long enough to read as a special move. */
+
+    @Nullable
+    public BlockPos getDestination() {
+        return this.destination;
+    }
+
+    public void setDestination(@Nullable BlockPos destination) {
+        this.destination = destination;
+    }
+
+    public BlockPos getHome() {
+        if (this.home == null) {
+            this.home = this.blockPosition();
+        }
+        return this.home;
+    }
+
+    public void setHome(BlockPos home) {
+        this.home = home.immutable();
+    }
+
+    public boolean isFollowEnabled() {
+        return this.followEnabled;
+    }
+
+    public void setFollowEnabled(boolean enabled) {
+        this.followEnabled = enabled;
+    }
+
+    @Override
+    public void die(DamageSource source) {
+        // A death event with health to spare did not come from damage — something forced it. Plenty of hostile content
+        // does this directly rather than going through hurt, which bypasses every guard above. Refusing it here is the
+        // last line: the entity keeps its remaining health and the forced death is ignored.
+        if (this.getHealth() > 0.0F && !this.bypassProtections) {
+            ReturnCapsuleMod.LOGGER.info("[humanoid] refused a forced death event (health {})", this.getHealth());
+            return;
+        }
+        ReturnCapsuleMod.LOGGER.info("[humanoid] died from {}", source.getMsgId());
+        // The healing seal this humanoid applied ends with it. Every victim it had wounded becomes healable again,
+        // which is the intended contract: nothing is sealed permanently by a death the player could not prevent.
+        com.curiats.returncapsule.util.DamageLock.clearAll();
+        super.die(source);
+        if (this.level().isClientSide) {
+            return;
+        }
+        // Death blast: everything hostile within range loses most of its health. The unit is worth more dead than alive
+        // when it is about to be overrun, and this keeps a losing fight from being free for the swarm.
+        for (LivingEntity nearby : this.level().getEntitiesOfClass(LivingEntity.class,
+                this.getBoundingBox().inflate(DEATH_BLAST_RADIUS),
+                candidate -> candidate != this && candidate.isAlive()
+                        && !(candidate instanceof Player)
+                        && !(candidate instanceof NeutralHumanoid))) {
+            nearby.invulnerableTime = 0;
+            nearby.hurt(this.damageSources().magic(), nearby.getMaxHealth() * DEATH_BLAST_FRACTION);
+        }
+        // Camera shake, applied to nearby players through this mod's own shake effect. Relying on the client's explosion
+        // sound handler did nothing, because that only reacts to explosions it hears at full volume.
+        for (Player nearby : this.level().getEntitiesOfClass(Player.class, this.getBoundingBox().inflate(32.0D))) {
+            double distance = nearby.distanceTo(this);
+            int amplifier = distance < 8.0D ? 2 : distance < 16.0D ? 1 : 0;
+            nearby.addEffect(new MobEffectInstance(
+                    com.curiats.returncapsule.registry.ModEffects.SHAKE.get(), 30, amplifier, false, false, false));
+        }
+        if (this.level() instanceof net.minecraft.server.level.ServerLevel server) {
+            // Explosion visuals to match the blast. The sound is also what the client's camera shake listens for — it
+            // triggers on hearing an explosion at full volume — so the raised volume is what makes the shake reach.
+            server.sendParticles(net.minecraft.core.particles.ParticleTypes.EXPLOSION_EMITTER,
+                    this.getX(), this.getY() + 0.8D, this.getZ(), 3, 1.2D, 0.8D, 1.2D, 0.0D);
+            server.sendParticles(net.minecraft.core.particles.ParticleTypes.LARGE_SMOKE,
+                    this.getX(), this.getY() + 0.6D, this.getZ(), 60, 2.2D, 1.4D, 2.2D, 0.03D);
+            server.sendParticles(net.minecraft.core.particles.ParticleTypes.EXPLOSION,
+                    this.getX(), this.getY() + 0.6D, this.getZ(), 12, 2.0D, 1.0D, 2.0D, 0.0D);
+        }
+        this.level().playSound(null, this.getX(), this.getY(), this.getZ(),
+                SoundEvents.GENERIC_EXPLODE, net.minecraft.sounds.SoundSource.HOSTILE, 4.0F, 0.8F);
+        ReturnCapsuleMod.LOGGER.info("[humanoid] death blast fired");
+    }
+
+    /** Radius of the death blast, in blocks. */
+    private static final double DEATH_BLAST_RADIUS = 8.0D;
+    /** Share of a victim's maximum health removed by it. */
+    private static final float DEATH_BLAST_FRACTION = 0.63F;
+
+    @Override
+    protected void defineSynchedData() {
+        super.defineSynchedData();
+        this.entityData.define(DATA_ATTACK_SEQ, 0);
+    }
+
+    /**
+     * Advances the swing counter. The client uses it to reset MoBends' attack clock, because that clock only ever grows
+     * and the client-side swing flags proved unreliable for this entity.
+     */
+    public int markAttack() {
+        int next = this.entityData.get(DATA_ATTACK_SEQ) + 1;
+        this.entityData.set(DATA_ATTACK_SEQ, next);
+        return next;
+    }
+
+    public int attackSequence() {
+        return this.entityData.get(DATA_ATTACK_SEQ);
+    }
+
     @Override
     public boolean doHurtTarget(Entity target) {
         // Let the blade's own combo engine advance (motion and animation) without changing who resolves the damage.
         if (this.holdsBlade) {
-            com.curiats.returncapsule.compat.slashblade.SlashBlades.advanceCombo(this, target);
         }
         double damage = this.getAttributeValue(Attributes.ATTACK_DAMAGE)
                 + HumanoidWeapons.attackBonus(this.getMainHandItem());
@@ -522,6 +1024,12 @@ public class NeutralHumanoid extends PathfinderMob implements RangedAttackMob {
     @Override
     public InteractionResult mobInteract(Player player, InteractionHand hand) {
         ItemStack offered = player.getItemInHand(hand);
+        // Handing over equipment requires sneaking. Without that, aiming or interacting near a humanoid while holding a
+        // gun handed the gun to it: the old weapon was dropped and the new one equipped, which looked exactly like the
+        // humanoid swapping to a weapon it was never issued.
+        if (!player.isShiftKeyDown()) {
+            return super.mobInteract(player, hand);
+        }
         if (offered.isEmpty()) {
             return super.mobInteract(player, hand);
         }
@@ -561,15 +1069,29 @@ public class NeutralHumanoid extends PathfinderMob implements RangedAttackMob {
         }
     }
 
+    /**
+     * Installs a gun handed over by a player, into the slot that matches its kind: a sniper or marksman rifle into the
+     * long range slot, everything else into the rifle slot. Matching on the weapon's own type keeps a lever action from
+     * displacing a rifle and vice versa, which is what the two slots are for.
+     */
     private void installRanged(ItemStack offered) {
-        ItemStack previous = this.rangedWeapon;
-        this.rangedWeapon = single(offered);
-        TaczRifles.prepareForMob(this.rangedWeapon);
-        if (!previous.isEmpty() && previous.getItem() != this.rangedWeapon.getItem()) {
+        ItemStack candidate = single(offered);
+        TaczRifles.prepareForMob(candidate);
+        String type = TaczRifles.gunType(candidate).toLowerCase(java.util.Locale.ROOT);
+        boolean longRange = "sniper".equals(type) || "dmr".equals(type);
+
+        ItemStack previous = longRange ? this.longRangedWeapon : this.rangedWeapon;
+        if (longRange) {
+            this.longRangedWeapon = candidate;
+        } else {
+            this.rangedWeapon = candidate;
+        }
+        if (!previous.isEmpty() && previous.getItem() != candidate.getItem()) {
             this.spawnAtLocation(previous);
         }
         this.stance = Stance.RANGED;
-        this.forceMainHand(this.rangedWeapon.copy());
+        ItemStack inHand = longRange ? this.longRangedWeapon : this.rangedWeapon;
+        this.forceMainHand(inHand.copy());
     }
 
     private void installMelee(ItemStack offered) {
@@ -613,6 +1135,9 @@ public class NeutralHumanoid extends PathfinderMob implements RangedAttackMob {
         if (!this.rangedWeapon.isEmpty()) {
             tag.put(TAG_RANGED, this.rangedWeapon.save(new CompoundTag()));
         }
+        if (!this.longRangedWeapon.isEmpty()) {
+            tag.put(TAG_LONG_RANGED, this.longRangedWeapon.save(new CompoundTag()));
+        }
         if (!this.meleeWeapon.isEmpty()) {
             tag.put(TAG_MELEE, this.meleeWeapon.save(new CompoundTag()));
         }
@@ -624,6 +1149,10 @@ public class NeutralHumanoid extends PathfinderMob implements RangedAttackMob {
         super.readAdditionalSaveData(tag);
         this.rangedWeapon = tag.contains(TAG_RANGED)
                 ? ItemStack.of(tag.getCompound(TAG_RANGED))
+                : ItemStack.EMPTY;
+        this.gunsIssued = tag.contains(TAG_RANGED);
+        this.longRangedWeapon = tag.contains(TAG_LONG_RANGED)
+                ? ItemStack.of(tag.getCompound(TAG_LONG_RANGED))
                 : ItemStack.EMPTY;
         this.meleeWeapon = tag.contains(TAG_MELEE)
                 ? ItemStack.of(tag.getCompound(TAG_MELEE))

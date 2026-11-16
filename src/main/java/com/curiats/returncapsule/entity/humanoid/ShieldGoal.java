@@ -55,6 +55,15 @@ public class ShieldGoal extends Goal {
     }
 
     private void block() {
+        // Never block through a swing. `startUsingItem(OFF_HAND)` makes the off hand the "used" hand, and both vanilla
+        // and MoBends read that to decide which arm is attacking — a shield held up permanently turned every attack
+        // after the first into an off-hand attack.
+        if (this.mob.swinging) {
+            if (this.mob.isUsingItem()) {
+                this.mob.stopUsingItem();
+            }
+            return;
+        }
         if (!this.mob.isBlocking()) {
             this.mob.startUsingItem(InteractionHand.OFF_HAND);
         }

@@ -10,6 +10,7 @@ import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.LinkedHashSet;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
@@ -106,21 +107,71 @@ public final class TaczRifles {
         };
     }
 
-    /** Every installed gun whose TaCZ type is one of {@link #SERVICE_TYPES}. Cached: this is polled per tick. */
+    /**
+     * Every installed gun whose TaCZ type is one of {@link #SERVICE_TYPES}. Cached: this is polled per tick.
+     * <p>
+     * Guns are additionally restricted to those the client has resource data for. Firing works without a model, so a
+     * gun whose client index never loaded shoots fine while being invisible in hand; filtering against the client set is
+     * the only reliable way to avoid handing those out, because it needs no per-gun testing and covers every pack.
+     */
     public static List<GunInfo> serviceGuns() {
         List<GunInfo> local = serviceCache;
         if (local != null) {
             return local;
         }
+        Set<ResourceLocation> renderable = renderableGuns();
+        if (renderable.isEmpty()) {
+            // The client index is not loaded yet on the first call. Do not cache an unfiltered list, or every gun after
+            // this point is handed out without a renderability check.
+            List<GunInfo> unfiltered = new ArrayList<>();
+            for (GunInfo gun : TaczCatalog.snapshot().guns()) {
+                if (SERVICE_TYPES.contains(gun.type().toLowerCase(Locale.ROOT))) {
+                    unfiltered.add(gun);
+                }
+            }
+            return List.copyOf(unfiltered);
+        }
         List<GunInfo> built = new ArrayList<>();
         for (GunInfo gun : TaczCatalog.snapshot().guns()) {
-            if (SERVICE_TYPES.contains(gun.type().toLowerCase(Locale.ROOT))) {
-                built.add(gun);
+            if (!SERVICE_TYPES.contains(gun.type().toLowerCase(Locale.ROOT))) {
+                continue;
             }
+            if (!renderable.isEmpty() && !renderable.contains(gun.id())) {
+                continue;
+            }
+            built.add(gun);
         }
         local = List.copyOf(built);
         serviceCache = local;
         return local;
+    }
+
+    /**
+     * Gun ids the client can actually draw, from TaCZ's own client index. Empty on a dedicated server (the data only
+     * exists on the client), in which case no filtering happens.
+     */
+    private static Set<ResourceLocation> renderableGuns() {
+        if (!net.minecraftforge.fml.loading.FMLEnvironment.dist.isClient()) {
+            return Set.of();
+        }
+        try {
+            Class<?> api = Class.forName("com.tacz.guns.api.TimelessAPI");
+            Object entries = api.getMethod("getAllClientGunIndex").invoke(null);
+            if (!(entries instanceof Iterable<?> iterable)) {
+                return Set.of();
+            }
+            Set<ResourceLocation> ids = new LinkedHashSet<>();
+            for (Object entry : iterable) {
+                if (entry instanceof Map.Entry<?, ?> mapEntry && mapEntry.getKey() instanceof ResourceLocation id) {
+                    ids.add(id);
+                }
+            }
+            ReturnCapsuleMod.LOGGER.info("[humanoid] {} guns have client models", ids.size());
+            return ids;
+        } catch (ReflectiveOperationException | RuntimeException | LinkageError exception) {
+            ReturnCapsuleMod.LOGGER.debug("Client gun index unavailable: {}", exception.toString());
+            return Set.of();
+        }
     }
 
     private static Map<ResourceLocation, String> types() {
@@ -141,13 +192,55 @@ public final class TaczRifles {
      * A gun for a neutral humanoid: picked from the issued kinds, carrying TaCZ dummy ammo. TaCZ consumes real
      * magazine rounds for non-player shooters and would otherwise need an inventory to reload from, which a mob has not.
      */
+    /**
+     * A long range gun for the humanoid's second slot: a sniper or a marksman rifle.
+     * <p>
+     * A rifle's effective range is about sixty blocks, so past that the humanoid needs something else or it is shooting
+     * into falloff. Same construction path as the service gun, attachments included.
+     */
+    public static ItemStack randomLongGun(RandomSource random) {
+        List<GunInfo> pool = new java.util.ArrayList<>();
+        for (GunInfo gun : serviceGuns()) {
+            String type = gun.type().toLowerCase(Locale.ROOT);
+            if ("sniper".equals(type) || "dmr".equals(type)) {
+                pool.add(gun);
+            }
+        }
+        if (pool.isEmpty()) {
+            return ItemStack.EMPTY;
+        }
+        ItemStack gun = TaczItems.mobGun(pool.get(random.nextInt(pool.size())), MOB_MAGAZINE, MOB_DUMMY_AMMO);
+        TaczItems.randomizeAttachments(gun, random);
+        return gun;
+    }
+
     public static ItemStack randomServiceGun(RandomSource random) {
         List<GunInfo> pool = serviceGuns();
         if (pool.isEmpty()) {
             warnEmptyOnce();
             return ItemStack.EMPTY;
         }
-        ItemStack gun = TaczItems.mobGun(pool.get(random.nextInt(pool.size())), MOB_MAGAZINE, MOB_DUMMY_AMMO);
+        // The rifle slot wants an actual rifle. The service pool also contains snipers and marksman rifles, and those are
+        // almost all single shot by design — pulling from the whole pool is why the rifle slot so often ended up holding
+        // something that fires one round per trigger pull.
+        List<GunInfo> rifles = new java.util.ArrayList<>();
+        for (GunInfo gun : pool) {
+            if ("rifle".equalsIgnoreCase(gun.type())) {
+                rifles.add(gun);
+            }
+        }
+        List<GunInfo> byType = rifles.isEmpty() ? pool : rifles;
+
+        // Then prefer full auto within that: burst and semi guns still fire one round per trigger pull.
+        List<GunInfo> automatic = new java.util.ArrayList<>();
+        for (GunInfo gun : byType) {
+            if ("AUTO".equalsIgnoreCase(gun.fireMode())) {
+                automatic.add(gun);
+            }
+        }
+        List<GunInfo> chosenPool = automatic.isEmpty() ? byType : automatic;
+        ItemStack gun = TaczItems.mobGun(chosenPool.get(random.nextInt(chosenPool.size())),
+                MOB_MAGAZINE, MOB_DUMMY_AMMO);
         TaczItems.randomizeAttachments(gun, random);
         return gun;
     }

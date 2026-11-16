@@ -73,22 +73,32 @@ final class TaczItems {
      * rather than a random assortment, and each slot has a chance to stay empty.
      */
     static void randomizeAttachments(ItemStack gun, RandomSource random) {
-        if (gun.isEmpty() || !TaczApi.available()) {
+        // resolve() must run first: available() is only true after the API has been looked up once, and without
+        // this check every gun silently came out bare.
+        if (gun.isEmpty() || !TaczApi.resolve()) {
+            ReturnCapsuleMod.LOGGER.info("[humanoid] no attachments: TaCZ API unavailable");
             return;
         }
         try {
             Object gunHandle = TaczApi.gunOrNull(gun);
             if (gunHandle == null) {
+                ReturnCapsuleMod.LOGGER.info("[humanoid] no attachments: IGun handle is null for {}", gun.getItem());
                 return;
             }
             ResourceLocation gunId = TaczRifles.gunId(gun);
             if (gunId == null) {
+                ReturnCapsuleMod.LOGGER.info("[humanoid] no attachments: gun has no GunId tag");
                 return;
             }
             Object[] types = Class.forName(ATTACHMENT_TYPE_CLASS).getEnumConstants();
+            int allowed = 0;
+            int fitted = 0;
             for (Object type : types) {
-                if (!TaczApi.allowAttachmentType(gunHandle, type)) {
-                    continue;   // slot disabled for this gun
+                // allowAttachmentType returned false for every type on every gun sampled, which cannot be right for guns
+                // that players can fit scopes to. It is therefore not the gate we assumed; installation validates on its
+                // own, and the read-back below is what actually decides whether anything was fitted.
+                if (TaczApi.allowAttachmentType(gunHandle, type)) {
+                    allowed++;
                 }
                 if (random.nextFloat() > ATTACHMENT_CHANCE) {
                     continue;   // this slot stays empty
@@ -96,10 +106,42 @@ final class TaczItems {
                 ItemStack candidate = pickAttachment(gunHandle, type, gunId.getNamespace(), random);
                 if (!candidate.isEmpty()) {
                     TaczApi.installAttachment(gunHandle, gun, candidate);
+                    if (!gun.getOrCreateTag().contains("Attachment")) {
+                        // TaCZ refused it; write the tag ourselves in its own layout.
+                        forceWriteAttachment(gun, type, candidate);
+                    }
+                    if (TaczApi.attachedId(gunHandle, gun, type) != null) {
+                        fitted++;
+                    }
                 }
             }
+            ReturnCapsuleMod.LOGGER.info("[humanoid] gun {} fitted {}/{} attachments (allowAttachmentType said {}/{})",
+                    gunId, fitted, types.length, allowed, types.length);
+            // Read the raw tag: TaCZ's own accessors are gated behind allowAttachmentType, so they report "nothing" even
+            // when something was installed. The tag keys are the only trustworthy evidence.
+            ReturnCapsuleMod.LOGGER.info("[humanoid] gun {} nbt keys after fit: {}", gunId, gun.getOrCreateTag().getAllKeys());
         } catch (ReflectiveOperationException | RuntimeException exception) {
-            ReturnCapsuleMod.LOGGER.debug("Could not fit attachments: {}", exception.toString());
+            ReturnCapsuleMod.LOGGER.info("[humanoid] could not fit attachments: {}", exception.toString());
+        }
+    }
+
+    /**
+     * Writes an attachment straight into the gun's tag, bypassing TaCZ's validation.
+     * <p>
+     * {@code installAttachment} refuses everything here because it is gated behind {@code allowAttachment}, which in turn
+     * is gated behind {@code allowAttachmentType} — and that returns false for every slot of every gun sampled. The NBT
+     * layout is TaCZ's own: a compound named {@code Attachment}, one entry per slot type, each holding the saved item.
+     */
+    static void forceWriteAttachment(ItemStack gun, Object type, ItemStack attachment) {
+        try {
+            // TaCZ builds the key as {@code type.name() + "Attachment"} at the top level: getAttachmentTag does
+            // tag.contains(<type>Attachment, TAG_COMPOUND) and then reads tag.getCompound(<type>Attachment). Writing a
+            // nested "Attachment" bucket instead put the data somewhere nothing ever reads.
+            net.minecraft.nbt.CompoundTag root = gun.getOrCreateTag();
+            String key = ((Enum<?>) type).name() + "Attachment";
+            root.put(key, attachment.save(new net.minecraft.nbt.CompoundTag()));
+        } catch (RuntimeException exception) {
+            ReturnCapsuleMod.LOGGER.info("[humanoid] could not write attachment: {}", exception.toString());
         }
     }
 
@@ -122,9 +164,9 @@ final class TaczItems {
             if (stack.isEmpty() || !type.equals(TaczApi.attachmentType(stack))) {
                 continue;
             }
-            if (TaczApi.allowAttachment(gunHandle, stack)) {
-                return stack;
-            }
+            // No allowAttachment check: it is gated behind allowAttachmentType, which reports false for every slot of
+            // every gun, so filtering on it discarded every candidate and nothing was ever fitted.
+            return stack;
         }
         return ItemStack.EMPTY;
     }

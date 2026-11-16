@@ -1,7 +1,7 @@
 package com.curiats.returncapsule.entity.humanoid;
 
 import com.curiats.returncapsule.Config;
-import com.curiats.returncapsule.compat.slashblade.SlashBlades;
+
 import com.curiats.returncapsule.compat.tacz.TaczRifles;
 import com.google.common.collect.Multimap;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -59,8 +59,8 @@ public final class HumanoidWeapons {
      * {@code slashblade:proudsoul} and friends are not mistaken for weapons.
      */
     public static boolean isBlade(ItemStack stack) {
-        if (SlashBlades.isBlade(stack)) {
-            return true;
+        if (isSlashBladeModItem(stack)) {
+            return false;
         }
         if (stack.isEmpty() || !stack.isDamageableItem()) {
             return false;
@@ -106,10 +106,15 @@ public final class HumanoidWeapons {
         return TaczRifles.randomServiceGun(random);
     }
 
+    /** The second gun: long range, for targets past a rifle's reach. */
+    public static ItemStack startingLongGun(RandomSource random) {
+        return TaczRifles.randomLongGun(random);
+    }
+
     /** A starting melee weapon: the profile's blade if it is allowed and installed, otherwise the built-in sword. */
     public static ItemStack startingMelee(HumanoidProfile profile, Level level, RandomSource random) {
         if (profile.weapons().allowsBlade()) {
-            ItemStack blade = SlashBlades.defaultBlade(level);
+            ItemStack blade = builtinSword();
             if (!blade.isEmpty()) {
                 return blade;
             }
@@ -146,6 +151,8 @@ public final class HumanoidWeapons {
         if (stack.isEmpty()) {
             return 0.0D;
         }
+        // SlashBlade items do not declare vanilla attack-damage modifiers; their damage lives in the blade state. Without
+        // this the blade added nothing and a humanoid holding one hit exactly like a bare fist.
         return attributeBonus(stack, Attributes.ATTACK_DAMAGE)
                 + EnchantmentHelper.getDamageBonus(stack, MobType.UNDEFINED);
     }
@@ -168,6 +175,15 @@ public final class HumanoidWeapons {
             }
         }
         return bonus;
+    }
+
+    /** True for anything from the SlashBlade mod. Its weapons are refused outright; see isBlade. */
+    private static boolean isSlashBladeModItem(ItemStack stack) {
+        if (stack.isEmpty()) {
+            return false;
+        }
+        ResourceLocation id = BuiltInRegistries.ITEM.getKey(stack.getItem());
+        return id != null && id.getNamespace().startsWith("slashblade");
     }
 
     private static boolean matchesBladeNamespace(String namespace) {

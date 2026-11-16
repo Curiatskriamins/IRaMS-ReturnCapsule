@@ -47,6 +47,8 @@ public class HumanoidCombatGoal extends Goal {
     private static final int REPATH_INTERVAL = 10;
     /** How long a fight may make no progress before the target is dropped. */
     private static final int STALL_TIMEOUT = 200;
+    /** Ticks a target may stay out of sight before it is dropped. */
+    private static final int NO_SIGHT_TIMEOUT = 60;
     private static final double BASE_ATTACK_SPEED = 4.0D;
     private static final double TICKS_PER_SECOND = 20.0D;
 
@@ -60,6 +62,10 @@ public class HumanoidCombatGoal extends Goal {
     private int targetId = -1;
     private float lastTargetHealth = -1.0F;
     private int stalledTicks;
+    /** Consecutive ticks the target has been out of sight; a target behind a wall is dropped after a while. */
+    private int noSightTicks;
+    /** Ticks left in a reposition run. */
+    private int repositionTicks;
 
     public HumanoidCombatGoal(NeutralHumanoid mob) {
         this.mob = mob;
@@ -111,6 +117,7 @@ public class HumanoidCombatGoal extends Goal {
         this.mob.useStance(gun ? NeutralHumanoid.Stance.RANGED : NeutralHumanoid.Stance.MELEE);
 
         if (this.mob.isRangedStance()) {
+            this.mob.chooseGunFor(distance);
             this.holdRange(target, distance);
         } else {
             this.turnToward(target);
@@ -162,10 +169,47 @@ public class HumanoidCombatGoal extends Goal {
             this.mob.setSpeed(RETREAT_SPEED_FACTOR);
         } else if (distance > this.mob.engagementRadiusFor(target)) {
             this.navigateTo(target, APPROACH_SPEED);
+        } else if (this.repositionTicks > 0) {
+            this.repositionTicks--;
+            this.runAwayFrom(target);
+        } else if (distance < REPOSITION_DISTANCE && this.mob.getRandom().nextInt(REPOSITION_CHANCE) == 0) {
+            // Occasionally turn and actually run, instead of only backpedalling. A player who is being closed in on
+            // breaks line of sight and repositions; always walking backwards looks robotic and keeps it in the open.
+            this.repositionTicks = REPOSITION_TICKS;
+            this.runAwayFrom(target);
         } else {
+            // Back away slowly while shooting: keep the target in front, keep pulling the trigger, give ground.
+            this.faceTarget(target);
             this.mob.getNavigation().stop();
+            this.mob.getMoveControl().strafe(-0.6F, 0.0F);
+            this.mob.setSpeed(0.55F);
         }
     }
+
+    /** Turns its back and sprints to a point away from the target; the body follows the path, which is the point. */
+    private void runAwayFrom(LivingEntity target) {
+        double dx = this.mob.getX() - target.getX();
+        double dz = this.mob.getZ() - target.getZ();
+        double length = Math.sqrt(dx * dx + dz * dz);
+        if (length < 1.0E-3D) {
+            dx = 1.0D;
+            dz = 0.0D;
+            length = 1.0D;
+        }
+        double x = this.mob.getX() + dx / length * REPOSITION_STEP;
+        double z = this.mob.getZ() + dz / length * REPOSITION_STEP;
+        this.mob.getNavigation().moveTo(x, this.mob.getY(), z, 1.4D);
+        this.mob.setSpeed(1.0F);
+    }
+
+    /** Distance at which a gunner considers breaking away to reposition. */
+    private static final double REPOSITION_DISTANCE = 12.0D;
+    /** How far the reposition run goes. */
+    private static final double REPOSITION_STEP = 8.0D;
+    /** Ticks spent running rather than firing. */
+    private static final int REPOSITION_TICKS = 25;
+    /** One in this many opportunities triggers a run; keeps it occasional rather than constant. */
+    private static final int REPOSITION_CHANCE = 90;
 
     /** Points body and head at the target without any smoothing. */
     private void faceTarget(LivingEntity target) {
@@ -226,6 +270,13 @@ public class HumanoidCombatGoal extends Goal {
     private void attack(LivingEntity target, double distance) {
         if (this.mob.isRangedStance()) {
             if (!this.mob.getSensing().hasLineOfSight(target)) {
+            // Give up on a target that stays behind cover: holding it locks the humanoid onto something it cannot reach
+            // while other enemies walk up behind it.
+            if (++this.noSightTicks > NO_SIGHT_TIMEOUT) {
+                this.noSightTicks = 0;
+                this.mob.setTarget(null);
+                return;
+            }
                 return;
             }
             this.attackCooldown = this.gunInterval();
@@ -243,8 +294,42 @@ public class HumanoidCombatGoal extends Goal {
         this.attackCooldown = this.meleeInterval();
         this.stepBackTicks = STEP_BACK_TICKS;
         this.mob.setAggressive(true);
+        this.mob.markAttack();
         this.mob.swing(InteractionHand.MAIN_HAND);
         this.mob.doHurtTarget(target);
+        this.sweep(target);
+    }
+
+    /**
+     * Sweeping blow, the way a player swinging a sword hits everything beside the target.
+     * <p>
+     * Vanilla only does this for players, so a mob with a sword hits exactly one thing. Sweeping is what makes a blade
+     * feel different from a club, so it is reproduced here: everything within two and a half blocks of the victim takes a
+     * reduced share of the hit.
+     */
+    private void sweep(LivingEntity target) {
+        if (!this.mob.wieldsBlade()) {
+            return;
+        }
+        // A visible sweep arc, from the victim's feet outward. The vanilla sweeping particle is only produced by a player's
+        // own sweep, which is why the blade looked like a single-target club.
+        if (this.mob.level() instanceof net.minecraft.server.level.ServerLevel server) {
+            server.sendParticles(net.minecraft.core.particles.ParticleTypes.SWEEP_ATTACK,
+                    target.getX(), target.getY() + 0.8D, target.getZ(), 3, 0.6D, 0.2D, 0.6D, 0.0D);
+            server.sendParticles(net.minecraft.core.particles.ParticleTypes.CRIT,
+                    target.getX(), target.getY() + 0.9D, target.getZ(), 12, 1.2D, 0.3D, 1.2D, 0.08D);
+        }
+        // Cleave: everything in a 3x3x2 volume around the victim, excluding the victim itself, takes half the hit.
+        float cleave = (float) (this.mob.getAttributeValue(
+                net.minecraft.world.entity.ai.attributes.Attributes.ATTACK_DAMAGE) * 0.5D);
+        net.minecraft.world.phys.AABB area = net.minecraft.world.phys.AABB.ofSize(
+                target.position().add(0.0D, 1.0D, 0.0D), 3.0D, 2.0D, 3.0D);
+        for (LivingEntity nearby : this.mob.level().getEntitiesOfClass(LivingEntity.class, area,
+                candidate -> candidate != this.mob && candidate != target && candidate.isAlive()
+                        && !(candidate instanceof net.minecraft.world.entity.player.Player))) {
+            nearby.invulnerableTime = 0;
+            nearby.hurt(this.mob.damageSources().mobAttack(this.mob), cleave);
+        }
     }
 
     /**

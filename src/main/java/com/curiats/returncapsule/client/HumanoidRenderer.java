@@ -43,7 +43,7 @@ public class HumanoidRenderer extends HumanoidMobRenderer<NeutralHumanoid, Playe
     @Override
     public void render(NeutralHumanoid entity, float entityYaw, float partialTick, PoseStack poseStack,
                        MultiBufferSource buffer, int packedLight) {
-        if (entity.swinging && entity.swingTime == 1) {
+        if (MobendsAddon.isNewSwing(entity)) {
             MobendsAddon.driveAttack(entity);
         }
         super.render(entity, entityYaw, partialTick, poseStack, buffer, packedLight);

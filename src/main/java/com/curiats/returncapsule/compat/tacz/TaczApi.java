@@ -126,6 +126,23 @@ final class TaczApi {
         }
     }
 
+    /** Id of the attachment installed in the given slot, or null when the slot is empty. */
+    static ResourceLocation attachedId(Object gunHandle, net.minecraft.world.item.ItemStack gun, Object type) {
+        try {
+            if (getAttachmentId == null) {
+                getAttachmentId = Class.forName(IGUN_CLASS)
+                        .getMethod("getAttachmentId", net.minecraft.world.item.ItemStack.class,
+                                Class.forName(ATTACHMENT_TYPE_CLASS));
+            }
+            Object value = getAttachmentId.invoke(gunHandle, gun, type);
+            return value instanceof ResourceLocation id ? id : null;
+        } catch (ReflectiveOperationException | RuntimeException exception) {
+            return null;
+        }
+    }
+
+    private static volatile Method getAttachmentId;
+
     /** Slot type of an attachment item, used to match it against the slot being filled. */
     static Object attachmentType(net.minecraft.world.item.ItemStack attachment) {
         try {
@@ -220,6 +237,13 @@ final class TaczApi {
         try {
             Object modes = accessors.fireModes().invoke(gunData);
             if (modes instanceof Collection<?> collection && !collection.isEmpty()) {
+                // Prefer AUTO. The set is unordered, so taking the first entry handed most guns SEMI — which is exactly
+                // why the humanoid felt like it was firing one round per trigger pull.
+                for (Object mode : collection) {
+                    if ("AUTO".equalsIgnoreCase(String.valueOf(mode))) {
+                        return "AUTO";
+                    }
+                }
                 return String.valueOf(collection.iterator().next());
             }
         } catch (ReflectiveOperationException | RuntimeException ignored) {

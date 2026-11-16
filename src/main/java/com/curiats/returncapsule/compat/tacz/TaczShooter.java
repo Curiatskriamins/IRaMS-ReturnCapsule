@@ -31,6 +31,8 @@ public final class TaczShooter {
     private static volatile boolean resolved;
     private static volatile boolean broken;
     private static final java.util.Set<String> reportedOutcomes = java.util.concurrent.ConcurrentHashMap.newKeySet();
+    /** Entities whose shot pacing has already been reported. */
+    private static final java.util.Set<Integer> shotsLogged = java.util.concurrent.ConcurrentHashMap.newKeySet();
     private static Method fromLivingEntity;
     private static Method draw;
     private static Method aim;
@@ -38,6 +40,7 @@ public final class TaczShooter {
     private static Method synDrawCoolDown;
     private static Method bolt;
     private static Method synShootCoolDown;
+    private static Method bolting;
 
     /**
      * Keeps the mob's aim state in sync with its combat state. Cheap to call every tick: TaCZ's aim call is a
@@ -104,6 +107,10 @@ public final class TaczShooter {
     }
 
     /** True when both the draw and the shot cooldown TaCZ reports are finished. */
+    private static Method bolting() {
+        return bolting;
+    }
+
     private static boolean ready(Object operator) throws ReflectiveOperationException {
         if (synDrawCoolDown == null || synShootCoolDown == null) {
             return true;
@@ -192,6 +199,7 @@ public final class TaczShooter {
                 synDrawCoolDown = operator.getMethod("getSynDrawCoolDown");
                 bolt = operator.getMethod("bolt");
                 synShootCoolDown = operator.getMethod("getSynShootCoolDown");
+                bolting = operator.getMethod("getSynIsBolting");
                 ReturnCapsuleMod.LOGGER.debug("[humanoid] TaCZ firing bridge ready");
             } catch (ReflectiveOperationException | RuntimeException exception) {
                 fromLivingEntity = null;

@@ -4,6 +4,7 @@ import com.curiats.returncapsule.ReturnCapsuleMod;
 import com.curiats.returncapsule.entity.humanoid.HumanoidToggles;
 import com.curiats.returncapsule.entity.humanoid.NeutralHumanoid;
 import com.mojang.brigadier.CommandDispatcher;
+import com.mojang.brigadier.arguments.DoubleArgumentType;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.context.CommandContext;
@@ -46,12 +47,62 @@ public final class HumanoidCommand {
         dispatcher.register(Commands.literal("returncapsule")
                 .then(Commands.literal("info").executes(HumanoidCommand::info))
                 .then(Commands.literal("reset").executes(HumanoidCommand::reset))
+                .then(Commands.literal("target")
+                        .then(Commands.argument("distance", DoubleArgumentType.doubleArg(4.0D, 512.0D))
+                                .executes(context -> spawnTarget(context, "minecraft:zombie"))
+                                .then(Commands.argument("type", StringArgumentType.word())
+                                        .suggests(TARGET_TYPE_SUGGESTIONS)
+                                        .executes(context -> spawnTarget(context,
+                                                StringArgumentType.getString(context, "type"))))))
                 .then(Commands.argument("target", StringArgumentType.word())
                         .suggests(TARGET_SUGGESTIONS)
                         .then(Commands.argument("slot", StringArgumentType.word())
                                 .suggests(SLOT_SUGGESTIONS)
                                 .then(Commands.argument("enabled", IntegerArgumentType.integer(0, 1))
                                         .executes(HumanoidCommand::apply)))));
+    }
+
+    private static final SuggestionProvider<CommandSourceStack> TARGET_TYPE_SUGGESTIONS =
+            (context, builder) -> SharedSuggestionProvider.suggest(
+                    List.of("minecraft:zombie", "minecraft:skeleton", "minecraft:warden"), builder);
+
+    /**
+     * Spawns a test target a given distance away, in the direction the player is looking.
+     * <p>
+     * A humanoid follows its player, so testing the long range gun by walking away is impractical. This puts a target at
+     * an exact distance instead, which is the only reliable way to see the sixty-four block weapon switch happen.
+     */
+    private static int spawnTarget(CommandContext<CommandSourceStack> context, String type) {
+        CommandSourceStack source = context.getSource();
+        double distance = DoubleArgumentType.getDouble(context, "distance");
+        ServerLevel level = source.getLevel();
+        net.minecraft.world.phys.Vec3 eye = source.getPosition();
+        net.minecraft.world.phys.Vec2 rotation = source.getRotation();
+        double yaw = Math.toRadians(rotation.y);
+        double pitch = Math.toRadians(rotation.x);
+        double x = eye.x - Math.sin(yaw) * Math.cos(pitch) * distance;
+        double y = eye.y - Math.sin(pitch) * distance;
+        double z = eye.z + Math.cos(yaw) * Math.cos(pitch) * distance;
+
+        net.minecraft.resources.ResourceLocation id =
+                net.minecraft.resources.ResourceLocation.tryParse(type);
+        net.minecraft.world.entity.EntityType<?> entityType =
+                id == null ? null : net.minecraftforge.registries.ForgeRegistries.ENTITY_TYPES.getValue(id);
+        if (entityType == null) {
+            source.sendFailure(Component.literal("[returncapsule] unknown entity type '" + type + "'"));
+            return 0;
+        }
+        net.minecraft.world.entity.Entity spawned = entityType.create(level);
+        if (spawned == null) {
+            source.sendFailure(Component.literal("[returncapsule] could not create '" + type + "'"));
+            return 0;
+        }
+        spawned.moveTo(x, y, z, rotation.y, 0.0F);
+        level.addFreshEntity(spawned);
+        float actual = (float) Math.sqrt(spawned.distanceToSqr(eye.x, eye.y, eye.z));
+        source.sendSuccess(() -> Component.literal(
+                "[returncapsule] spawned " + type + " at " + Math.round(actual) + " blocks"), true);
+        return 1;
     }
 
     private static int info(CommandContext<CommandSourceStack> context) {
@@ -79,6 +130,16 @@ public final class HumanoidCommand {
         String slotName = StringArgumentType.getString(context, "slot");
         int enabled = IntegerArgumentType.getInteger(context, "enabled");
 
+        if ("mobends".equalsIgnoreCase(slotName)) {
+            // A/B switch for the animation layer: off means the plain vanilla player model.
+            if (net.minecraftforge.fml.loading.FMLEnvironment.dist.isClient()) {
+                com.curiats.returncapsule.compat.mobends.MobendsAddon.setAnimationEnabled(enabled == 1);
+                source.sendSuccess(() -> Component.literal("[returncapsule] mobends animation=" + enabled), true);
+                return 1;
+            }
+            source.sendFailure(Component.literal("[returncapsule] mobends toggle is client only"));
+            return 0;
+        }
         if ("fists".equalsIgnoreCase(slotName)) {
             // Convenience: strip both weapon slots in one go.
             HumanoidToggles.set(HumanoidToggles.Slot.ITEM, false);
