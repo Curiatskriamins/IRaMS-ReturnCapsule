@@ -20,6 +20,8 @@ public class HumanoidTargetGoal extends Goal {
     private final NeutralHumanoid mob;
     private int wideCooldown;
     private int closeCooldown;
+
+    private static final int RETARGET_INTERVAL = 20;
     @Nullable
     private LivingEntity chosen;
 
@@ -35,11 +37,12 @@ public class HumanoidTargetGoal extends Goal {
 
         LivingEntity current = this.mob.getTarget();
         if (current != null) {
-            if (current.isAlive()) {
+            if (current.isAlive() && this.mob.tickCount % RETARGET_INTERVAL != 0) {
                 return false;
             }
-
-            this.mob.setTarget(null);
+            if (!current.isAlive()) {
+                this.mob.setTarget(null);
+            }
         }
         if (this.closeCooldown > 0) {
             this.closeCooldown--;
@@ -63,8 +66,13 @@ public class HumanoidTargetGoal extends Goal {
     @Override
     public void start() {
         if (this.chosen != null) {
-            this.mob.setTarget(this.chosen);
-
+            LivingEntity current = this.mob.getTarget();
+            boolean keepCurrent = current != null && current.isAlive()
+                    && HumanoidCombatRules.priority(this.mob, current)
+                            >= HumanoidCombatRules.priority(this.mob, this.chosen);
+            if (!keepCurrent) {
+                this.mob.setTarget(this.chosen);
+            }
         }
         this.chosen = null;
     }

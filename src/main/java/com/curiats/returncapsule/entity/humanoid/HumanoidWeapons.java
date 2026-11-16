@@ -48,7 +48,13 @@ public final class HumanoidWeapons {
         if (isSlashBladeModItem(stack)) {
             return false;
         }
-        if (stack.isEmpty() || !stack.isDamageableItem()) {
+        if (stack.isEmpty()) {
+            return false;
+        }
+        if (stack.getItem() instanceof net.minecraft.world.item.SwordItem) {
+            return true;
+        }
+        if (!stack.isDamageableItem()) {
             return false;
         }
         ResourceLocation id = ForgeRegistries.ITEMS.getKey(stack.getItem());

@@ -66,6 +66,7 @@ public class NeutralHumanoid extends PathfinderMob implements RangedAttackMob {
     private boolean convertedHit;
 
     private static final double LONG_RANGE_HYSTERESIS = 8.0D;
+    private static final double AIRBORNE_SWITCH_HEIGHT = 2.0D;
 
     private static final float SHIELD_BREAK_DAMAGE = 100.0F;
 
@@ -323,6 +324,9 @@ public class NeutralHumanoid extends PathfinderMob implements RangedAttackMob {
             return true;
         }
 
+        if (this.getTarget() != null && this.getTarget().getY() - this.getY() > AIRBORNE_SWITCH_HEIGHT) {
+            return true;
+        }
         double keepGun = HumanoidCombatRules.MELEE_SWITCH_DISTANCE;
         double drawGun = HumanoidCombatRules.MELEE_SWITCH_DISTANCE + GUN_DRAW_DISTANCE;
         return distance > (this.stance == Stance.RANGED ? keepGun : drawGun);
@@ -608,6 +612,18 @@ public class NeutralHumanoid extends PathfinderMob implements RangedAttackMob {
                 || source.getDirectEntity() instanceof Player shooter && shooter.isCreative();
     }
 
+    @Override
+    public net.minecraft.world.entity.HumanoidArm getMainArm() {
+        return net.minecraft.world.entity.HumanoidArm.RIGHT;
+    }
+
+    private static boolean isFriendlyCreature(LivingEntity entity) {
+        if (entity instanceof net.minecraft.world.entity.OwnableEntity own && own.getOwnerUUID() != null) {
+            return true;
+        }
+        return !(entity instanceof net.minecraft.world.entity.monster.Enemy);
+    }
+
     private static boolean isFriendlySource(DamageSource source) {
 
         String id = source.getMsgId();
@@ -744,6 +760,10 @@ public class NeutralHumanoid extends PathfinderMob implements RangedAttackMob {
                         && !(candidate instanceof NeutralHumanoid))) {
             nearby.invulnerableTime = 0;
             nearby.hurt(this.damageSources().magic(), nearby.getMaxHealth() * DEATH_BLAST_FRACTION);
+            if (!(nearby instanceof Player) && !isFriendlyCreature(nearby)) {
+                com.curiats.returncapsule.util.DamageLock.lockFraction(nearby, this.level().getGameTime(),
+                        DEATH_BLAST_FRACTION, DEATH_BLAST_LOCK_TICKS);
+            }
         }
 
         for (Player nearby : this.level().getEntitiesOfClass(Player.class, this.getBoundingBox().inflate(32.0D))) {
@@ -769,6 +789,8 @@ public class NeutralHumanoid extends PathfinderMob implements RangedAttackMob {
     private static final double DEATH_BLAST_RADIUS = 8.0D;
 
     private static final float DEATH_BLAST_FRACTION = 0.63F;
+
+    private static final int DEATH_BLAST_LOCK_TICKS = 3600;
 
     @Override
     protected void defineSynchedData() {

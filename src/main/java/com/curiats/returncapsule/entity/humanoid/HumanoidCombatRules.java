@@ -73,8 +73,8 @@ public final class HumanoidCombatRules {
         if (user == null) {
             return value2;
         }
-        double distanceSqr = user.distanceToSqr(target);
-        return value2 + NEAREST_BONUS * Math.max(0.0D, 1.0D - distanceSqr / (NEAREST_RADIUS * NEAREST_RADIUS));
+        double distance = Math.sqrt(user.distanceToSqr(target));
+        return value2 - Math.min(distance, NEAREST_CLAMP) * NEAREST_WEIGHT;
     }
 
     private static double playerProximityBonus(LivingEntity target) {
@@ -90,7 +90,8 @@ public final class HumanoidCombatRules {
 
     private static final double PROXIMITY_BONUS = 600.0D;
 
-    private static final double NEAREST_BONUS = 400.0D;
+    private static final double NEAREST_WEIGHT = 60.0D;
+    private static final double NEAREST_CLAMP = 48.0D;
 
     private static final double NEAREST_RADIUS = 32.0D;
 

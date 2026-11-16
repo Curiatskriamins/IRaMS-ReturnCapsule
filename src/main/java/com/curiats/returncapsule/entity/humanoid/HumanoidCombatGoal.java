@@ -49,6 +49,10 @@ public class HumanoidCombatGoal extends Goal {
 
     private int repositionTicks;
 
+    private int lastSweepParticle = -100;
+
+    private static final int SWEEP_PARTICLE_INTERVAL = 10;
+
     public HumanoidCombatGoal(NeutralHumanoid mob) {
         this.mob = mob;
         this.setFlags(EnumSet.of(Goal.Flag.MOVE, Goal.Flag.LOOK));
@@ -153,10 +157,20 @@ public class HumanoidCombatGoal extends Goal {
             this.runAwayFrom(target);
         } else {
 
-            this.faceTarget(target);
-            this.mob.getNavigation().stop();
-            this.mob.getMoveControl().strafe(-0.6F, 0.0F);
-            this.mob.setSpeed(0.55F);
+            if (distance < RETREAT_DISTANCE) {
+                this.faceTarget(target);
+                this.mob.getNavigation().stop();
+                this.mob.getMoveControl().strafe(-0.6F, 0.0F);
+                this.mob.setSpeed(0.55F);
+                if (this.mob.horizontalCollision && this.mob.onGround()) {
+                    this.mob.getJumpControl().jump();
+                } else if (target.getY() - this.mob.getY() > 1.0D && this.mob.onGround()) {
+                    this.mob.getJumpControl().jump();
+                }
+            } else {
+                this.faceTarget(target);
+                this.mob.getNavigation().stop();
+            }
         }
     }
 
@@ -176,6 +190,8 @@ public class HumanoidCombatGoal extends Goal {
     }
 
     private static final double REPOSITION_DISTANCE = 12.0D;
+
+    private static final double RETREAT_DISTANCE = 18.0D;
 
     private static final double REPOSITION_STEP = 8.0D;
 
@@ -264,14 +280,14 @@ public class HumanoidCombatGoal extends Goal {
         if (!this.mob.wieldsBlade()) {
             return;
         }
-
+        if (this.mob.tickCount - this.lastSweepParticle < SWEEP_PARTICLE_INTERVAL) {
+            return;
+        }
+        this.lastSweepParticle = this.mob.tickCount;
         if (this.mob.level() instanceof net.minecraft.server.level.ServerLevel server) {
             server.sendParticles(net.minecraft.core.particles.ParticleTypes.SWEEP_ATTACK,
-                    target.getX(), target.getY() + 0.8D, target.getZ(), 3, 0.6D, 0.2D, 0.6D, 0.0D);
-            server.sendParticles(net.minecraft.core.particles.ParticleTypes.CRIT,
-                    target.getX(), target.getY() + 0.9D, target.getZ(), 12, 1.2D, 0.3D, 1.2D, 0.08D);
+                    target.getX(), target.getY() + 0.8D, target.getZ(), 1, 0.0D, 0.0D, 0.0D, 0.0D);
         }
-
         float cleave = (float) (this.mob.getAttributeValue(
                 net.minecraft.world.entity.ai.attributes.Attributes.ATTACK_DAMAGE) * 0.5D);
         net.minecraft.world.phys.AABB area = net.minecraft.world.phys.AABB.ofSize(
