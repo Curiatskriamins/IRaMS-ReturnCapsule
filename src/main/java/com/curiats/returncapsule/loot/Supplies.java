@@ -8,7 +8,6 @@ import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 
- 
 public final class Supplies {
     private static final Item[] FOODS = {
             Items.GOLDEN_CARROT, Items.COOKED_BEEF, Items.BREAD,

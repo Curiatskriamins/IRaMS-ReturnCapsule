@@ -97,7 +97,7 @@ public abstract class FallingCapsuleEntity extends Entity {
         this.setDeltaMovement(0.0D, dy, 0.0D);
         this.move(MoverType.SELF, this.getDeltaMovement());
         if (this.getY() >= beforeY - 0.01D) {
-            
+
             this.setPos(this.getX(), beforeY - Math.max(0.1D, -dy), this.getZ());
         }
 

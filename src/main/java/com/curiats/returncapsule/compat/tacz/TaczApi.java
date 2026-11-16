@@ -70,8 +70,6 @@ final class TaczApi {
         return entries(attachmentIndexMethod);
     }
 
-    // ---------------------------------------------------------------- attachment fitting
-
     private static final String IGUN_CLASS = "com.tacz.guns.api.item.IGun";
     private static final String IATTACHMENT_CLASS = "com.tacz.guns.api.item.IAttachment";
 
@@ -81,7 +79,6 @@ final class TaczApi {
     private static volatile Method installAttachment;
     private static volatile Method attachmentTypeOf;
 
-    /** The {@code IGun} handle for a gun stack, or {@code null} when it is not a gun. */
     static Object gunOrNull(net.minecraft.world.item.ItemStack stack) throws ReflectiveOperationException {
         if (gunOrNull == null) {
             Class<?> type = Class.forName(IGUN_CLASS);
@@ -96,7 +93,6 @@ final class TaczApi {
         return gunOrNull.invoke(null, stack);
     }
 
-    /** False for a slot this gun disables outright. */
     static boolean allowAttachmentType(Object gunHandle, Object attachmentType) {
         try {
             return allowAttachmentType != null
@@ -106,7 +102,6 @@ final class TaczApi {
         }
     }
 
-    /** Whether this particular attachment fits the gun. */
     static boolean allowAttachment(Object gunHandle, net.minecraft.world.item.ItemStack attachment) {
         try {
             return allowAttachment != null && Boolean.TRUE.equals(allowAttachment.invoke(gunHandle, attachment));
@@ -126,7 +121,6 @@ final class TaczApi {
         }
     }
 
-    /** Id of the attachment installed in the given slot, or null when the slot is empty. */
     static ResourceLocation attachedId(Object gunHandle, net.minecraft.world.item.ItemStack gun, Object type) {
         try {
             if (getAttachmentId == null) {
@@ -143,7 +137,6 @@ final class TaczApi {
 
     private static volatile Method getAttachmentId;
 
-    /** Slot type of an attachment item, used to match it against the slot being filled. */
     static Object attachmentType(net.minecraft.world.item.ItemStack attachment) {
         try {
             if (attachmentTypeOf == null) {
@@ -237,8 +230,7 @@ final class TaczApi {
         try {
             Object modes = accessors.fireModes().invoke(gunData);
             if (modes instanceof Collection<?> collection && !collection.isEmpty()) {
-                // Prefer AUTO. The set is unordered, so taking the first entry handed most guns SEMI — which is exactly
-                // why the humanoid felt like it was firing one round per trigger pull.
+
                 for (Object mode : collection) {
                     if ("AUTO".equalsIgnoreCase(String.valueOf(mode))) {
                         return "AUTO";
@@ -247,7 +239,7 @@ final class TaczApi {
                 return String.valueOf(collection.iterator().next());
             }
         } catch (ReflectiveOperationException | RuntimeException ignored) {
-            
+
         }
         return "SEMI";
     }

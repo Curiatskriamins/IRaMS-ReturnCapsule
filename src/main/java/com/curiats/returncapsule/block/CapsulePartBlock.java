@@ -1,12 +1,10 @@
 package com.curiats.returncapsule.block;
 
-import com.curiats.returncapsule.registry.ModBlocks;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.entity.player.Player;
-import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
@@ -25,7 +23,7 @@ import net.minecraft.world.phys.shapes.VoxelShape;
 import javax.annotation.Nullable;
 
 public class CapsulePartBlock extends Block {
-     
+
     public static final IntegerProperty PART = IntegerProperty.create("part", 0, 17);
 
     private static final VoxelShape EDGE = Block.box(2.0D, 0.0D, 2.0D, 14.0D, 16.0D, 14.0D);
@@ -56,7 +54,6 @@ public class CapsulePartBlock extends Block {
         return shapeFor(state);
     }
 
-     
     private static VoxelShape shapeFor(BlockState state) {
         int part = state.getValue(PART);
         int dx = part % 3 - 1;

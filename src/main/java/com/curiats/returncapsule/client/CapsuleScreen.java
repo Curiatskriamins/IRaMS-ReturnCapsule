@@ -7,11 +7,6 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.player.Inventory;
 
-
-
-
-
-
 public class CapsuleScreen extends AbstractContainerScreen<CapsuleMenu> {
     private static final ResourceLocation CHEST_TEXTURE =
             new ResourceLocation("textures/gui/container/generic_54.png");
@@ -42,9 +37,6 @@ public class CapsuleScreen extends AbstractContainerScreen<CapsuleMenu> {
                 this.leftPos + this.imageWidth / 2 - this.font.width(page) / 2,
                 controlY, 0x404040, false);
 
-        
-        
-        
         this.renderTooltip(graphics, mouseX, mouseY);
     }
 

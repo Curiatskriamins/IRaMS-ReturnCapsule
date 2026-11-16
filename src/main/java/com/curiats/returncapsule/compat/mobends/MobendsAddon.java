@@ -12,27 +12,6 @@ import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
 
-/**
- * Registers the humanoid with MoBends so its player-style animation set drives the model.
- * <p>
- * MoBends has a public addon API ({@code Addons.registerAddon} + {@code AddonAnimationRegistry.registerNewEntity}), but
- * it is not a compile time dependency, so everything here is reflective. That works because the two interfaces the API
- * asks for are single-method ({@code IEntityDataFactory}, {@code IMutatorFactory}, both implementable with
- * {@link Proxy}) and the rest are plain public constructors.
- * <p>
- * The registration mirrors what MoBends' own {@code DefaultAddon} does for zombies, skeletons and villagers:
- * <pre>
- *   registerNewEntity(EntityClass, dataFactory, mutatorFactory,
- *                     new BipedRenderer&lt;&gt;(), new BipedPreviewer(),
- *                     PLAYER_LIKE_ANIMATIONS, BIPED_PARTS)
- * </pre>
- * Passing a bare {@code MutatedRenderer} with an empty animation list — which is what an earlier version of this class
- * did — registers a bender that never animates anything, so the renderer, the previewer and both string tables are
- * essential. The tables are read straight off {@code DefaultAddon} so they track MoBends' own definitions.
- * <p>
- * Every failure path degrades to a warning: without MoBends, or if its internals move, the humanoid keeps the plain
- * vanilla player-model animation instead of breaking the client.
- */
 public final class MobendsAddon {
     private static final String MOD_ID = "mobends";
     private static final String ADDON_ID = "returncapsule_humanoids";
@@ -45,7 +24,7 @@ public final class MobendsAddon {
     private static final String MUTATED_RENDERER = "goblinbob.mobends.core.client.MutatedRenderer";
     private static final String I_PREVIEWER = "goblinbob.mobends.core.bender.IPreviewer";
     private static final String HUMANOID_DATA = "goblinbob.mobends.standard.data.HumanoidMobData";
-    /** Our own mutator: the stock humanoid one mis-binds the wear sleeves of a {@code PlayerModel}. */
+
     private static final String HUMANOID_MUTATOR = "goblinbob.mobends.standard.mutators.HumanoidMobMutator";
     private static final String BIPED_RENDERER = "goblinbob.mobends.standard.client.renderer.entity.mutated.BipedRenderer";
     private static final String BIPED_PREVIEWER = "goblinbob.mobends.standard.previewer.BipedPreviewer";
@@ -56,7 +35,6 @@ public final class MobendsAddon {
     private static final String MUTATOR = "goblinbob.mobends.core.mutators.Mutator";
     private static final String LIVING_ENTITY_DATA = "goblinbob.mobends.core.data.LivingEntityData";
 
-    /** Fallbacks copied from MoBends' DefaultAddon, used only if its static tables cannot be read. */
     private static final String[] FALLBACK_ANIMATIONS =
             {"walk", "sprint", "jump", "fall", "sneak", "swim", "attack", "ride", "climb"};
     private static final String[] FALLBACK_PARTS =
@@ -71,20 +49,9 @@ public final class MobendsAddon {
     private static volatile Method onAttack;
     private static volatile Method isAnimated;
     private static volatile Object registryInstance;
-    /** Key returned by MoBends for our bender, used to toggle its animation at runtime. */
+
     private static volatile String registeredKey;
 
-    /**
-     * Whether MoBends is currently driving this entity's model, i.e. it has a registered bender and the bender's
-     * animation switch is on. Used to arbitrate against other animation systems that write the same model.
-     */
-    /**
-     * Turns MoBends animation for our humanoids on or off at runtime.
-     * <p>
-     * This exists so the two hypotheses can be separated in game: with MoBends switched off the entity uses the plain
-     * vanilla player model. If the mirrored hands and the missing attack swing disappear, the fault is in MoBends'
-     * mutation of our model; if they stay, it is in how the entity is registered or rendered.
-     */
     public static void setAnimationEnabled(boolean enabled) {
         if (!ModList.get().isLoaded(MOD_ID) || registeredKey == null) {
             return;
@@ -102,13 +69,6 @@ public final class MobendsAddon {
         }
     }
 
-    /**
-     * True when this entity has started a new swing since the last call.
-     * <p>
-     * Edge detection on the {@code swinging} flag: it is true for the whole swing (about six ticks), and the client tick
-     * runs twenty times a second, so a swing cannot be missed. Comparing {@code swingTime} values instead relied on the
-     * exact numbers observed at whatever moment the caller happened to run, which is why most swings went unnoticed.
-     */
     public static boolean isNewSwing(LivingEntity entity) {
         if (!entity.swinging) {
             swingingEntities.remove(entity.getId());
@@ -142,17 +102,6 @@ public final class MobendsAddon {
         }
     }
 
-    /**
-     * Feeds one attack into MoBends' animation state for this entity.
-     * <p>
-     * MoBends only ever calls {@code onAttack()} from its player path and from an optional vanilla-backport compat;
-     * for a modded mob nothing fires it, so the biped controller never learns that a swing happened and the arm stays
-     * still while the sword simply changes orientation. Everything needed to do it by hand is public: the bender
-     * exposes {@code getMutator(renderer)} and the mutator exposes {@code getOrMakeData(entity)}, which hands back the
-     * {@code LivingEntityData} holding {@code onAttack()}.
-     * <p>
-     * Called once per swing, from the renderer, guarded by {@code swingTime == 1} so a single swing is counted once.
-     */
     public static void driveAttack(LivingEntity entity) {
         if (!isAnimating(entity)) {
             return;
@@ -173,8 +122,7 @@ public final class MobendsAddon {
                         Class.forName("net.minecraft.client.renderer.entity.LivingEntityRenderer"));
                 Class<?> mutatorClass = Class.forName(MUTATOR, false, loader);
                 getOrMakeData = mutatorClass.getMethod("getOrMakeData", LivingEntity.class);
-                // Hand-aware entry point: it flags the attack as externally driven and routes to the main hand, which is
-                // what the biped controller reads. The no-argument onAttack() left the swing on the wrong arm.
+
                 onAttack = Class.forName(LIVING_ENTITY_DATA, false, loader)
                         .getMethod("onExternalAttack", net.minecraft.world.InteractionHand.class);
             }
@@ -192,7 +140,6 @@ public final class MobendsAddon {
         }
     }
 
-    /** Called once from client setup. Does nothing when MoBends is not installed. */
     public static void registerIfPresent() {
         if (attempted) {
             return;
@@ -203,10 +150,7 @@ public final class MobendsAddon {
         }
         try {
             register();
-            // The gun mods ship MoBends animation packs, and a pack drives the arm bones itself — anything written after
-            // it still loses, which is why writing the pose in three different places changed nothing on screen. This is
-            // exactly what the standalone gun-fix mod does: drop those packs so the pose written by this mod is the last
-            // word. Unregistering a name that was never registered is harmless.
+
             goblinbob.mobends.api.animation.MoBendsAnimationControl.unregister("tacz");
             goblinbob.mobends.api.animation.MoBendsAnimationControl.unregister("superbwarfare");
         } catch (ReflectiveOperationException | RuntimeException | LinkageError exception) {
@@ -262,10 +206,8 @@ public final class MobendsAddon {
         Method registerAddon = addonsClass.getMethod("registerAddon", String.class, iAddon);
         registerAddon.invoke(null, ADDON_ID, addon);
 
-        // MoBends may have already flushed its queue during its own client setup, so flush again.
         addonsClass.getMethod("flushPending").invoke(null);
 
-        // Verify the registration actually stuck; "registered" alone does not prove MoBends kept it.
         boolean present = false;
         Object registered = addonsClass.getMethod("getRegistered").invoke(null);
         if (registered instanceof Iterable<?> iterable) {
@@ -279,7 +221,6 @@ public final class MobendsAddon {
         ReturnCapsuleMod.LOGGER.info("[humanoid] MoBends addon '{}' registered={}", ADDON_ID, present);
     }
 
-    /** One {@code registerNewEntity} call with the same shape MoBends uses for its own humanoid mobs. */
     private static void registerEntity(Object registry, Object dataFactory, Object mutatorFactory,
                                        ClassLoader loader) throws ReflectiveOperationException {
         Class<?> iDataFactory = Class.forName(I_DATA_FACTORY, false, loader);
@@ -296,8 +237,7 @@ public final class MobendsAddon {
                 String.class, String.class, Class.class,
                 iDataFactory, iMutatorFactory, mutatedRenderer, iPreviewer,
                 String[].class, String[].class);
-        // An explicit key is mandatory: without it MoBends derives the EntityType from class.getSimpleName() and
-        // throws when the registry path does not happen to match.
+
         Object key = register.invoke(registry, ADDON_ID, "entity.returncapsule.base_humanoid", BaseHumanoid.class,
                 dataFactory, mutatorFactory, renderer, previewer, animations, parts);
         registeredKey = key instanceof String name ? name : null;
@@ -306,16 +246,6 @@ public final class MobendsAddon {
         enableAnimation(key, loader);
     }
 
-    /**
-     * Turns animation on for the freshly registered bender.
-     * <p>
-     * Registering only creates the bender; whether it animates is a per-key flag owned by
-     * {@code EntityBenderRegistry}, and a key that MoBends' own config never mentioned stays off. MoBends applies that
-     * configuration once during its client setup, which may run before or after this registration, so the addon has to
-     * repeat what {@code BenderDiscovery} does: read the config entry (defaulting to enabled) and set the flag.
-     * <p>
-     * This mirrors the CNPC/MoBends compatibility mod, which registers player-model humanoids through the same API.
-     */
     private static void enableAnimation(Object key, ClassLoader loader) throws ReflectiveOperationException {
         Class<?> registryClass = Class.forName(BENDER_REGISTRY, false, loader);
         Object registry = registryClass.getField("instance").get(null);
@@ -335,7 +265,6 @@ public final class MobendsAddon {
         ReturnCapsuleMod.LOGGER.info("[humanoid] MoBends animation active for {}: {}", key, animated);
     }
 
-    /** MoBends' own per-key switch, defaulting to enabled when no config entry exists. */
     private static boolean configuredAnimate(String key, ClassLoader loader) {
         try {
             Class<?> configClass = Class.forName(CORE_CLIENT_CONFIG, false, loader);
@@ -350,7 +279,6 @@ public final class MobendsAddon {
         }
     }
 
-    /** Reads one of MoBends' own {@code String[]} tables so we do not drift from its definitions. */
     private static String[] staticTable(String fieldName, String[] fallback) {
         try {
             Class<?> addon = Class.forName(DEFAULT_ADDON, false, MobendsAddon.class.getClassLoader());

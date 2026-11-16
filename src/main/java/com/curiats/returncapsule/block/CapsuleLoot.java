@@ -3,7 +3,6 @@ package com.curiats.returncapsule.block;
 import com.curiats.returncapsule.compat.BladeLoot;
 import com.curiats.returncapsule.compat.LootLayout;
 import com.curiats.returncapsule.compat.TaCZIntegration;
-import com.curiats.returncapsule.compat.TransportLoot;
 import com.curiats.returncapsule.loot.BulkCargo;
 import com.curiats.returncapsule.loot.Supplies;
 import com.curiats.returncapsule.loot.TieredLoot;
@@ -45,10 +44,7 @@ final class CapsuleLoot {
         if (!(this.owner.getLevel() instanceof ServerLevel server)) {
             return;
         }
-        
-        
-        
-        
+
         RandomSource random = server.random;
         SummonTier tier = this.owner.getTier();
         if (this.phase == Phase.UNASSIGNED) {
@@ -107,7 +103,7 @@ final class CapsuleLoot {
                 this.phase = Phase.valueOf(tag.getString(TAG_PHASE));
                 return;
             } catch (IllegalArgumentException ignored) {
-                
+
             }
         }
         if (tag.getBoolean(TAG_GENERATED)) {

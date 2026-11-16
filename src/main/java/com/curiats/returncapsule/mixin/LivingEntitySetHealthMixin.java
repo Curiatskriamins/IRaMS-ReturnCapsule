@@ -9,16 +9,6 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-/**
- * Turns raw health writes into ordinary damage.
- * <p>
- * Several hostile mods, SRP among them, do not attack through {@code hurt} at all: they call {@code setHealth} directly
- * (see {@code EntityParasiteBase.attackEntityAsMobMinimum}). That skips armour, blocking, the per-hit ceiling and every
- * other protective layer, and it skips {@code die} as well, so the entity falls over with a vanilla animation and no death
- * handling at all. Converting the write into a hit is the fix; clamping it was not.
- * <p>
- * Direct writes made from inside our own {@code hurt} are passed through untouched, otherwise the conversion would recurse.
- */
 @Mixin(LivingEntity.class)
 public abstract class LivingEntitySetHealthMixin {
     @Inject(method = "setHealth", at = @At("HEAD"), cancellable = true)
@@ -35,12 +25,12 @@ public abstract class LivingEntitySetHealthMixin {
             return;
         }
         if (humanoid.isApplyingHit() || humanoid.bypassesProtections()) {
-            return;   // a real hit, or an administrator: leave the write alone
+            return;
         }
         float current = humanoid.getHealth();
         float loss = current - health;
         if (loss <= 0.0F) {
-            return;   // healing and no-ops are handled by the heal lock
+            return;
         }
         ci.cancel();
         humanoid.setConvertedHit(true);

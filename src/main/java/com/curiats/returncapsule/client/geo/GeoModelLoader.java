@@ -21,7 +21,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
- 
 public final class GeoModelLoader {
     private static final Logger LOGGER = ReturnCapsuleMod.LOGGER;
     private static final String LID_BONE = "GJ1";
@@ -202,7 +201,6 @@ public final class GeoModelLoader {
         return (float) Math.toRadians(degrees);
     }
 
-     
     private static final class Baker {
         private final boolean glow;
         private final List<GeoFace> staticFaces = new ArrayList<>();
@@ -232,8 +230,7 @@ public final class GeoModelLoader {
 
             boolean lid = insideLid || LID_BONE.equals(bone.name);
             if (lid && !insideLid) {
-                
-                
+
                 Vector3f shift = new Vector3f(LID_SHIFT_X, LID_SHIFT_Y, LID_SHIFT_Z);
                 new Matrix3f(parent).transform(shift);
                 this.lidShift.set(shift);

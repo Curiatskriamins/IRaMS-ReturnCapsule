@@ -12,8 +12,6 @@ import net.minecraft.world.entity.MobType;
 import net.minecraft.world.entity.ai.attributes.Attribute;
 import net.minecraft.world.entity.ai.attributes.AttributeModifier;
 import net.minecraft.world.entity.ai.attributes.Attributes;
-import net.minecraft.world.item.EnchantedBookItem;
-import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.ShieldItem;
@@ -22,21 +20,14 @@ import net.minecraft.world.item.enchantment.EnchantmentHelper;
 import net.minecraft.world.item.enchantment.Enchantments;
 import net.minecraft.world.level.Level;
 
-import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
-/**
- * Weapon bookkeeping for a humanoid: what a stack is, the built-in fallback kit, and how to compare two weapons.
- * <p>
- * Both weapon systems are optional: with neither TaCZ nor a slashblade mod installed the humanoids still fall back to
- * their built-in netherite sword, so they always have something to swing.
- */
 public final class HumanoidWeapons {
-    /** Forced enchantment levels of the built-in sword. Deliberately far beyond vanilla limits. */
+
     private static final int BUILTIN_SHARPNESS = 30;
     private static final int BUILTIN_KNOCKBACK = 2;
-    /** Vanilla player baselines, used when comparing weapons by damage per second. */
+
     private static final double BASE_ATTACK_DAMAGE = 1.0D;
     private static final double BASE_ATTACK_SPEED = 4.0D;
 
@@ -53,11 +44,6 @@ public final class HumanoidWeapons {
         return WeaponKind.NONE;
     }
 
-    /**
-     * A blade is whatever the slashblade mod's own item class says it is. The namespace rule is only a fallback for
-     * forks that rename that class, and it additionally requires the item to be damageable so that
-     * {@code slashblade:proudsoul} and friends are not mistaken for weapons.
-     */
     public static boolean isBlade(ItemStack stack) {
         if (isSlashBladeModItem(stack)) {
             return false;
@@ -69,7 +55,6 @@ public final class HumanoidWeapons {
         return id != null && matchesBladeNamespace(id.getNamespace());
     }
 
-    /** The built-in melee fallback: unbreakable netherite sword with a forced Sharpness/Knockback level. */
     public static ItemStack builtinSword() {
         ItemStack sword = new ItemStack(Items.NETHERITE_SWORD);
         sword.getOrCreateTag().putBoolean("Unbreakable", true);
@@ -78,15 +63,10 @@ public final class HumanoidWeapons {
         return sword;
     }
 
-    /** True for the built-in sword, which is part of the kit and must never be dropped as loot. */
     public static boolean isBuiltinSword(ItemStack stack) {
         return stack.is(Items.NETHERITE_SWORD) && stack.isEnchanted();
     }
 
-    /**
-     * Anything that behaves like a shield. Modded shields are covered by the use-animation test rather than by class,
-     * so a shield from another mod is treated the same as the vanilla one.
-     */
     public static boolean isShield(ItemStack stack) {
         if (stack.isEmpty()) {
             return false;
@@ -101,17 +81,14 @@ public final class HumanoidWeapons {
         return new ItemStack(Items.SHIELD);
     }
 
-    /** A starting gun the profile is allowed to use, or {@link ItemStack#EMPTY} when none is installed. */
     public static ItemStack startingGun(RandomSource random) {
         return TaczRifles.randomServiceGun(random);
     }
 
-    /** The second gun: long range, for targets past a rifle's reach. */
     public static ItemStack startingLongGun(RandomSource random) {
         return TaczRifles.randomLongGun(random);
     }
 
-    /** A starting melee weapon: the profile's blade if it is allowed and installed, otherwise the built-in sword. */
     public static ItemStack startingMelee(HumanoidProfile profile, Level level, RandomSource random) {
         if (profile.weapons().allowsBlade()) {
             ItemStack blade = builtinSword();
@@ -122,11 +99,6 @@ public final class HumanoidWeapons {
         return builtinSword();
     }
 
-    /**
-     * Damage per second of a melee weapon, used to pick the better of the two melee options. Enchantment damage is
-     * included, which is what makes the built-in Sharpness 30 sword competitive with a named blade; TaCZ guns are not
-     * compared because their damage never reaches the item's attributes.
-     */
     public static double dps(ItemStack stack) {
         if (stack.isEmpty()) {
             return 0.0D;
@@ -138,7 +110,6 @@ public final class HumanoidWeapons {
         return damage * Math.max(0.1D, speed);
     }
 
-    /** Attack speed modifier of the held item, added on top of the player baseline. */
     public static double attackSpeedBonus(ItemStack stack) {
         if (stack.isEmpty()) {
             return 0.0D;
@@ -146,20 +117,17 @@ public final class HumanoidWeapons {
         return attributeBonus(stack, Attributes.ATTACK_SPEED);
     }
 
-    /** Damage the held item adds on top of the entity's base attack damage. */
     public static double attackBonus(ItemStack stack) {
         if (stack.isEmpty()) {
             return 0.0D;
         }
-        // SlashBlade items do not declare vanilla attack-damage modifiers; their damage lives in the blade state. Without
-        // this the blade added nothing and a humanoid holding one hit exactly like a bare fist.
+
         return attributeBonus(stack, Attributes.ATTACK_DAMAGE)
                 + EnchantmentHelper.getDamageBonus(stack, MobType.UNDEFINED);
     }
 
-    /** Hook for reload-time invalidation. Nothing is cached here any more; the compat layers cache themselves. */
     public static void invalidate() {
-        // Intentionally empty.
+
     }
 
     private static double attributeBonus(ItemStack stack, Attribute attribute) {
@@ -177,7 +145,6 @@ public final class HumanoidWeapons {
         return bonus;
     }
 
-    /** True for anything from the SlashBlade mod. Its weapons are refused outright; see isBlade. */
     private static boolean isSlashBladeModItem(ItemStack stack) {
         if (stack.isEmpty()) {
             return false;

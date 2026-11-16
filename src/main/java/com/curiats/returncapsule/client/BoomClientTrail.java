@@ -10,7 +10,6 @@ import net.minecraft.util.RandomSource;
 import net.minecraft.world.phys.Vec3;
 import org.joml.Vector3f;
 
- 
 public final class BoomClientTrail {
     private static final DustParticleOptions FLAME_DUST =
             new DustParticleOptions(new Vector3f(1.0F, 0.42F, 0.08F), 1.8F);

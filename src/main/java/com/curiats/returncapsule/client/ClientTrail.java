@@ -11,7 +11,6 @@ import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.util.RandomSource;
 import org.joml.Vector3f;
 
- 
 public final class ClientTrail {
     private static final DustParticleOptions TRANSPORT_DUST =
             new DustParticleOptions(new Vector3f(1.0F, 0.05F, 0.05F), 1.4F);
@@ -61,7 +60,6 @@ public final class ClientTrail {
         }
     }
 
-     
     private static void emit(ClientLevel level, RandomSource random, ParticleOptions particle, int count,
                              double cx, double cy, double cz,
                              double halfX, double spreadY, double halfZ,

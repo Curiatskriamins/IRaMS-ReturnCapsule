@@ -4,11 +4,6 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 
-/**
- * The nether star is this mod's shared "expensive key": it gates both the tier III supply summon and
- * every transport capsule launch, so the lookup and the payment live here instead of being duplicated
- * by each item that needs them.
- */
 public final class NetherStars {
     public static boolean has(Player player) {
         if (player.getOffhandItem().is(Items.NETHER_STAR)) {
@@ -22,7 +17,6 @@ public final class NetherStars {
         return false;
     }
 
-    /** Consumes one nether star, taking it from the offhand first so the payment stays predictable. */
     public static void consumeOne(Player player) {
         ItemStack offhand = player.getOffhandItem();
         if (offhand.is(Items.NETHER_STAR)) {

@@ -7,7 +7,6 @@ import net.minecraft.util.RandomSource;
 import net.minecraft.world.Container;
 import net.minecraft.world.item.ItemStack;
 
- 
 public final class BulkCargo {
     public static void fill(Container container, SummonTier tier, RandomSource random) {
         double target = Config.FILL_TARGET.get();

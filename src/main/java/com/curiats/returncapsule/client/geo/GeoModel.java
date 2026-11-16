@@ -1,6 +1,5 @@
 package com.curiats.returncapsule.client.geo;
 
- 
 public final class GeoModel {
     private static final GeoFace[] NO_FACES = new GeoFace[0];
 

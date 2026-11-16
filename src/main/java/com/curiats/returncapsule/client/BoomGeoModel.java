@@ -11,7 +11,6 @@ import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.RenderType;
 import net.minecraft.resources.ResourceLocation;
 
- 
 public final class BoomGeoModel {
     private static final ResourceLocation GEO = ReturnCapsuleMod.id("geo/boom.geo.json");
     public static final ResourceLocation TEXTURE = ReturnCapsuleMod.id("textures/entity/boom.png");

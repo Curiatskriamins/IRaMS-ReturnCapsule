@@ -2,15 +2,9 @@ package com.curiats.returncapsule.entity.humanoid;
 
 import java.util.EnumSet;
 
-/**
- * Runtime switches for testing: which parts of a humanoid's kit it is allowed to use.
- * <p>
- * This exists so a humanoid can be stripped of a weapon system without editing configs or rebuilding, e.g. to test
- * melee behaviour without being shot at. Toggles are global and live for the current game session only.
- */
 public final class HumanoidToggles {
     public enum Slot {
-        /** Both weapon slots at once: ranged and melee. Does not affect the shield. */
+
         ITEM("item"),
         RANGED("ranged"),
         MELEE("melee"),
@@ -42,7 +36,7 @@ public final class HumanoidToggles {
         if (DISABLED.contains(slot)) {
             return false;
         }
-        // "item" is the umbrella switch for the two weapon slots; it never touches the shield.
+
         if (slot == Slot.RANGED || slot == Slot.MELEE) {
             return !DISABLED.contains(Slot.ITEM);
         }

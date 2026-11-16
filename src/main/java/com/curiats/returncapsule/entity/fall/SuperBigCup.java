@@ -20,11 +20,10 @@ import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
- 
 public final class SuperBigCup {
     private static final double MIN_INCIDENCE = 5.0D;
     private static final double MAX_INCIDENCE = 85.0D;
-     
+
     private static final double[] INCIDENCE_FALLBACKS = {15.0D, -15.0D, 30.0D, -30.0D, 45.0D, -45.0D};
     private static final int AZIMUTH_STEPS = 12;
     private static final int[] YAW_OFFSETS = {-90, -45, -20, 0, 20, 45, 90};
@@ -32,7 +31,7 @@ public final class SuperBigCup {
     private static final double CLEAR_EPSILON = 0.05D;
     private static final DustParticleOptions MARKER_DUST =
             new DustParticleOptions(new Vector3f(1.0F, 1.0F, 1.0F), 1.2F);
-     
+
     private static final int SPIRAL_DURATION = 120;
     private static final double SPIRAL_TURNS = 2.0D;
     private static final double SPIRAL_RADIUS = 50.0D;
@@ -46,10 +45,10 @@ public final class SuperBigCup {
     private UUID lockedEntity;
     private Vec3 targetPoint;
     private boolean pointTarget;
-     
+
     private final Vec3 approachOffset;
     private final double incidenceDegrees;
-     
+
     private final double spiralAngle;
     private int spiralTicks;
 
@@ -64,7 +63,6 @@ public final class SuperBigCup {
         this.pointTarget = pointTarget;
     }
 
-     
     public static synchronized double nextIncidence() {
         if (incidenceSequence == null) {
             List<Double> list = new ArrayList<>(201);
@@ -80,7 +78,6 @@ public final class SuperBigCup {
         return angle;
     }
 
-     
     public static SuperBigCup create(ServerLevel level, Vec3 targetPoint, @Nullable UUID lockedEntity,
                                      double incidenceDegrees, double playerDistance,
                                      @Nullable Vec3 playerPos,
@@ -92,8 +89,7 @@ public final class SuperBigCup {
         double baseAngle = Mth.clamp(incidenceDegrees, MIN_INCIDENCE, MAX_INCIDENCE);
         double angleRad = Math.toRadians(baseAngle);
         double cos = Math.max(0.05D, Math.cos(angleRad));
-        
-        
+
         double horizontal = Math.max(0.0D, playerDistance) + radius * cos;
         double distance = horizontal / cos;
         double baseAzimuth = playerPos == null
@@ -108,7 +104,6 @@ public final class SuperBigCup {
                 lockedEntity == null);
     }
 
-     
     public static SuperBigCup restore(ServerLevel level, @Nullable UUID lockedEntity,
                                       Vec3 fallbackPoint, Vec3 approachOffset, double incidenceDegrees,
                                       boolean pointTarget) {
@@ -122,11 +117,8 @@ public final class SuperBigCup {
         return new SuperBigCup(level, lockedEntity, point, approachOffset, incidenceDegrees, pointTarget);
     }
 
-     
     public void update(Vec3 from) {
-        
-        
-        
+
         if (this.spiralTicks < SPIRAL_DURATION) {
             this.spiralTicks++;
         }
@@ -146,7 +138,6 @@ public final class SuperBigCup {
         return this.targetPoint;
     }
 
-     
     public Vec3 aimPoint() {
         if (this.spiralTicks >= SPIRAL_DURATION) {
             return this.targetPoint;
@@ -173,7 +164,6 @@ public final class SuperBigCup {
                 start.z * w0 + control.z * w1 + end.z * w2);
     }
 
-     
     public Vec3 launchPoint() {
         return this.targetPoint.add(this.approachOffset);
     }
@@ -199,7 +189,6 @@ public final class SuperBigCup {
         return uuid.equals(this.lockedEntity);
     }
 
-     
     public Vec3 steer(Vec3 from, Vec3 desired, @Nullable Entity source) {
         Vec3 direct = this.targetPoint.subtract(from);
         double distance = direct.length();
@@ -234,7 +223,6 @@ public final class SuperBigCup {
         return best;
     }
 
-     
     public void markerParticles() {
         Vec3 point = this.targetPoint;
         double x = point.x;
@@ -254,7 +242,6 @@ public final class SuperBigCup {
         return clearDistance(this.level, from, to, source) >= from.distanceTo(to) - CLEAR_EPSILON;
     }
 
-     
     private static double clearDistance(net.minecraft.world.level.Level level, Vec3 from, Vec3 to,
                                         @Nullable Entity source) {
         if (from.distanceToSqr(to) < 1.0E-6D) {
@@ -285,7 +272,7 @@ public final class SuperBigCup {
         double bestClear = -1.0D;
         for (int index = 0; index < angles.size(); index++) {
             double angle = angles.get(index);
-            
+
             if (index > 0 && isReserved(angle, reservedAngles)) {
                 continue;
             }

@@ -25,12 +25,6 @@ import org.lwjgl.opengl.GL11;
 
 import javax.annotation.Nullable;
 
-/**
- * Draws the red reticle over the entity (or point) a cruise bomb is locked onto.
- * <p>
- * Runs as its own level stage pass rather than inside {@code BoomRenderer} because the marker is
- * usually much further away than the bomb itself, so it must not be culled together with the bomb.
- */
 public final class KillMarkerRenderer {
     private static final ResourceLocation TEXTURE =
             ReturnCapsuleMod.id("textures/entity/kill_ssag.png");
@@ -48,11 +42,6 @@ public final class KillMarkerRenderer {
                 RenderSystem.defaultBlendFunc();
             });
 
-    /**
-     * The marker has to stay readable through terrain, so depth testing is disabled here instead of
-     * clearing the framebuffer depth buffer: a mid frame clear would also punch through every later
-     * stage (hand, weather) and costs a full buffer clear for every marker.
-     */
     private static final RenderType MARKER = RenderType.create(
             "returncapsule_kill_marker",
             DefaultVertexFormat.NEW_ENTITY,
@@ -119,10 +108,6 @@ public final class KillMarkerRenderer {
         }
     }
 
-    /**
-     * Returns the world point the reticle sits on, or {@code null} when the server has not synced a
-     * target yet (the bomb syncs it a few ticks after launch).
-     */
     @Nullable
     private static Vec3 anchorOf(Minecraft minecraft, BoomEntity bomb, float partial) {
         int targetId = bomb.clientLockedEntity();
@@ -139,11 +124,6 @@ public final class KillMarkerRenderer {
         return point.add(0.0D, 1.5D, 0.0D);
     }
 
-    /**
-     * Only runs while a bomb is actually in flight, so normal play stays quiet. The two counts answer
-     * "is the bomb on the client" (bombs) and "did it have a synced anchor" (markers) in one line:
-     * a fired bomb with no line at all means the entity never reached the client.
-     */
     private static void logDiagnostics(Minecraft minecraft, int bombs, int markers) {
         if (minecraft.level == null) {
             return;

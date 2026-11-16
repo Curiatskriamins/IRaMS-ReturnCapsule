@@ -23,12 +23,11 @@ import net.minecraft.world.phys.Vec3;
 
 import javax.annotation.Nullable;
 
- 
 public final class BoomExplosion {
     public enum Mode {
-         
+
         ANCHOR,
-         
+
         PREMATURE
     }
 
@@ -37,10 +36,6 @@ public final class BoomExplosion {
         double radius = Config.boomRadius();
         float power = Config.BOOM_POWER.get().floatValue();
 
-        
-        
-        
-        
         if (Config.BOOM_DESTROY_TERRAIN.get()) {
             level.explode(bomb, center.x, center.y, center.z, power, Level.ExplosionInteraction.BLOCK);
         }
@@ -50,9 +45,6 @@ public final class BoomExplosion {
         spawnParticles(level, center, radius);
         CapsuleFire.spread(level, center, radius, Config.BOOM_FIRE_CHANCE.get());
 
-        
-        
-        
         if (Config.SCREEN_SHAKE.get()) {
             ShakeBurst.around(level, center.x, center.y, center.z, Config.SHAKE_RADIUS.get(), 25, 0);
         }

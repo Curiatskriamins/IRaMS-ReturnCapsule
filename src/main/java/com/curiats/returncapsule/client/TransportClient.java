@@ -11,7 +11,6 @@ import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 
-
 @Mod.EventBusSubscriber(modid = ReturnCapsuleMod.MODID, bus = Mod.EventBusSubscriber.Bus.FORGE, value = Dist.CLIENT)
 public final class TransportClient {
     private static CameraType previousCamera;
@@ -29,8 +28,7 @@ public final class TransportClient {
 
         boolean useDown = minecraft.options.keyUse.isDown();
         if (riding && !wasRiding) {
-            
-            
+
             wasUseDown = useDown;
         } else if (riding && useDown && !wasUseDown && minecraft.screen == null) {
             ModNetwork.openTransportMenu(((TransportCapsuleEntity) player.getVehicle()).getId());

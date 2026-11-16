@@ -32,7 +32,6 @@ public final class CapsuleParticles {
         level.sendParticles(particle, x, y, z, scaled, dx, dy, dz, speed);
     }
 
-     
     public static void within(ServerLevel level, double radius, ParticleOptions particle,
                               double x, double y, double z, int count,
                               double dx, double dy, double dz, double speed) {

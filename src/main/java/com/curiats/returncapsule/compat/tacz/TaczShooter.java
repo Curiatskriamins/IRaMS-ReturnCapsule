@@ -8,20 +8,6 @@ import net.minecraft.world.item.ItemStack;
 import java.lang.reflect.Method;
 import java.util.function.Supplier;
 
-/**
- * Firing bridge between a humanoid and TaCZ.
- * <p>
- * TaCZ is not a compile time dependency, so everything is reflective. The important detail is that TaCZ does not
- * need a mob-specific API: its mixin makes every {@code LivingEntity} implement {@code IGunOperator}, so the same
- * draw/aim/shoot calls the client uses for a player also work for a mob.
- * <p>
- * Two sequencing rules come from TaCZ's implementation and are handled here:
- * <ul>
- *   <li>{@code shoot} returns {@code NOT_DRAW} until {@code draw} has been called once for the current gun, so the
- *       first attack after equipping only draws the weapon;</li>
- *   <li>{@code draw} starts a put-away cooldown, so a shot immediately after it reports {@code IS_DRAWING}.</li>
- * </ul>
- */
 public final class TaczShooter {
     private static final String OPERATOR_CLASS = "com.tacz.guns.api.entity.IGunOperator";
     private static final String AMMO_TAG = "GunCurrentAmmoCount";
@@ -31,7 +17,7 @@ public final class TaczShooter {
     private static volatile boolean resolved;
     private static volatile boolean broken;
     private static final java.util.Set<String> reportedOutcomes = java.util.concurrent.ConcurrentHashMap.newKeySet();
-    /** Entities whose shot pacing has already been reported. */
+
     private static final java.util.Set<Integer> shotsLogged = java.util.concurrent.ConcurrentHashMap.newKeySet();
     private static Method fromLivingEntity;
     private static Method draw;
@@ -42,10 +28,6 @@ public final class TaczShooter {
     private static Method synShootCoolDown;
     private static Method bolting;
 
-    /**
-     * Keeps the mob's aim state in sync with its combat state. Cheap to call every tick: TaCZ's aim call is a
-     * data-field check, and it is also what drives the third-person gun pose on the client.
-     */
     public static void tick(NeutralHumanoid mob) {
         if (!resolve() || !mob.holdsGun()) {
             return;
@@ -57,7 +39,6 @@ public final class TaczShooter {
         }
     }
 
-    /** Clears the aim pose when the mob stops carrying a rifle. */
     public static void aimOff(NeutralHumanoid mob) {
         if (!resolve()) {
             return;
@@ -69,7 +50,6 @@ public final class TaczShooter {
         }
     }
 
-    /** Fires one round at the current target. Called from the combat goal on the server. */
     public static void fire(NeutralHumanoid mob, LivingEntity target) {
         if (!resolve()) {
             return;
@@ -86,13 +66,12 @@ public final class TaczShooter {
                 mob.setGunDrawn(true);
                 return;
             }
-            // Let TaCZ's own synced cooldowns decide when the weapon is ready. Without this the AI pulls the trigger
-            // through the whole draw animation and every shot is refused with IS_DRAWING.
+
             if (!ready(operator)) {
                 return;
             }
             TaczRifles.prepareForMob(gun);
-            // TaCZ rejects a shot while the shooter is sprinting; a guard closing in must not be locked out.
+
             mob.setSprinting(false);
             Object result = shoot.invoke(operator,
                     (Supplier<Float>) mob::getXRot, (Supplier<Float>) mob::getYHeadRot);
@@ -106,7 +85,6 @@ public final class TaczShooter {
         }
     }
 
-    /** True when both the draw and the shot cooldown TaCZ reports are finished. */
     private static Method bolting() {
         return bolting;
     }
@@ -123,20 +101,15 @@ public final class TaczShooter {
         return value instanceof Number number ? number.longValue() : 0L;
     }
 
-    /**
-     * Recovers from the two outcomes that are our fault rather than TaCZ's: a lost draw state (for example after a
-     * weapon swap) and an empty magazine. Everything else is TaCZ saying "not now" and is left to the next attack tick.
-     */
     private static void recover(String outcome, NeutralHumanoid mob, ItemStack gun) {
         switch (outcome) {
             case "NEED_BOLT" -> {
-                // Bolt-action rifles will not fire again until the bolt is cycled, and a mob has no player input to do
-                // it. TaCZ exposes the action, so the humanoid cycles its own bolt.
+
                 if (bolt != null) {
                     try {
                         bolt.invoke(operator(mob));
                     } catch (ReflectiveOperationException | RuntimeException ignored) {
-                        // Nothing better to do; the next attempt will report the same outcome.
+
                     }
                 }
             }
@@ -147,16 +120,11 @@ public final class TaczShooter {
                 TaczRifles.prepareForMob(gun);
             }
             default -> {
-                // COOL_DOWN / IS_DRAWING / IS_RELOADING / IS_BOLTING: nothing to fix, just wait a tick.
+
             }
         }
     }
 
-    /**
-     * TaCZ reports why a shot did not happen, and each reason has a completely different fix ({@code NOT_DRAW} means
-     * the draw call did not take, {@code NO_AMMO} means the script-level ammo check refused, {@code COOL_DOWN} is just
-     * cadence). Logging each distinct outcome once turns "the gun never fires" into a concrete answer in the log.
-     */
     private static void reportOutcome(String outcome, LivingEntity target) {
         if ("SUCCESS".equals(outcome)) {
             reportedOutcomes.clear();

@@ -9,17 +9,6 @@ import net.minecraftforge.event.entity.living.LivingHurtEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 
-/**
- * Applies the humanoid's percentage damage to whatever it damages, by whatever means.
- * <p>
- * The earlier version only did this on melee hits, so a humanoid fighting with a rifle applied no percentage damage and
- * no heal lock at all — the wounded enemy simply regenerated back to full. Forge's damage event covers every source the
- * humanoid produces, including TaCZ rounds, which are entities of their own.
- * <p>
- * The share is taken straight out of health rather than sent back through damage. Routing it through damage would let
- * armour, resistance and SRP's adaptation reduce it, which defeats the point of a percentage; and the amount is also
- * recorded in {@link DamageLock} so the victim cannot heal it back.
- */
 @Mod.EventBusSubscriber(modid = ReturnCapsuleMod.MODID)
 public final class HumanoidDamageEvents {
     private HumanoidDamageEvents() {

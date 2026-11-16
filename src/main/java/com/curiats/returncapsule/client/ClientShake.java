@@ -17,13 +17,6 @@ import net.minecraftforge.eventbus.api.EventPriority;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 
-
-
-
-
-
-
-
 @Mod.EventBusSubscriber(modid = ReturnCapsuleMod.MODID, bus = Mod.EventBusSubscriber.Bus.FORGE, value = Dist.CLIENT)
 public final class ClientShake {
     private static final int SHAKE_TICKS = 25;
@@ -60,10 +53,6 @@ public final class ClientShake {
         event.setRoll(event.getRoll() + Mth.sin(t * 11.0F) * amplitude * 0.45F);
     }
 
-    
-
-
-
     @SubscribeEvent(priority = EventPriority.LOWEST)
     public static void onPlaySound(PlaySoundEvent event) {
         SoundInstance sound = event.getSound();
@@ -72,7 +61,7 @@ public final class ClientShake {
         }
         float volume;
         try {
-            
+
             if (sound.getSound() == null) {
                 return;
             }
@@ -84,8 +73,6 @@ public final class ClientShake {
             return;
         }
 
-        
-        
         Minecraft minecraft = Minecraft.getInstance();
         if (lastRumble != null) {
             minecraft.getSoundManager().stop(lastRumble);

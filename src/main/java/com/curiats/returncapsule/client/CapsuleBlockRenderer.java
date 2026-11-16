@@ -20,9 +20,7 @@ public class CapsuleBlockRenderer implements BlockEntityRenderer<CapsuleBlockEnt
         Direction facing = blockEntity.getBlockState().getValue(CapsuleBlock.FACING);
         pose.pushPose();
         pose.translate(0.5D, 0.0D, 0.5D);
-        
-        
-        
+
         pose.mulPose(Axis.YP.rotationDegrees(180.0F - facing.toYRot() + Config.MODEL_YAW_OFFSET.get().floatValue()));
         CapsuleGeoModel.get().render(pose, buffer, packedLight, overlay, blockEntity.getLidProgress(partialTick));
         pose.popPose();

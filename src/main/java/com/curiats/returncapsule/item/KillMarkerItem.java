@@ -42,7 +42,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
- 
 public class KillMarkerItem extends Item {
     private static final int USE_DURATION = 72000;
     private static final Map<UUID, Volley> VOLLEYS = new HashMap<>();
@@ -295,7 +294,6 @@ public class KillMarkerItem extends Item {
         return bomb;
     }
 
-     
     @Nullable
     private static Payment pay(ServerPlayer player) {
         if (player.isCreative()) {
@@ -315,7 +313,6 @@ public class KillMarkerItem extends Item {
         return null;
     }
 
-     
     private static void refund(ServerPlayer player, Payment payment) {
         if (payment.item() == null || payment.count() <= 0) {
             return;
@@ -354,11 +351,9 @@ public class KillMarkerItem extends Item {
         inventory.setChanged();
     }
 
-     
     @Nullable
     private static Shot resolveShot(ServerPlayer player, Level level, Set<UUID> excluded) {
-        
-        
+
         int simulation = Math.max(1, player.getServer().getPlayerList().getSimulationDistance());
         int margin = Config.BOOM_SPAWN_MARGIN_CHUNKS.get();
         double simulationLimit = Math.max(8.0D, (simulation - margin) * 16.0D - 16.0D);
@@ -430,7 +425,6 @@ public class KillMarkerItem extends Item {
         return best == null ? null : new Shot(best.getBoundingBox().getCenter(), best.getUUID());
     }
 
-     
     public static void refundVolley(ServerPlayer player) {
         Volley volley = VOLLEYS.remove(player.getUUID());
         if (volley == null) {

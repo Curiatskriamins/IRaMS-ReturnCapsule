@@ -11,7 +11,6 @@ public final class ModEffects {
     public static final DeferredRegister<MobEffect> EFFECTS =
             DeferredRegister.create(ForgeRegistries.MOB_EFFECTS, ReturnCapsuleMod.MODID);
 
-    
     public static final RegistryObject<MobEffect> SHAKE =
             EFFECTS.register("shake", () -> new MobEffect(MobEffectCategory.NEUTRAL, 0xFFFFFF) {
             });

@@ -67,7 +67,7 @@ public final class TaczLootFiller {
             return;
         }
         if (wanted == available) {
-            
+
             List<ResourceLocation> all = new ArrayList<>(attachments);
             shuffle(all, random);
             for (ResourceLocation id : all) {

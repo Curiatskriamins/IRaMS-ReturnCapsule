@@ -44,7 +44,6 @@ public final class ModEntities {
                     .updateInterval(1)
                     .build(ReturnCapsuleMod.id("boom").toString()));
 
-    /** Player sized hitbox; the profile is bound through the factory so both sides agree without syncing it. */
     private static EntityType<NeutralHumanoid> humanoid(HumanoidProfile profile) {
         return EntityType.Builder
                 .<NeutralHumanoid>of((type, level) -> new BaseHumanoid(type, level),

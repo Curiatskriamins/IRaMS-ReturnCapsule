@@ -22,7 +22,6 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
- 
 public final class ModItemPool {
     private static final Set<String> INTERNAL_NAMESPACES =
             Set.of("minecraft", "forge", "returncapsule", "fml", "neoforge");
@@ -63,7 +62,7 @@ public final class ModItemPool {
             if (stack.isEmpty()) {
                 continue;
             }
-            
+
             stack.setCount(Math.max(1, Math.min(1 + random.nextInt(tier.maxLootStack()),
                     stack.getMaxStackSize())));
             if (com.curiats.returncapsule.util.LootLimits.isMusicDisc(stack)) {
@@ -80,7 +79,6 @@ public final class ModItemPool {
         container.setChanged();
     }
 
-     
     private static ItemStack randomDistinct(RandomSource random, SummonTier tier, Set<Item> picked) {
         ItemStack fallback = ItemStack.EMPTY;
         for (int attempt = 0; attempt < 5; attempt++) {
@@ -145,7 +143,7 @@ public final class ModItemPool {
         if (Config.MOD_LOOT_EXCLUDED_ITEMS.get().contains(id.toString())) {
             return false;
         }
-        
+
         if (item instanceof BlockItem || item instanceof ArmorItem || isSpawnEgg(id, item)) {
             return false;
         }
@@ -158,7 +156,6 @@ public final class ModItemPool {
         return stack.getMaxStackSize() > 1 || stack.getMaxDamage() > 0;
     }
 
-     
     private static boolean isSpawnEgg(ResourceLocation id, Item item) {
         if (item instanceof SpawnEggItem) {
             return true;

@@ -1,6 +1,5 @@
 package com.curiats.returncapsule.entity;
 
- 
 public final class BoomClientHooks {
     @FunctionalInterface
     public interface TrailHook {

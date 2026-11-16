@@ -1,7 +1,6 @@
 package com.curiats.returncapsule.block;
 
 import com.curiats.returncapsule.Config;
-import com.curiats.returncapsule.registry.ModBlocks;
 import com.curiats.returncapsule.registry.ModItems;
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;

@@ -15,7 +15,6 @@ import net.minecraftforge.forgespi.language.IModFileInfo;
 
 import java.nio.file.Path;
 
- 
 @Mod.EventBusSubscriber(modid = ReturnCapsuleMod.MODID, bus = Mod.EventBusSubscriber.Bus.MOD, value = Dist.CLIENT)
 public final class BuiltinSoundPack {
     private static final String FOLDER = "IRaMS_titan_fall";

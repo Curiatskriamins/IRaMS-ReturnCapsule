@@ -5,15 +5,6 @@ import com.curiats.returncapsule.entity.humanoid.NeutralHumanoid;
 import goblinbob.mobends.core.client.model.IModelPart;
 import goblinbob.mobends.standard.data.BipedEntityData;
 
-/**
- * Puts the arms into a two-handed hold when the humanoid is carrying a firearm.
- * <p>
- * Written as one static call rather than a bit of its own because every entry point in MoBends' own pose code is closed to
- * a gun: {@code BipedActionController.getAction} needs a crossbow use animation, {@code CrossbowHoldAnimationBit
- * .getChargedCrossbowArm} needs {@code UseAnim.CROSSBOW}, and its {@code perform} returns early on a null arm. Those are
- * item properties, not flags. Applying the rotations directly to the biped data, after the controller has run, is the only
- * place that is both reachable and last to write.
- */
 public final class GunPose {
     private static final float TO_DEGREES = 180F / (float) Math.PI;
     private static final float HOLDING_PITCH = (-1.5707964F + 0.1F) * TO_DEGREES;

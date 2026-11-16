@@ -8,15 +8,6 @@ import net.minecraftforge.event.entity.living.LivingHurtEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 
-/**
- * Two jobs, both driven by the same damage event:
- * <ul>
- *   <li>resolving a humanoid's shot — when damage on its target is attributed to it, the aim solution was right and
- *       stays;</li>
- *   <li>feeding the shared squad memory whenever somebody on our side is attacked, so a mob that picks a fight with a
- *       player or with one humanoid becomes a known target for the rest of them.</li>
- * </ul>
- */
 @Mod.EventBusSubscriber(modid = ReturnCapsuleMod.MODID, bus = Mod.EventBusSubscriber.Bus.FORGE)
 public final class HumanoidAlerts {
     @SubscribeEvent

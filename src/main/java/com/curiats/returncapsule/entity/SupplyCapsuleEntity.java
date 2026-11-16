@@ -94,8 +94,7 @@ public class SupplyCapsuleEntity extends FallingCapsuleEntity {
         server.playSound(null, x, y, z, SoundEvents.GENERIC_EXPLODE, SoundSource.BLOCKS,
                 Config.IMPACT_SOUND_VOLUME.get().floatValue(),
                 Config.IMPACT_SOUND_PITCH.get().floatValue());
-        
-        
+
         server.playSound(null, x, y, z, ModSounds.CAPSULE_IMPACT.get(), SoundSource.BLOCKS,
                 Config.IMPACT_THUD_VOLUME.get().floatValue(),
                 Config.IMPACT_THUD_PITCH.get().floatValue());
@@ -156,13 +155,12 @@ public class SupplyCapsuleEntity extends FallingCapsuleEntity {
     @Override
     protected void addAdditionalSaveData(CompoundTag tag) {
         super.addAdditionalSaveData(tag);
-        
+
         if (this.anchor != null) {
             tag.putLong(TAG_LEGACY_TARGET, this.anchor.asLong());
         }
     }
 
-    
     public boolean isImpacted() {
         return this.impacted;
     }

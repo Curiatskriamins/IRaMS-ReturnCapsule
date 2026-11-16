@@ -23,7 +23,6 @@ import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 
- 
 public final class ArmorSets {
     private static final List<ArmorItem.Type> SLOTS = List.of(
             ArmorItem.Type.HELMET, ArmorItem.Type.CHESTPLATE,
@@ -73,8 +72,7 @@ public final class ArmorSets {
     }
 
     private static List<Set> build() {
-        
-        
+
         Map<ArmorMaterial, EnumMap<ArmorItem.Type, Item>> byMaterial = new IdentityHashMap<>();
         for (Item item : BuiltInRegistries.ITEM) {
             if (!(item instanceof ArmorItem armor)) {
@@ -111,7 +109,6 @@ public final class ArmorSets {
         return List.copyOf(result);
     }
 
-     
     private static int itemPower(Item item, ArmorItem.Type type, ArmorMaterial material) {
         EquipmentSlot slot = switch (type) {
             case HELMET -> EquipmentSlot.HEAD;

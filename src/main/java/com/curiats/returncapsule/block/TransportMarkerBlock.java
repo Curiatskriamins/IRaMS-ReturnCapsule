@@ -15,7 +15,6 @@ import net.minecraft.world.phys.shapes.VoxelShape;
 
 import javax.annotation.Nullable;
 
-
 public class TransportMarkerBlock extends BaseEntityBlock {
     public TransportMarkerBlock(Properties properties) {
         super(properties);

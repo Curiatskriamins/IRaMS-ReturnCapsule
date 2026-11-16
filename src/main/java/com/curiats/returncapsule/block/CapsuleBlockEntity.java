@@ -104,7 +104,6 @@ public class CapsuleBlockEntity extends RandomizableContainerBlockEntity {
         this.loot.ensureAssigned();
     }
 
-     
     public void prepareLoot(Player player) {
         this.loot.prepareForAccess(player);
     }
@@ -185,8 +184,7 @@ public class CapsuleBlockEntity extends RandomizableContainerBlockEntity {
     @Override
     public void load(CompoundTag tag) {
         super.load(tag);
-        
-        
+
         int saved = tag.getList("Items", Tag.TAG_COMPOUND).size();
         int size = Math.max(this.slots, saved);
         this.items = NonNullList.withSize(size, ItemStack.EMPTY);

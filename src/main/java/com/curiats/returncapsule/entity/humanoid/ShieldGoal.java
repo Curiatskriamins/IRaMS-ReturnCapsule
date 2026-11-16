@@ -4,17 +4,6 @@ import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.ai.goal.Goal;
 
-/**
- * Raises the off-hand shield when a threat is within {@link HumanoidCombatRules#SHIELD_DISTANCE}.
- * <p>
- * A mob blocks through the same vanilla path a player does: {@code startUsingItem} on the shield makes
- * {@code isBlocking()} true, and vanilla then decides whether a given hit is blocked by direction. The item only has to
- * be recognised as a shield, which {@link HumanoidWeapons#isShield} does by class or by block use-animation so that
- * shields from other mods work too.
- * <p>
- * This goal deliberately declares no {@link Flag}s, so it can run alongside the movement and attack goals instead of
- * taking their slots away.
- */
 public class ShieldGoal extends Goal {
     private final NeutralHumanoid mob;
 
@@ -28,8 +17,7 @@ public class ShieldGoal extends Goal {
         if (target == null || !target.isAlive() || !this.mob.hasShield()) {
             return false;
         }
-        // Only while fighting at arm's length. A raised shield while firing looks wrong, and the gunner is not trading
-        // blows anyway.
+
         if (!this.mob.isMeleeStance()) {
             return false;
         }
@@ -49,15 +37,12 @@ public class ShieldGoal extends Goal {
 
     @Override
     public void tick() {
-        // Re-assert every tick: an attack or an equipment update calls stopUsingItem, which silently ends the block and
-        // left the shield doing nothing most of the time.
+
         this.block();
     }
 
     private void block() {
-        // Never block through a swing. `startUsingItem(OFF_HAND)` makes the off hand the "used" hand, and both vanilla
-        // and MoBends read that to decide which arm is attacking — a shield held up permanently turned every attack
-        // after the first into an off-hand attack.
+
         if (this.mob.swinging) {
             if (this.mob.isUsingItem()) {
                 this.mob.stopUsingItem();

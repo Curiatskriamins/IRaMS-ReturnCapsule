@@ -72,7 +72,6 @@ public final class ShockManager {
         STUNS.clear();
     }
 
-     
     public static void applyShock(LivingEntity target, int ticks) {
         if (ticks <= 0 || target.level().isClientSide || !target.isAlive()) {
             return;

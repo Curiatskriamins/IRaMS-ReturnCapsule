@@ -23,7 +23,6 @@ import net.minecraft.world.phys.Vec3;
 import javax.annotation.Nullable;
 import java.util.UUID;
 
- 
 public class BoomEntity extends Entity {
     private static final String TAG_OWNER = "Owner";
     private static final String TAG_LOCKED_ENTITY = "LockedEntity";
@@ -165,7 +164,6 @@ public class BoomEntity extends Entity {
         Vec3 next = from.add(dir.scale(speed));
         this.setPos(next.x, next.y, next.z);
 
-        
         if (locked && segmentDistanceSqr(from, next, target) <= CONTACT_RADIUS * CONTACT_RADIUS) {
             this.setPos(target.x, target.y, target.z);
             this.detonate(server, BoomExplosion.Mode.ANCHOR);
@@ -176,7 +174,7 @@ public class BoomEntity extends Entity {
                 ClipContext.Block.COLLIDER, ClipContext.Fluid.NONE, this));
         if (hit.getType() != HitResult.Type.MISS) {
             if (hit.getLocation().distanceToSqr(target) <= GRAZE_RADIUS * GRAZE_RADIUS) {
-                
+
                 this.setPos(target.x, target.y, target.z);
                 this.detonate(server, BoomExplosion.Mode.ANCHOR);
                 return;

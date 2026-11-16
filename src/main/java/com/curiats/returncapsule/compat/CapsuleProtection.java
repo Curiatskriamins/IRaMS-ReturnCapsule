@@ -9,12 +9,6 @@ import net.minecraftforge.event.entity.living.LivingHurtEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 
-/**
- * Riders of a falling transport capsule are invulnerable until they are ejected on landing.
- * <p>
- * The block capsule used to grant the same protection through a hidden-seat mechanic; that entry point
- * was retired, so a passenger of the transport entity is the only protected state left.
- */
 @Mod.EventBusSubscriber(modid = ReturnCapsuleMod.MODID, bus = Mod.EventBusSubscriber.Bus.FORGE)
 public final class CapsuleProtection {
     @SubscribeEvent

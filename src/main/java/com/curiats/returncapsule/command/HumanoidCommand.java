@@ -22,18 +22,11 @@ import net.minecraftforge.fml.common.Mod;
 import java.util.ArrayList;
 import java.util.List;
 
-/**
- * {@code /returncapsule <target> <slot> <0|1>} — turn parts of a humanoid's kit on or off for testing, plus an
- * {@code info} branch showing the current state.
- * <p>
- * Weapons can be disabled without touching configs, which is what makes it practical to test one behaviour at a time:
- * {@code /returncapsule all item 0} leaves the humanoid with fists only.
- */
 @Mod.EventBusSubscriber(modid = ReturnCapsuleMod.MODID, bus = Mod.EventBusSubscriber.Bus.FORGE)
 public final class HumanoidCommand {
     private static final List<String> TARGETS = List.of("all", "nearby");
     private static final List<String> SLOTS = List.of("item", "ranged", "melee", "shield", "fists");
-    /** Radius used by the {@code nearby} target, in blocks. */
+
     private static final double NEARBY_RADIUS = 64.0D;
 
     private static final SuggestionProvider<CommandSourceStack> TARGET_SUGGESTIONS =
@@ -66,12 +59,6 @@ public final class HumanoidCommand {
             (context, builder) -> SharedSuggestionProvider.suggest(
                     List.of("minecraft:zombie", "minecraft:skeleton", "minecraft:warden"), builder);
 
-    /**
-     * Spawns a test target a given distance away, in the direction the player is looking.
-     * <p>
-     * A humanoid follows its player, so testing the long range gun by walking away is impractical. This puts a target at
-     * an exact distance instead, which is the only reliable way to see the sixty-four block weapon switch happen.
-     */
     private static int spawnTarget(CommandContext<CommandSourceStack> context, String type) {
         CommandSourceStack source = context.getSource();
         double distance = DoubleArgumentType.getDouble(context, "distance");
@@ -131,7 +118,7 @@ public final class HumanoidCommand {
         int enabled = IntegerArgumentType.getInteger(context, "enabled");
 
         if ("mobends".equalsIgnoreCase(slotName)) {
-            // A/B switch for the animation layer: off means the plain vanilla player model.
+
             if (net.minecraftforge.fml.loading.FMLEnvironment.dist.isClient()) {
                 com.curiats.returncapsule.compat.mobends.MobendsAddon.setAnimationEnabled(enabled == 1);
                 source.sendSuccess(() -> Component.literal("[returncapsule] mobends animation=" + enabled), true);
@@ -141,7 +128,7 @@ public final class HumanoidCommand {
             return 0;
         }
         if ("fists".equalsIgnoreCase(slotName)) {
-            // Convenience: strip both weapon slots in one go.
+
             HumanoidToggles.set(HumanoidToggles.Slot.ITEM, false);
             List<NeutralHumanoid> affected = collect(source, target);
             affected.forEach(NeutralHumanoid::refreshLoadout);

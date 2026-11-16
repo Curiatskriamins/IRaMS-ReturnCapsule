@@ -20,7 +20,6 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 
-
 public final class TransportLoot {
     public static void fill(Container container, ServerLevel server, RandomSource random, SummonTier tier) {
         fillVanilla(container, server, random, tier);
@@ -45,9 +44,7 @@ public final class TransportLoot {
                 .withParameter(LootContextParams.ORIGIN, Vec3.atCenterOf(server.getSharedSpawnPos()))
                 .create(LootContextParamSets.CHEST);
         List<ItemStack> rolled = new ArrayList<>(table.getRandomItems(params, random.nextLong()));
-        
-        
-        
+
         rolled.sort(Comparator.comparingInt((ItemStack stack) -> stack.getRarity().ordinal()).reversed());
         int keep = Config.VANILLA_LOOT_STACKS.get();
         int limit = keep <= 0 ? rolled.size() : Math.min(keep, rolled.size());

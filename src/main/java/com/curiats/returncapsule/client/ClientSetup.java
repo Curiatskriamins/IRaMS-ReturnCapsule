@@ -36,7 +36,7 @@ public final class ClientSetup {
     public static void clientSetup(FMLClientSetupEvent event) {
         event.enqueueWork(() -> {
             MenuScreens.register(ModMenus.CAPSULE.get(), CapsuleScreen::new);
-            
+
             CapsuleClientHooks.install(ClientTrail::onFallingTick);
             BoomClientHooks.install(BoomClientTrail::onTick);
             net.minecraftforge.common.MinecraftForge.EVENT_BUS.register(KillMarkerRenderer.class);

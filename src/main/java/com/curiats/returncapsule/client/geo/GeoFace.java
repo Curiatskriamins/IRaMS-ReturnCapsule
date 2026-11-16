@@ -1,6 +1,5 @@
 package com.curiats.returncapsule.client.geo;
 
- 
 public final class GeoFace {
     private final float[] positions;
     private final float[] uvs;
@@ -16,12 +15,10 @@ public final class GeoFace {
         this.normalZ = normalZ;
     }
 
-     
     public float[] positions() {
         return this.positions;
     }
 
-     
     public float[] uvs() {
         return this.uvs;
     }

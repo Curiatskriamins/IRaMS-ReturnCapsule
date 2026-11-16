@@ -8,7 +8,6 @@ import org.joml.Matrix4f;
 import org.joml.Vector3f;
 import org.joml.Vector4f;
 
- 
 public final class GeoRenderer {
     private static final float MODEL_SCALE = 0.0625F;
     private static final Vector4f POSITION = new Vector4f();
@@ -42,7 +41,7 @@ public final class GeoRenderer {
                              VertexConsumer consumer, int packedLight, int overlay,
                              float shiftX, float shiftY, float shiftZ) {
         for (GeoFace face : faces) {
-            
+
             NORMAL.set(face.normalX(), face.normalY(), face.normalZ());
             normalMatrix.transform(NORMAL);
             NORMAL.normalize();
@@ -58,8 +57,7 @@ public final class GeoRenderer {
                         positions[base + 1] + shiftY,
                         positions[base + 2] + shiftZ, 1.0F);
                 matrix.transform(POSITION);
-                
-                
+
                 consumer.vertex(POSITION.x, POSITION.y, POSITION.z)
                         .color(255, 255, 255, 255)
                         .uv(uvs[vertex * 2], uvs[vertex * 2 + 1])

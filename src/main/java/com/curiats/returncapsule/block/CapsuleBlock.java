@@ -59,9 +59,7 @@ public class CapsuleBlock extends BaseEntityBlock {
     public void setPlacedBy(Level level, BlockPos pos, BlockState state, @Nullable LivingEntity placer, ItemStack stack) {
         super.setPlacedBy(level, pos, state, placer, stack);
         if (!level.isClientSide && level.getBlockEntity(pos) instanceof CapsuleBlockEntity capsule) {
-            
-            
-            
+
             capsule.markLootGenerated();
         }
     }
