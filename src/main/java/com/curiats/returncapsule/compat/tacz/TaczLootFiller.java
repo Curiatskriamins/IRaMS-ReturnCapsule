@@ -66,7 +66,7 @@ public final class TaczLootFiller {
         if (wanted <= 0) {
             return;
         }
-        if (wanted == available) {
+        if (wanted >= available) {
 
             List<ResourceLocation> all = new ArrayList<>(attachments);
             shuffle(all, random);
@@ -77,14 +77,15 @@ public final class TaczLootFiller {
         }
         int[] picked = new int[wanted];
         int chosen = 0;
-        while (chosen < wanted) {
+        int guard = 0;
+        while (chosen < wanted && guard++ < wanted * 32 + 32) {
             int index = random.nextInt(available);
             if (!contains(picked, chosen, index)) {
                 picked[chosen++] = index;
             }
         }
-        for (int index : picked) {
-            inserter.insertNoMerge(buildAttachment(attachments.get(index)));
+        for (int i = 0; i < chosen; i++) {
+            inserter.insertNoMerge(buildAttachment(attachments.get(picked[i])));
         }
     }
 
@@ -110,12 +111,16 @@ public final class TaczLootFiller {
             return;
         }
         int remaining = count;
-        while (remaining > 0) {
+        int guard = 0;
+        while (remaining > 0 && guard++ < 512) {
             ItemStack stack = TaczItems.ammo(ammoId, remaining);
             if (stack.isEmpty()) {
                 return;
             }
             int moved = stack.getCount();
+            if (moved <= 0) {
+                return;
+            }
             if (!inserter.insertNoMerge(stack)) {
                 return;
             }

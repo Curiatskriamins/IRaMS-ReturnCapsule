@@ -51,7 +51,8 @@ public final class TaczCatalog {
             Object gunData = TaczApi.readGunData(index);
             ResourceLocation ammoId = gunData == null ? null : TaczApi.readAmmoId(gunData);
             String fireMode = gunData == null ? "SEMI" : TaczApi.readFireMode(gunData);
-            guns.add(new GunInfo(id, TaczApi.readType(index), ammoId, fireMode));
+            guns.add(new GunInfo(id, TaczApi.readType(index), ammoId, fireMode,
+                TaczApi.readBulletRange(gunData)));
         }
 
         Map<String, List<GunInfo>> gunsByPack = new LinkedHashMap<>();

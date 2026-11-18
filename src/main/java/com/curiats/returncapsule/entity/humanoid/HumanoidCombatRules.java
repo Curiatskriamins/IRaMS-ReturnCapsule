@@ -58,23 +58,39 @@ public final class HumanoidCombatRules {
         return threatensAllies(target) ? Math.max(ALLY_RESCUE_RADIUS, threat) : threat;
     }
 
-    public static double priority(LivingEntity target) {
-        return priority(null, target);
+    private static boolean defendingPlayer(LivingEntity target) {
+        if (!(target instanceof net.minecraft.world.entity.Mob mob)) {
+            return false;
+        }
+        return mob.getTarget() instanceof net.minecraft.world.entity.player.Player;
     }
 
-    public static double priority(LivingEntity user, LivingEntity target) {
-        double value = score(target);
+
+    public static int tier(LivingEntity target) {
+        if (defendingPlayer(target)) {
+            return 3;
+        }
         if (threatensAllies(target)) {
-            value += HOSTILITY_BONUS;
+            return 2;
         }
+        return isHostileEnemy(target) ? 1 : 0;
+    }
 
-        double value2 = value + playerProximityBonus(target);
-
-        if (user == null) {
-            return value2;
+    public static boolean outranks(LivingEntity user, LivingEntity candidate, LivingEntity current) {
+        if (current == null) {
+            return true;
         }
-        double distance = Math.sqrt(user.distanceToSqr(target));
-        return value2 - Math.min(distance, NEAREST_CLAMP) * NEAREST_WEIGHT;
+        int candidateTier = tier(candidate);
+        int currentTier = tier(current);
+        if (candidateTier != currentTier) {
+            return candidateTier > currentTier;
+        }
+        double candidateScore = score(candidate);
+        double currentScore = score(current);
+        if (candidateScore != currentScore) {
+            return candidateScore > currentScore;
+        }
+        return user.distanceToSqr(candidate) < user.distanceToSqr(current);
     }
 
     private static double playerProximityBonus(LivingEntity target) {

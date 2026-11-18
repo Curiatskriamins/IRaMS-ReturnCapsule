@@ -36,6 +36,8 @@ public final class HumanoidAnimationTicker {
             if (previous == null ? sequence > 0 : sequence != previous) {
                 MobendsAddon.driveAttack(humanoid);
             }
+            com.curiats.returncapsule.compat.ragdoll.RagdollReactions.sync(humanoid);
+            HumanoidImpactDetector.tick(humanoid);
         }
     }
 

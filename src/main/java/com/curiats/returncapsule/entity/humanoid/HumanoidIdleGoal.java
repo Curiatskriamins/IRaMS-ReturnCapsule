@@ -11,11 +11,15 @@ import java.util.List;
 @SuppressWarnings({"this-escape"})
 public class HumanoidIdleGoal extends Goal {
 
+    private static final int MAX_SAFE_DROP = 3;
+
     private static final double FOLLOW_START = 12.0D;
 
-    private static final double FOLLOW_GAP = 9.0D;
+    private static final double FOLLOW_GAP = 6.0D;
 
-    private static final double CATCH_UP = 16.0D;
+    private static final double CATCH_UP = 12.0D;
+
+    private static final int FOLLOW_DECISION_CHANCE = 20;
 
     private static final double PATROL_RADIUS = 8.0D;
 
@@ -46,6 +50,12 @@ public class HumanoidIdleGoal extends Goal {
 
     @Override
     public boolean canUse() {
+        if (this.mob.hasTestGoal()) {
+            return false;
+        }
+        if (this.mob.isDowned()) {
+            return false;
+        }
         return this.mob.getTarget() == null;
     }
 
@@ -77,7 +87,9 @@ public class HumanoidIdleGoal extends Goal {
                 double distanceSqr = this.mob.distanceToSqr(owner);
 
                 if (!this.following && distanceSqr > FOLLOW_START * FOLLOW_START) {
-                    this.following = true;
+                    if (this.mob.getRandom().nextInt(FOLLOW_DECISION_CHANCE) == 0) {
+                        this.following = true;
+                    }
                 } else if (this.following && distanceSqr < FOLLOW_GAP * FOLLOW_GAP) {
                     this.following = false;
                 }
@@ -169,7 +181,38 @@ public class HumanoidIdleGoal extends Goal {
             return;
         }
         this.repathCooldown = REPATH_INTERVAL * 2;
-        this.mob.getNavigation().moveTo(target, speed);
+        net.minecraft.core.BlockPos ladder = this.ladderDown(target);
+        if (ladder != null) {
+            this.mob.requestMove(ladder.getX() + 0.5D, ladder.getY(), ladder.getZ() + 0.5D, speed, 1);
+            return;
+        }
+        this.mob.requestMove(target, speed, 1);
+    }
+
+    private net.minecraft.core.BlockPos ladderDown(net.minecraft.world.entity.LivingEntity target) {
+        if (target.getY() > this.mob.getY() - 2.0D) {
+            return null;
+        }
+        net.minecraft.core.BlockPos base = this.mob.blockPosition();
+        for (net.minecraft.core.BlockPos candidate : net.minecraft.core.BlockPos.betweenClosed(
+                base.offset(-4, -1, -4), base.offset(4, 1, 4))) {
+            if (!HumanoidTraversal.isClimbable(this.mob.level(), candidate)) {
+                continue;
+            }
+            net.minecraft.core.BlockPos below = candidate.below();
+            if (HumanoidTraversal.isClimbable(this.mob.level(), below)) {
+                continue;
+            }
+            if (candidate.getY() < base.getY() - 1 || candidate.getY() > base.getY() + 2) {
+                continue;
+            }
+            int drop = HumanoidTraversal.ladderDrop(this.mob.level(), candidate);
+            if (drop > MAX_SAFE_DROP) {
+                continue;
+            }
+            return candidate;
+        }
+        return null;
     }
 
     private void follow(BlockPos target, double speed) {
@@ -179,6 +222,6 @@ public class HumanoidIdleGoal extends Goal {
             return;
         }
         this.lastTarget = target;
-        this.mob.getNavigation().moveTo(target.getX() + 0.5D, target.getY(), target.getZ() + 0.5D, speed);
+        this.mob.requestMove(target.getX() + 0.5D, target.getY(), target.getZ() + 0.5D, speed, 1);
     }
 }

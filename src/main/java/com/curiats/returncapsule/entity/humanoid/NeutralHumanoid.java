@@ -59,6 +59,104 @@ public class NeutralHumanoid extends PathfinderMob implements RangedAttackMob {
 
     private int lastAcceptedHit = -100;
 
+    private int leapCooldown;
+
+    private boolean crawling;
+
+    private boolean combatProne;
+
+    private long vehicleShotMillis;
+
+    private boolean drivingVehicle;
+
+    private boolean vehicleCombat;
+
+    private static final double SPRINT_JUMP_REACH = 1.0D;
+
+    private static final double MAX_JUMP_REACH = 3.5D;
+
+    private static final double SPRINT_JUMP_BOOST = 0.2D;
+
+
+
+    private static final double JUMP_UP = 0.42D;
+
+    private static final int RUN_UP_TICKS = 12;
+
+    private static final double RUN_UP_DISTANCE = 2.0D;
+
+    private int runUpTicks;
+
+    private int runUpDone;
+
+    private boolean runUpReady;
+
+    private double runUpX;
+
+    private double runUpZ;
+
+    private double lastFallSpeed;
+
+    private net.minecraft.world.phys.Vec3 lastPosition;
+
+    private static final double DOWNED_PUSH_DISTANCE = 0.7D;
+
+    private int downedTicks;
+
+    private int downedCooldownUntil;
+
+    private int farFromPlayerTicks;
+
+    private int stuckBelowTicks;
+
+    private int reactionGraceTicks;
+
+    private static final int MOVE_INTERVAL = 10;
+
+    private int moveCooldown;
+
+    private int movePriority;
+
+    private net.minecraft.core.BlockPos testGoal;
+
+    private HostileCluster cluster;
+
+    private int clusterTicks;
+
+    private int clusterEmptyChecks;
+
+    private static final int CLUSTER_CHECK_TICKS = 20;
+
+    private static final int CLUSTER_EMPTY_CHECKS = 5;
+
+    private int testGoalRetry;
+
+    private int testGoalRescan;
+
+    private int testGoalFailures;
+
+    private int testGoalStall;
+
+    private net.minecraft.world.phys.Vec3 testGoalLastPos = net.minecraft.world.phys.Vec3.ZERO;
+
+    private int platformY = Integer.MIN_VALUE;
+
+    private static final int STUCK_TELEPORT_TICKS = 1200;
+
+    private static final double LEASH_DISTANCE = 100.0D;
+
+    private static final int LEASH_TICKS = 600;
+
+    private static final int DOWNED_COOLDOWN = 120;
+
+    private static final int DOWNED_TICKS = 100;
+
+    private static final float DOWNED_MIN_DAMAGE = 30.0F;
+
+    private static final double DOWNED_FALL_SPEED = 0.85D;
+
+    private static final double DOWNED_FAST_SPEED = 0.85D;
+
     private boolean bypassProtections;
 
     private boolean applyingHit;
@@ -71,6 +169,14 @@ public class NeutralHumanoid extends PathfinderMob implements RangedAttackMob {
     private static final float SHIELD_BREAK_DAMAGE = 100.0F;
 
     private static final int BLADE_SKILL_INTERVAL = 200;
+
+    private static final net.minecraft.network.syncher.EntityDataAccessor<Boolean> DATA_LEAP =
+            net.minecraft.network.syncher.SynchedEntityData.defineId(NeutralHumanoid.class,
+                    net.minecraft.network.syncher.EntityDataSerializers.BOOLEAN);
+
+    private static final net.minecraft.network.syncher.EntityDataAccessor<Boolean> DATA_DOWNED =
+            net.minecraft.network.syncher.SynchedEntityData.defineId(NeutralHumanoid.class,
+                    net.minecraft.network.syncher.EntityDataSerializers.BOOLEAN);
 
     private static final net.minecraft.network.syncher.EntityDataAccessor<Integer> DATA_ATTACK_SEQ =
             net.minecraft.network.syncher.SynchedEntityData.defineId(NeutralHumanoid.class,
@@ -93,6 +199,8 @@ public class NeutralHumanoid extends PathfinderMob implements RangedAttackMob {
     private boolean loadoutLogged;
 
     private ItemStack rangedWeapon = ItemStack.EMPTY;
+
+    private final java.util.List<ItemStack> throwables = new java.util.ArrayList<>();
 
     private ItemStack longRangedWeapon = ItemStack.EMPTY;
     private ItemStack meleeWeapon = ItemStack.EMPTY;
@@ -132,6 +240,7 @@ public class NeutralHumanoid extends PathfinderMob implements RangedAttackMob {
     public NeutralHumanoid(EntityType<? extends NeutralHumanoid> type, Level level, HumanoidProfile profile) {
         super(type, level);
         this.profile = profile;
+        this.moveControl = new HumanoidMoveControl(this);
         this.xpReward = 40;
         this.setPersistenceRequired();
         this.setDropChance(EquipmentSlot.MAINHAND, 1.0F);
@@ -140,7 +249,8 @@ public class NeutralHumanoid extends PathfinderMob implements RangedAttackMob {
             this.makeConversionImmune();
 
         }
-    }
+    
+        this.setMaxUpStep(1.0F);}
 
     @Override
     public net.minecraft.world.entity.SpawnGroupData finalizeSpawn(net.minecraft.world.level.ServerLevelAccessor level,
@@ -152,6 +262,43 @@ public class NeutralHumanoid extends PathfinderMob implements RangedAttackMob {
                 super.finalizeSpawn(level, difficulty, spawnType, spawnGroupData, tag);
         this.refreshLoadout();
         return data;
+    }
+
+    public java.util.List<ItemStack> getThrowables() {
+        return this.throwables;
+    }
+
+    public boolean isIndoors() {
+        if (this.level().canSeeSky(this.blockPosition())) {
+            return false;
+        }
+        int blocked = 0;
+        net.minecraft.core.BlockPos head = this.blockPosition().above();
+        for (net.minecraft.core.Direction direction : net.minecraft.core.Direction.Plane.HORIZONTAL) {
+            for (int step = 1; step <= 3; step++) {
+                net.minecraft.core.BlockPos probe = head.relative(direction, step);
+                if (!this.level().getBlockState(probe).getCollisionShape(this.level(), probe).isEmpty()) {
+                    blocked++;
+                    break;
+                }
+            }
+        }
+        return blocked >= 3;
+    }
+
+    private void refillThrowables() {
+        if (!this.throwables.isEmpty()) {
+            return;
+        }
+        java.util.List<ItemStack> pool = com.curiats.returncapsule.compat.lrt.Throwables.available();
+        if (pool.isEmpty()) {
+            return;
+        }
+        for (int i = 0; i < 3; i++) {
+            ItemStack candidate = pool.get(this.random.nextInt(pool.size())).copy();
+            candidate.setCount(Math.min(3, candidate.getMaxStackSize()));
+            this.throwables.add(candidate);
+        }
     }
 
     public void refreshLoadout() {
@@ -190,7 +337,8 @@ public class NeutralHumanoid extends PathfinderMob implements RangedAttackMob {
         }
         this.applyStance();
         this.logLoadout();
-    }
+    
+        this.refillThrowables();}
 
     private void auditOffhand() {
         String now = describe(this.getOffhandItem());
@@ -244,6 +392,14 @@ public class NeutralHumanoid extends PathfinderMob implements RangedAttackMob {
                 .add(Attributes.ATTACK_DAMAGE, 1.0D)
 
                 .add(Attributes.FOLLOW_RANGE, FOLLOW_RANGE);
+    }
+
+    @Override
+    protected net.minecraft.world.entity.ai.navigation.PathNavigation createNavigation(Level level) {
+        if (Boolean.getBoolean("returncapsule.vanillaNavigation")) {
+            return super.createNavigation(level);
+        }
+        return new HumanoidNavigation(this, level);
     }
 
     @Override
@@ -316,7 +472,52 @@ public class NeutralHumanoid extends PathfinderMob implements RangedAttackMob {
         return this.rangedWeapon.isEmpty() ? Math.min(radius, HumanoidCombatRules.MELEE_ENGAGEMENT) : radius;
     }
 
+    private int descentCooldown;
+    private net.minecraft.core.BlockPos descentEdge;
+
+    private void descendToward(net.minecraft.core.BlockPos toward) {
+        if (this.level().isClientSide) {
+            return;
+        }
+        if (this.descentCooldown > 0) {
+            this.descentCooldown--;
+        }
+        if (this.descentEdge != null) {
+            double distance = this.position().distanceTo(net.minecraft.world.phys.Vec3.atCenterOf(this.descentEdge));
+            if (distance < 1.6D) {
+                net.minecraft.core.BlockPos landing = this.descentEdge.below(2);
+                double dx = landing.getX() + 0.5D - this.getX();
+                double dz = landing.getZ() + 0.5D - this.getZ();
+                double length = Math.sqrt(dx * dx + dz * dz);
+                if (length > 1.0E-3D) {
+                    this.setDeltaMovement(dx / length * 0.28D, 0.0D, dz / length * 0.28D);
+                }
+                this.descentEdge = null;
+                this.descentCooldown = 60;
+                return;
+            }
+            this.getNavigation().moveTo(this.descentEdge.getX() + 0.5D, this.descentEdge.getY(),
+                    this.descentEdge.getZ() + 0.5D, 1.3D);
+            return;
+        }
+        if (this.descentCooldown > 0) {
+            return;
+        }
+        if (toward.getY() > this.blockPosition().getY() - 4) {
+            return;
+        }
+        net.minecraft.core.BlockPos spot = HumanoidTraversal.findDescentSpot(this.level(), this.blockPosition(), toward);
+        if (spot != null) {
+            this.descentEdge = spot;
+        } else {
+            this.descentCooldown = 40;
+        }
+    }
+
     public boolean shouldHoldGun(double distance, double hysteresis) {
+        if (this.isPassenger()) {
+            return false;
+        }
         if (this.rangedWeapon.isEmpty() || !HumanoidToggles.isEnabled(HumanoidToggles.Slot.RANGED)) {
             return false;
         }
@@ -340,14 +541,101 @@ public class NeutralHumanoid extends PathfinderMob implements RangedAttackMob {
         this.applyStance();
     }
 
-    public void fireGun(LivingEntity target) {
+    public boolean aimAtPoint(net.minecraft.world.phys.Vec3 point, float tolerance) {
+        double dx = point.x - this.getX();
+        double dz = point.z - this.getZ();
+        double horizontal = Math.sqrt(dx * dx + dz * dz);
+        if (horizontal < 1.0E-4D) {
+            return true;
+        }
+        float desiredYaw = (float) Math.toDegrees(Math.atan2(-dx, dz));
+        float desiredPitch = (float) -Math.toDegrees(Math.atan2(point.y - this.getEyeY(), horizontal));
+        float yawDelta = net.minecraft.util.Mth.wrapDegrees(desiredYaw - this.getYRot());
+        float pitchDelta = net.minecraft.util.Mth.wrapDegrees(desiredPitch - this.getXRot());
+        this.setYRot(this.getYRot() + net.minecraft.util.Mth.clamp(yawDelta, -14.0F, 14.0F));
+        this.setXRot(this.getXRot() + net.minecraft.util.Mth.clamp(pitchDelta, -12.0F, 12.0F));
+        this.yBodyRot = this.getYRot();
+        this.setYHeadRot(this.getYRot());
+        return Math.abs(yawDelta) < tolerance && Math.abs(pitchDelta) < tolerance * 1.4F;
+    }
+
+    public boolean precisionWeapon() {
+        String type = com.curiats.returncapsule.compat.tacz.TaczRifles.gunType(this.getMainHandItem());
+        return "sniper".equalsIgnoreCase(type) || "dmr".equalsIgnoreCase(type);
+    }
+
+    public boolean aimAt(LivingEntity target) {
+        double dx = target.getX() - this.getX();
+        double dz = target.getZ() - this.getZ();
+        double horizontal = Math.sqrt(dx * dx + dz * dz);
+        if (horizontal < 1.0E-4D) {
+            return true;
+        }
+        float desiredYaw = (float) Math.toDegrees(Math.atan2(-dx, dz));
+        float desiredPitch = (float) -Math.toDegrees(Math.atan2(target.getEyeY() - this.getEyeY(), horizontal));
+        float yawDelta = net.minecraft.util.Mth.wrapDegrees(desiredYaw - this.getYRot());
+        float pitchDelta = net.minecraft.util.Mth.wrapDegrees(desiredPitch - this.getXRot());
+        this.setYRot(this.getYRot() + net.minecraft.util.Mth.clamp(yawDelta, -10.0F, 10.0F));
+        this.setXRot(this.getXRot() + net.minecraft.util.Mth.clamp(pitchDelta, -8.0F, 8.0F));
+        this.yBodyRot = this.getYRot();
+        this.setYHeadRot(this.getYRot());
+        return Math.abs(yawDelta) < 3.0F && Math.abs(pitchDelta) < 4.0F;
+    }
+
+    public boolean fireGun(LivingEntity target) {
+        if (friendlyOnLine(target)) {
+            return false;
+        }
         GunAim aim = this.gunAim;
         aim.track(target);
         double distance = Math.sqrt(this.distanceToSqr(target));
         aim.resolveExpired(this.level().getGameTime(), distance);
-        this.snapAim(target, aim, distance);
         this.performRangedAttack(target, 1.0F);
         aim.onShot(target);
+        return true;
+    }
+
+    private boolean friendlyOnLine(LivingEntity target) {
+        net.minecraft.world.phys.Vec3 from = this.getEyePosition();
+        net.minecraft.world.phys.Vec3 to = target.getEyePosition();
+        net.minecraft.world.phys.Vec3 segment = to.subtract(from);
+        double length = segment.length();
+        if (length < 1.0E-3D) {
+            return false;
+        }
+        for (net.minecraft.world.entity.player.Player player : this.level().getEntitiesOfClass(
+                net.minecraft.world.entity.player.Player.class,
+                this.getBoundingBox().inflate(length + 4.0D))) {
+            if (player.isSpectator()) {
+                continue;
+            }
+            if (player.getVehicle() != null) {
+                if (this.distanceToSqr(player.getVehicle()) < length * length) {
+                    return true;
+                }
+            }
+            if (distanceToSegment(from, to, player.getEyePosition()) < 1.2D) {
+                return true;
+            }
+        }
+        for (NeutralHumanoid other : this.level().getEntitiesOfClass(NeutralHumanoid.class,
+                this.getBoundingBox().inflate(length + 4.0D))) {
+            if (other != this && distanceToSegment(from, to, other.getEyePosition()) < 1.2D) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static double distanceToSegment(net.minecraft.world.phys.Vec3 from,
+            net.minecraft.world.phys.Vec3 to, net.minecraft.world.phys.Vec3 point) {
+        net.minecraft.world.phys.Vec3 segment = to.subtract(from);
+        double lengthSqr = segment.lengthSqr();
+        if (lengthSqr < 1.0E-6D) {
+            return point.distanceTo(from);
+        }
+        double t = net.minecraft.util.Mth.clamp(point.subtract(from).dot(segment) / lengthSqr, 0.0D, 1.0D);
+        return point.distanceTo(from.add(segment.scale(t)));
     }
 
     private void snapAim(LivingEntity target, GunAim aim, double distance) {
@@ -373,6 +661,9 @@ public class NeutralHumanoid extends PathfinderMob implements RangedAttackMob {
     }
 
     private void applyStance() {
+        if (this.isPassenger()) {
+            return;
+        }
         ItemStack desired = this.stance == Stance.RANGED
                 ? this.rangedWeapon
                 : HumanoidToggles.isEnabled(HumanoidToggles.Slot.MELEE) ? this.bestMeleeWeapon() : ItemStack.EMPTY;
@@ -441,6 +732,31 @@ public class NeutralHumanoid extends PathfinderMob implements RangedAttackMob {
         if (held != null && this.distanceToNearestPlayerSqr() > GROUP_REGROUP_DISTANCE * GROUP_REGROUP_DISTANCE) {
             this.setTarget(null);
         }
+        if (this.lastPosition == null) {
+            this.lastPosition = this.position();
+        }
+        this.tickStuckRecovery();
+        this.tickReturnToPlayer();
+        this.tickPlatformReposition();
+        this.tickRunUp();
+        com.curiats.returncapsule.compat.vehicle.VehicleRider.tick(this);
+        com.curiats.returncapsule.compat.vehicle.VehicleGunner.tick(this);
+        com.curiats.returncapsule.compat.vehicle.VehicleDriverCompat.tick(this);
+        this.tickLeapFlag();
+        if (this.moveCooldown > 0) {
+            this.moveCooldown--;
+        } else {
+            this.movePriority = 0;
+        }
+        this.tickClusters();
+        this.tickTestGoal();
+        this.tickPlatformState();
+        this.tickCrawl();
+        this.tickLaneCentering();
+        this.tickClimb();
+        this.tickParkour();
+        this.tickDowned();
+        this.applyMovementReactions();
         this.updateSprint();
         if (this.bladeSkillCooldown > 0) {
             this.bladeSkillCooldown--;
@@ -453,6 +769,16 @@ public class NeutralHumanoid extends PathfinderMob implements RangedAttackMob {
             }
         }
         this.auditOffhand();
+        net.minecraft.world.entity.LivingEntity descentGoal = this.getTarget();
+        if (descentGoal == null) {
+            net.minecraft.world.entity.player.Player nearest = this.level().getNearestPlayer(this, 32.0D);
+            if (nearest != null) {
+                descentGoal = nearest;
+            }
+        }
+        if (descentGoal != null) {
+            this.descendToward(descentGoal.blockPosition());
+        }
         TaczShooter.tick(this);
         if (--this.regenCooldown > 0) {
             return;
@@ -524,6 +850,13 @@ public class NeutralHumanoid extends PathfinderMob implements RangedAttackMob {
         if (this.level().isClientSide || this.isInvulnerableTo(source)) {
             return false;
         }
+        if (this.isDowned()) {
+            return false;
+        }
+        if (source.is(net.minecraft.world.damagesource.DamageTypes.EXPLOSION)
+                || source.is(net.minecraft.world.damagesource.DamageTypes.PLAYER_EXPLOSION)) {
+            this.knockDown(DOWNED_TICKS);
+        }
         if (this.tickCount < this.lastStandUntil) {
             return false;
         }
@@ -593,6 +926,799 @@ public class NeutralHumanoid extends PathfinderMob implements RangedAttackMob {
             HumanoidSquad.report(this.level(), attacker);
         }
         return hurt;
+    }
+
+    public void suppressReactions(int ticks) {
+        this.reactionGraceTicks = Math.max(this.reactionGraceTicks, ticks);
+    }
+
+    private void applyMovementReactions() {
+        if (this.level().isClientSide) {
+            return;
+        }
+        if (this.reactionGraceTicks > 0) {
+            this.reactionGraceTicks--;
+            this.lastPosition = this.position();
+            this.lastFallSpeed = 0.0D;
+            return;
+        }
+        double moved = this.position().subtract(this.lastPosition).horizontalDistance();
+        this.lastPosition = this.position();
+        if (this.isDowned()) {
+            return;
+        }
+        boolean grounded = this.onGround();
+        if (grounded) {
+            if (this.lastFallSpeed > DOWNED_FALL_SPEED) {
+                this.knockDown(DOWNED_TICKS);
+            }
+            this.lastFallSpeed = 0.0D;
+        } else {
+            double falling = -this.getDeltaMovement().y;
+            if (falling > this.lastFallSpeed) {
+                this.lastFallSpeed = falling;
+            }
+        }
+        if (this.getDeltaMovement().horizontalDistance() > DOWNED_FAST_SPEED
+                || (moved > DOWNED_PUSH_DISTANCE && this.getNavigation().isDone())) {
+            this.knockDown(DOWNED_TICKS);
+        }
+    }
+
+    private void applyReactions(net.minecraft.world.damagesource.DamageSource source, float amount) {
+        if (this.level().isClientSide || !this.isDownedCandidate(amount)) {
+            return;
+        }
+        boolean heavy = amount >= DOWNED_MIN_DAMAGE
+                || source.is(net.minecraft.world.damagesource.DamageTypes.LIGHTNING_BOLT)
+                || source.is(net.minecraft.world.damagesource.DamageTypes.FALLING_BLOCK)
+                || source.is(net.minecraft.world.damagesource.DamageTypes.EXPLOSION);
+        if (heavy) {
+            this.knockDown(DOWNED_TICKS);
+        }
+    }
+
+    private boolean isDownedCandidate(float amount) {
+        return amount > 0.0F;
+    }
+
+    public boolean isLeaping() {
+        return this.entityData.get(DATA_LEAP);
+    }
+
+    public boolean isDownedSynced() {
+        return this.entityData.get(DATA_DOWNED);
+    }
+
+    private net.minecraft.core.BlockPos intendedStep() {
+        if (!(this.getNavigation() instanceof net.minecraft.world.entity.ai.navigation.GroundPathNavigation ground)) {
+            return null;
+        }
+        net.minecraft.world.level.pathfinder.Path path = ground.getPath();
+        if (path == null || path.isDone()) {
+            return null;
+        }
+        return path.getNextNodePos();
+    }
+
+    private net.minecraft.world.phys.Vec3 intendedDirection() {
+        net.minecraft.world.entity.LivingEntity goal = this.getTarget();
+        if (goal == null) {
+            goal = this.level().getNearestPlayer(this, 64.0D);
+        }
+        if (goal == null) {
+            net.minecraft.world.phys.Vec3 motion = this.getDeltaMovement();
+            if (motion.horizontalDistanceSqr() < 1.0E-4D) {
+                return null;
+            }
+            return new net.minecraft.world.phys.Vec3(motion.x, 0.0D, motion.z).normalize();
+        }
+        double dx = goal.getX() - this.getX();
+        double dz = goal.getZ() - this.getZ();
+        double length = Math.sqrt(dx * dx + dz * dz);
+        if (length < 0.5D) {
+            return null;
+        }
+        return new net.minecraft.world.phys.Vec3(dx / length, 0.0D, dz / length);
+    }
+
+    private void tickRunUp() {
+        if (this.runUpTicks > 0) {
+            this.runUpTicks--;
+        }
+    }
+
+    private void tickPlatformReposition() {
+        if (this.level().isClientSide || this.getTarget() != null || !this.isRangedStance()) {
+            return;
+        }
+        if (this.testGoal != null || this.atPlatformEdge() == false) {
+            return;
+        }
+        if (this.tickCount % 80 != 0) {
+            return;
+        }
+        net.minecraft.core.BlockPos here = this.blockPosition();
+        for (int attempt = 0; attempt < 12; attempt++) {
+            int dx = this.random.nextInt(13) - 6;
+            int dz = this.random.nextInt(13) - 6;
+            net.minecraft.core.BlockPos candidate = here.offset(dx, 0, dz);
+            if (HumanoidTraversal.canStandOn(this.level(), candidate)) {
+                this.requestMove(candidate.getX() + 0.5D, candidate.getY(),
+                        candidate.getZ() + 0.5D, 1.0D, 1);
+                return;
+            }
+        }
+    }
+
+    public boolean onHighPlatform() {
+        return this.platformY != Integer.MIN_VALUE;
+    }
+
+    public int platformY() {
+        return this.platformY;
+    }
+
+    public HostileCluster cluster() {
+        return this.cluster;
+    }
+
+    public net.minecraft.world.phys.Vec3 aimPointFor(LivingEntity target) {
+        if (this.cluster != null && this.cluster.contains(target)) {
+            return this.cluster.center();
+        }
+        return new net.minecraft.world.phys.Vec3(target.getX(), target.getEyeY(), target.getZ());
+    }
+
+    private void tickClusters() {
+        if (this.level().isClientSide) {
+            return;
+        }
+        if (this.getTarget() == null) {
+            this.cluster = null;
+            this.clusterEmptyChecks = 0;
+            return;
+        }
+        if (this.clusterTicks > 0) {
+            this.clusterTicks--;
+            return;
+        }
+        this.clusterTicks = CLUSTER_CHECK_TICKS;
+        if (this.cluster != null) {
+            int members = HostileCluster.countInside(this.level(), this.cluster.box());
+            if (members > 0) {
+                this.clusterEmptyChecks = 0;
+                return;
+            }
+            if (++this.clusterEmptyChecks < CLUSTER_EMPTY_CHECKS) {
+                return;
+            }
+            this.cluster = null;
+            this.clusterEmptyChecks = 0;
+        }
+        this.cluster = HostileCluster.build(this.level(), this.position(), 64.0D, this);
+    }
+
+    public String debugState() {
+        net.minecraft.world.level.pathfinder.Path path = this.getNavigation().getPath();
+        String node = "none";
+        if (path != null && !path.isDone()) {
+            int index = path.getNextNodeIndex();
+            if (index >= 0 && index < path.getNodeCount()) {
+                net.minecraft.world.level.pathfinder.Node next = path.getNode(index);
+                node = next.x + "," + next.y + "," + next.z;
+            }
+        }
+        return "pos=" + this.blockPosition()
+                + " testGoal=" + (this.testGoal == null ? "none" : this.testGoal)
+                + " navDone=" + this.getNavigation().isDone()
+                + " node=" + node
+                + " leapCd=" + this.leapCooldown
+                + " runUp=" + this.runUpTicks + "/" + this.runUpReady
+                + " ground=" + this.onGround()
+                + " moveCd=" + this.moveCooldown + " prio=" + this.movePriority
+                + " platform=" + this.platformY
+                + " combat=" + this.vehicleCombat
+                + " | " + com.curiats.returncapsule.compat.vehicle.VehicleGunner.describe(this);
+    }
+
+    public boolean hasTestGoal() {
+        return this.testGoal != null;
+    }
+
+    public boolean requestMove(double x, double y, double z, double speed, int priority) {
+        if (priority < this.movePriority) {
+            return false;
+        }
+        if (this.moveCooldown > 0 && priority <= this.movePriority) {
+            return false;
+        }
+        this.movePriority = priority;
+        this.moveCooldown = MOVE_INTERVAL;
+        return this.getNavigation().moveTo(x, y, z, speed);
+    }
+
+    public boolean requestMove(net.minecraft.world.entity.Entity target, double speed, int priority) {
+        if (priority < this.movePriority) {
+            return false;
+        }
+        if (this.moveCooldown > 0 && priority <= this.movePriority) {
+            return false;
+        }
+        this.movePriority = priority;
+        this.moveCooldown = MOVE_INTERVAL;
+        return this.getNavigation().moveTo(target, speed);
+    }
+
+    private void tickTestGoal() {
+        if (this.level().isClientSide) {
+            return;
+        }
+        if (this.getTarget() != null || this.isPassenger() || this.isDowned()) {
+            return;
+        }
+        if (this.testGoalRescan > 0) {
+            this.testGoalRescan--;
+        }
+        if (this.testGoalRetry > 0) {
+            this.testGoalRetry--;
+        }
+        if (this.testGoalStall > 0) {
+            this.testGoalStall--;
+        }
+        if (this.testGoal == null && this.testGoalRescan <= 0) {
+            this.testGoal = this.findTestGoal();
+            this.testGoalRescan = 200;
+            this.testGoalFailures = 0;
+            this.testGoalStall = 0;
+            this.testGoalLastPos = this.position();
+        }
+        if (this.testGoal == null) {
+            return;
+        }
+        net.minecraft.core.BlockPos stand = this.testGoal.above();
+        if (this.blockPosition().equals(stand)) {
+            this.getNavigation().stop();
+            return;
+        }
+        if (this.tickCount % 20 == 0) {
+            if (this.position().distanceToSqr(this.testGoalLastPos) < 0.25D) {
+                this.testGoalStall++;
+            } else {
+                this.testGoalStall = 0;
+            }
+            this.testGoalLastPos = this.position();
+        }
+        if (this.testGoalStall >= 2) {
+            this.testGoalFailures++;
+            this.testGoalStall = 0;
+            this.getNavigation().stop();
+            if (this.testGoalFailures >= 3) {
+                this.testGoal = null;
+                this.testGoalRescan = 400;
+                this.testGoalRetry = 60;
+                return;
+            }
+            this.testGoalRetry = 40 * this.testGoalFailures;
+            return;
+        }
+        if (this.testGoalRetry > 0) {
+            return;
+        }
+        if (this.tryClimbOnto(stand)) {
+            this.testGoalRetry = 20;
+            return;
+        }
+        double flat = Math.sqrt(this.distanceToSqr(stand.getX() + 0.5D, this.getY(), stand.getZ() + 0.5D));
+        if (flat <= 16.0D) {
+            this.getNavigation().stop();
+            this.getMoveControl().setWantedPosition(stand.getX() + 0.5D, stand.getY(),
+                    stand.getZ() + 0.5D, 1.1D);
+            return;
+        }
+        if (!this.getNavigation().isDone()) {
+            return;
+        }
+        this.requestMove(stand.getX() + 0.5D, stand.getY(), stand.getZ() + 0.5D, 1.2D, 2);
+        this.testGoalRetry = 40;
+    }
+
+    private boolean tryClimbOnto(net.minecraft.core.BlockPos stand) {
+        if (!this.onGround() || this.blockPosition().equals(stand)) {
+            return false;
+        }
+        if (!this.horizontalCollision) {
+            return false;
+        }
+        double dx = stand.getX() + 0.5D - this.getX();
+        double dz = stand.getZ() + 0.5D - this.getZ();
+        double flat = Math.sqrt(dx * dx + dz * dz);
+        double dy = stand.getY() - this.getY();
+        if (flat > 1.8D || dy < 0.3D || dy > 1.6D) {
+            return false;
+        }
+        if (this.leapCooldown > 0) {
+            return false;
+        }
+        this.getNavigation().stop();
+        double push = 0.26D;
+        this.setDeltaMovement(dx / flat * push, 0.42D, dz / flat * push);
+        this.hasImpulse = true;
+        this.leapCooldown = 10;
+        return true;
+    }
+
+    private net.minecraft.core.BlockPos findTestGoal() {
+        net.minecraft.core.BlockPos here = this.blockPosition();
+        net.minecraft.core.BlockPos best = null;
+        double bestDistance = 24.0D * 24.0D;
+        for (net.minecraft.core.BlockPos pos : net.minecraft.core.BlockPos.betweenClosed(
+                here.offset(-24, -4, -24), here.offset(24, 4, 24))) {
+            if (!this.level().getBlockState(pos).is(net.minecraft.world.level.block.Blocks.NETHERITE_BLOCK)) {
+                continue;
+            }
+            double distance = pos.distSqr(here);
+            if (distance < bestDistance) {
+                bestDistance = distance;
+                best = pos.immutable();
+            }
+        }
+        return best;
+    }
+
+    private void tickPlatformState() {
+        if (this.level().isClientSide || this.tickCount % 20 != 0) {
+            return;
+        }
+        this.platformY = HumanoidTraversal.nearHighEdge(this.level(), this.blockPosition())
+                ? this.blockPosition().getY()
+                : Integer.MIN_VALUE;
+    }
+
+    public void setCombatProne(boolean prone) {
+        if (this.combatProne == prone) {
+            return;
+        }
+        this.combatProne = prone;
+        if (this.isDowned()) {
+            return;
+        }
+        this.setShiftKeyDown(prone);
+        this.setPose(prone
+                ? net.minecraft.world.entity.Pose.SWIMMING
+                : net.minecraft.world.entity.Pose.STANDING);
+    }
+
+    public boolean isCombatProne() {
+        return this.combatProne;
+    }
+
+    public boolean atPlatformEdge() {
+        net.minecraft.core.BlockPos feet = this.blockPosition();
+        float yaw = (float) Math.toRadians(this.getYRot());
+        double dirX = -Math.sin(yaw);
+        double dirZ = Math.cos(yaw);
+        for (double step = 0.7D; step <= 1.6D; step += 0.45D) {
+            int x = (int) Math.floor(this.getX() + dirX * step);
+            int z = (int) Math.floor(this.getZ() + dirZ * step);
+            net.minecraft.core.BlockPos below = new net.minecraft.core.BlockPos(x, feet.getY() - 1, z);
+            if (this.level().getBlockState(below).getCollisionShape(this.level(), below).isEmpty()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private void tickCrawl() {
+        if (this.level().isClientSide || this.isDowned()) {
+            return;
+        }
+        if (this.combatProne) {
+            return;
+        }
+        if (this.onHighPlatform()
+                && HumanoidTraversal.platformDrop(this.level(), this.blockPosition()) > 1) {
+            this.crawling = false;
+            this.setPose(net.minecraft.world.entity.Pose.STANDING);
+            return;
+        }
+        net.minecraft.core.BlockPos here = this.blockPosition();
+        boolean headHere = HumanoidTraversal.headBlocked(this.level(), here);
+        float yaw = (float) Math.toRadians(this.getYRot());
+        double dirX = -Math.sin(yaw);
+        double dirZ = Math.cos(yaw);
+        boolean headAhead = HumanoidTraversal.headBlocked(this.level(), net.minecraft.core.BlockPos.containing(
+                this.getX() + dirX, this.getY(), this.getZ() + dirZ));
+        boolean needCrawl = headHere || headAhead;
+        if (needCrawl && !this.crawling) {
+            this.crawling = true;
+            this.setPose(net.minecraft.world.entity.Pose.SWIMMING);
+            return;
+        }
+        if (this.crawling && !needCrawl) {
+            this.crawling = false;
+            this.setPose(net.minecraft.world.entity.Pose.STANDING);
+            return;
+        }
+        if (this.crawling && this.onGround()
+                && HumanoidTraversal.stepUpAhead(this.level(), here, dirX, dirZ)) {
+            this.getJumpControl().jump();
+        }
+    }
+
+    private void tickLeapFlag() {
+        if (!this.level().isClientSide && this.entityData.get(DATA_LEAP) && this.onGround()) {
+            this.entityData.set(DATA_LEAP, false);
+        }
+    }
+
+    private boolean roomBehind(double dirX, double dirZ) {
+        for (double step = 1.0D; step <= RUN_UP_DISTANCE; step += 0.75D) {
+            net.minecraft.core.BlockPos probe = net.minecraft.core.BlockPos.containing(
+                    this.getX() - dirX * step, this.getY(), this.getZ() - dirZ * step);
+            if (!HumanoidTraversal.canStandOn(this.level(), probe)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private boolean stepUpAhead(double dirX, double dirZ) {
+        net.minecraft.core.BlockPos ahead = net.minecraft.core.BlockPos.containing(
+                this.getX() + dirX, this.getY(), this.getZ() + dirZ);
+        net.minecraft.core.BlockPos feet = ahead;
+        net.minecraft.core.BlockPos head = ahead.above();
+        boolean feetSolid = !this.level().getBlockState(feet).getCollisionShape(this.level(), feet).isEmpty();
+        boolean headFree = this.level().getBlockState(head).getCollisionShape(this.level(), head).isEmpty();
+        return feetSolid && headFree;
+    }
+
+    private void tickLaneCentering() {
+        if (this.level().isClientSide || this.isDowned() || this.isPassenger()) {
+            return;
+        }
+        if (this.testGoal != null) {
+            return;
+        }
+        net.minecraft.world.phys.Vec3 delta = this.getDeltaMovement();
+        double speed = Math.sqrt(delta.x * delta.x + delta.z * delta.z);
+        if (speed < 0.06D) {
+            return;
+        }
+        double offset = HumanoidTraversal.corridorOffset(this.level(), this.blockPosition(),
+                delta.x, delta.z, 4);
+        if (Math.abs(offset) < 0.5D) {
+            return;
+        }
+        offset = net.minecraft.util.Mth.clamp(offset, -2.0D, 2.0D);
+        double dirX = delta.x / speed;
+        double dirZ = delta.z / speed;
+        double push = offset * 0.02D;
+        this.setDeltaMovement(delta.x - dirZ * push, delta.y, delta.z + dirX * push);
+    }
+
+    private double pathGap(double dirX, double dirZ, net.minecraft.core.BlockPos next) {
+        double dx = next.getX() + 0.5D - this.getX();
+        double dz = next.getZ() + 0.5D - this.getZ();
+        double flat = Math.sqrt(dx * dx + dz * dz);
+        if (flat < 1.6D) {
+            return -1.0D;
+        }
+        for (double step = 0.6D; step <= flat; step += 0.4D) {
+            net.minecraft.core.BlockPos probe = net.minecraft.core.BlockPos.containing(
+                    this.getX() + dirX * step, this.getY() - 1.0D, this.getZ() + dirZ * step);
+            if (this.level().getBlockState(probe).getCollisionShape(this.level(), probe).isEmpty()) {
+                net.minecraft.core.BlockPos landing = net.minecraft.core.BlockPos.containing(
+                        this.getX() + dirX * flat, this.getY() - 1.0D, this.getZ() + dirZ * flat);
+                if (this.level().getBlockState(landing).getCollisionShape(this.level(), landing).isEmpty()) {
+                    return -1.0D;
+                }
+                return flat;
+            }
+        }
+        return -1.0D;
+    }
+
+    private void tickClimb() {
+        if (this.level().isClientSide || this.isDowned()) {
+            return;
+        }
+        boolean onLadder = HumanoidTraversal.isClimbable(this.level(), this.blockPosition())
+                || HumanoidTraversal.isClimbable(this.level(), this.blockPosition().below());
+        if (!onLadder) {
+            if (this.jumpToLadder()) {
+                return;
+            }
+            return;
+        }
+        net.minecraft.world.level.pathfinder.Path path = this.getNavigation().getPath();
+        if (path == null || path.isDone()) {
+            return;
+        }
+        int index = path.getNextNodeIndex();
+        if (index < 0 || index >= path.getNodeCount()) {
+            return;
+        }
+        net.minecraft.world.level.pathfinder.Node node = path.getNode(index);
+        if (node == null) {
+            return;
+        }
+        double dy = node.y - this.getY();
+        if (dy > 0.4D) {
+            this.setDeltaMovement(this.getDeltaMovement().x, 0.2D, this.getDeltaMovement().z);
+            this.hasImpulse = true;
+        } else if (dy < -0.6D) {
+            this.setDeltaMovement(this.getDeltaMovement().x, -0.2D, this.getDeltaMovement().z);
+            this.hasImpulse = true;
+        }
+    }
+
+    private boolean jumpToLadder() {
+        if (!this.onGround() || this.leapCooldown > 0) {
+            return false;
+        }
+        double yaw = Math.toRadians(this.getYRot());
+        double dirX = -Math.sin(yaw);
+        double dirZ = Math.cos(yaw);
+        for (double step = 0.6D; step <= 1.6D; step += 0.5D) {
+            net.minecraft.core.BlockPos probe = net.minecraft.core.BlockPos.containing(
+                    this.getX() + dirX * step, this.getY(), this.getZ() + dirZ * step);
+            if (!HumanoidTraversal.isClimbable(this.level(), probe.above())) {
+                continue;
+            }
+            if (!HumanoidTraversal.canStandOn(this.level(), this.blockPosition())) {
+                return false;
+            }
+            this.setDeltaMovement(this.getDeltaMovement().x + dirX * 0.12D, 0.42D,
+                    this.getDeltaMovement().z + dirZ * 0.12D);
+            this.hasImpulse = true;
+            this.leapCooldown = 10;
+            return true;
+        }
+        return false;
+    }
+
+    private void tickParkour() {
+        if (this.leapCooldown > 0) {
+            this.leapCooldown--;
+        }
+        if (this.level().isClientSide || this.isDowned()) {
+            return;
+        }
+        if (this.runUpTicks > 0) {
+            this.runUpTicks--;
+            if (this.runUpTicks == 0) {
+                this.runUpReady = true;
+            }
+            return;
+        }
+        if (!this.onGround() || this.leapCooldown > 0) {
+            return;
+        }
+        net.minecraft.world.entity.LivingEntity chase = this.getTarget();
+        if (chase != null && chase.getY() < this.getY() - 5.0D) {
+            return;
+        }
+        net.minecraft.core.BlockPos next = this.intendedStep();
+        double dx;
+        double dz;
+        if (next != null) {
+            dx = next.getX() + 0.5D - this.getX();
+            dz = next.getZ() + 0.5D - this.getZ();
+        } else {
+            net.minecraft.world.phys.Vec3 intent = this.intendedDirection();
+            if (intent == null) {
+                return;
+            }
+            dx = intent.x;
+            dz = intent.z;
+            next = net.minecraft.core.BlockPos.containing(this.getX() + dx * 4.0D, this.getY(),
+                    this.getZ() + dz * 4.0D);
+        }
+        double length = Math.sqrt(dx * dx + dz * dz);
+        if (length < 0.6D) {
+            return;
+        }
+        dx /= length;
+        dz /= length;
+        double yaw = Math.toRadians(this.getYRot());
+        if (dx * -Math.sin(yaw) + dz * Math.cos(yaw) < 0.3D) {
+            this.getLookControl().setLookAt(next.getX() + 0.5D, next.getY() + 1.0D, next.getZ() + 0.5D,
+                    30.0F, 30.0F);
+            this.setYRot((float) Math.toDegrees(Math.atan2(-dx, dz)));
+            this.yBodyRot = this.getYRot();
+            return;
+        }
+        double gap = HumanoidTraversal.gapWidthAhead(this.level(), this.blockPosition(), dx, dz, 6);
+        if (gap < 0.0D) {
+            gap = this.pathGap(dx, dz, next);
+        }
+        if (gap < 0.0D) {
+            this.runUpReady = false;
+            return;
+        }
+        if (this.onHighPlatform()) {
+            net.minecraft.core.BlockPos landing = HumanoidTraversal.landingOf(this.level(),
+                    this.blockPosition(), dx, dz, 6);
+            if (landing == null || Math.abs(landing.getY() - this.platformY) > 1) {
+                this.runUpReady = false;
+                return;
+            }
+        }
+        if (this.onHighPlatform()) {
+            net.minecraft.core.BlockPos landing = HumanoidTraversal.landingOf(this.level(),
+                    this.blockPosition(), dx, dz, 6);
+            if (landing != null && landing.getY() > this.getY()) {
+                this.setDeltaMovement(dx * 0.28D, JUMP_UP, dz * 0.28D);
+                this.hasImpulse = true;
+                this.leapCooldown = 8;
+                return;
+            }
+        }
+        net.minecraft.core.BlockPos goalPos = this.getTarget() != null
+                ? this.getTarget().blockPosition()
+                : net.minecraft.core.BlockPos.containing(this.getX() + dx * 8.0D, this.getY(),
+                        this.getZ() + dz * 8.0D);
+        double before = Math.sqrt(this.blockPosition().distSqr(goalPos));
+        double after = Math.sqrt(HumanoidTraversal.landingOf(this.level(), this.blockPosition(),
+                dx, dz, 6) != null
+                ? HumanoidTraversal.landingOf(this.level(), this.blockPosition(), dx, dz, 6).distSqr(goalPos)
+                : this.blockPosition().distSqr(goalPos));
+        if (after > before - 0.5D) {
+            return;
+        }
+        double edgeGap = Math.max(0.0D, gap - this.getBbWidth());
+        boolean sprint = edgeGap > SPRINT_JUMP_REACH && !this.stepUpAhead(dx, dz);
+        if (sprint && !this.runUpReady) {
+            if (!this.roomBehind(dx, dz)) {
+                this.runUpReady = true;
+            } else {
+                this.runUpTicks = RUN_UP_TICKS;
+                this.requestMove(this.getX() - dx * RUN_UP_DISTANCE, this.getY(),
+                        this.getZ() - dz * RUN_UP_DISTANCE, 1.3D, 3);
+                return;
+            }
+        }
+        if (edgeGap > MAX_JUMP_REACH) {
+            return;
+        }
+        net.minecraft.world.phys.Vec3 momentum = this.getDeltaMovement();
+        double boost = sprint ? SPRINT_JUMP_BOOST : 0.0D;
+        this.setSprinting(sprint);
+        this.entityData.set(DATA_LEAP, true);
+        this.setDeltaMovement(momentum.x + dx * boost, JUMP_UP, momentum.z + dz * boost);
+        this.hasImpulse = true;
+        this.leapCooldown = 12;
+        this.runUpReady = false;
+    }
+
+    private void tickStuckRecovery() {
+        if (this.level().isClientSide) {
+            return;
+        }
+        net.minecraft.world.entity.player.Player player = this.level().getNearestPlayer(this, 96.0D);
+        if (player == null || this.distanceToSqr(player) > 48.0D * 48.0D) {
+            this.stuckBelowTicks = 0;
+            return;
+        }
+        boolean cannotPath = this.getNavigation().isDone();
+        boolean walled = HumanoidTraversal.isTrapped(this.level(), this.blockPosition());
+        boolean unreachable = cannotPath && walled;
+        if (player.getY() - this.getY() < 5.0D && !unreachable) {
+            this.stuckBelowTicks = 0;
+            return;
+        }
+        if (++this.stuckBelowTicks < STUCK_TELEPORT_TICKS) {
+            return;
+        }
+        this.stuckBelowTicks = 0;
+        net.minecraft.core.BlockPos landing = HumanoidTraversal.findLandingSpot(this.level(),
+                player.blockPosition(), 5);
+        net.minecraft.core.BlockPos spot = landing != null ? landing : player.blockPosition();
+        this.getNavigation().stop();
+        this.suppressReactions(80);
+        this.moveTo(spot.getX() + 0.5D, spot.getY(), spot.getZ() + 0.5D, this.getYRot(), this.getXRot());
+        this.setDeltaMovement(net.minecraft.world.phys.Vec3.ZERO);
+        this.hasImpulse = false;
+    }
+
+    private void tickReturnToPlayer() {
+        if (this.level().isClientSide) {
+            return;
+        }
+        net.minecraft.world.entity.player.Player player = this.level().getNearestPlayer(this, 256.0D);
+        if (player == null || this.distanceToSqr(player) < LEASH_DISTANCE * LEASH_DISTANCE) {
+            this.farFromPlayerTicks = 0;
+            return;
+        }
+        if (++this.farFromPlayerTicks < LEASH_TICKS) {
+            return;
+        }
+        this.farFromPlayerTicks = 0;
+        net.minecraft.core.BlockPos landing = HumanoidTraversal.findLandingSpot(this.level(),
+                player.blockPosition(), 4);
+        net.minecraft.core.BlockPos spot = landing != null ? landing : player.blockPosition();
+        this.getNavigation().stop();
+        this.suppressReactions(80);
+        this.moveTo(spot.getX() + 0.5D, spot.getY(), spot.getZ() + 0.5D, this.getYRot(), this.getXRot());
+        this.setDeltaMovement(net.minecraft.world.phys.Vec3.ZERO);
+        this.hasImpulse = false;
+    }
+
+    public boolean isVehicleCombat() {
+        return this.vehicleCombat;
+    }
+
+    public void setVehicleCombat(boolean value) {
+        this.vehicleCombat = value;
+    }
+
+    public boolean isDrivingVehicle() {
+        return this.drivingVehicle;
+    }
+
+    public void setDrivingVehicle(boolean driving) {
+        this.drivingVehicle = driving;
+    }
+
+    public long vehicleShotMillis() {
+        return this.vehicleShotMillis;
+    }
+
+    public void markVehicleShot(long millis) {
+        this.vehicleShotMillis = millis;
+    }
+
+    public void knockDownServer(int ticks) {
+        if (!this.level().isClientSide) {
+            this.knockDown(ticks);
+        }
+    }
+
+    public boolean isDowned() {
+        return this.downedTicks > 0;
+    }
+
+    public void knockDown(int ticks) {
+        if (this.level().isClientSide || this.isDowned()) {
+            return;
+        }
+        if (this.tickCount < this.downedCooldownUntil) {
+            return;
+        }
+        this.downedCooldownUntil = this.tickCount + ticks + DOWNED_COOLDOWN;
+        this.downedTicks = Math.max(this.downedTicks, ticks);
+        this.entityData.set(DATA_DOWNED, true);
+        this.clearAggro();
+        this.getNavigation().stop();
+        this.setDeltaMovement(this.getDeltaMovement().x * 0.4D, 0.18D, this.getDeltaMovement().z * 0.4D);
+        this.hasImpulse = true;
+    }
+
+    private void clearAggro() {
+        for (net.minecraft.world.entity.Mob mob : this.level().getEntitiesOfClass(
+                net.minecraft.world.entity.Mob.class, this.getBoundingBox().inflate(48.0D))) {
+            if (mob.getTarget() == this) {
+                mob.setTarget(null);
+            }
+        }
+    }
+
+    private void tickDowned() {
+        if (this.downedTicks <= 0) {
+            return;
+        }
+        this.downedTicks--;
+        this.getNavigation().stop();
+        if (this.downedTicks % 10 == 0) {
+            this.clearAggro();
+        }
+        if (this.downedTicks == 0) {
+            this.entityData.set(DATA_DOWNED, false);
+            this.setPose(net.minecraft.world.entity.Pose.STANDING);
+            this.setDeltaMovement(net.minecraft.world.phys.Vec3.ZERO);
+            this.hasImpulse = false;
+        }
     }
 
     public void setConvertedHit(boolean converted) {
@@ -691,7 +1817,9 @@ public class NeutralHumanoid extends PathfinderMob implements RangedAttackMob {
         }
 
         double threshold = this.usingLongGun ? LONG_RANGE_SWITCH - LONG_RANGE_HYSTERESIS : LONG_RANGE_SWITCH;
-        boolean wantLong = distance > threshold && !this.longRangedWeapon.isEmpty();
+        boolean indoorBlock = this.isIndoors()
+                && "rpg".equalsIgnoreCase(com.curiats.returncapsule.compat.tacz.TaczRifles.gunType(this.longRangedWeapon));
+        boolean wantLong = distance > threshold && !this.longRangedWeapon.isEmpty() && !indoorBlock;
         ItemStack wanted = wantLong ? this.longRangedWeapon : this.rangedWeapon;
         if (wanted.isEmpty()) {
             return;
@@ -796,6 +1924,8 @@ public class NeutralHumanoid extends PathfinderMob implements RangedAttackMob {
     protected void defineSynchedData() {
         super.defineSynchedData();
         this.entityData.define(DATA_ATTACK_SEQ, 0);
+        this.entityData.define(DATA_DOWNED, false);
+        this.entityData.define(DATA_LEAP, false);
     }
 
     public int markAttack() {
@@ -809,7 +1939,20 @@ public class NeutralHumanoid extends PathfinderMob implements RangedAttackMob {
     }
 
     @Override
+    public void setTarget(@javax.annotation.Nullable LivingEntity target) {
+        if (target instanceof net.minecraft.world.entity.player.Player
+                || target instanceof NeutralHumanoid) {
+            super.setTarget(null);
+            return;
+        }
+        super.setTarget(target);
+    }
+
     public boolean doHurtTarget(Entity target) {
+        if (target instanceof net.minecraft.world.entity.player.Player
+                || target instanceof NeutralHumanoid) {
+            return false;
+        }
 
         if (this.holdsBlade) {
         }

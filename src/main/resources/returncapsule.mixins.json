@@ -7,12 +7,15 @@
     "mixins": [
         "LivingEntitySetHealthMixin",
         "EntityDiscardGuardMixin",
-        "LivingEntityHealLockMixin"
+        "LivingEntityHealLockMixin",
+        "HumanoidAggroGuardMixin"
     ],
     "client": [
         "TaczPlayerAnimatorMixin",
         "RagdollifiedSkinLayerMixin",
-        "MobendsLoadedCrossbowMixin"
+        "MobendsLoadedCrossbowMixin",
+        "MobendsGunLayerMixin",
+        "ReactionsVehicleMixin"
     ],
     "injectors": {
         "defaultRequire": 1

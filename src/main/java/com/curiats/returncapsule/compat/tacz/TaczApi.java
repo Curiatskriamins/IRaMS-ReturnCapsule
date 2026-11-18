@@ -222,6 +222,47 @@ final class TaczApi {
         }
     }
 
+    static double readBulletRange(Object gunData) {
+        if (!available()) {
+            return 0.0D;
+        }
+        try {
+            Object bullet = null;
+            for (java.lang.reflect.Method method : gunData.getClass().getMethods()) {
+                if (method.getName().equals("getBulletData") && method.getParameterCount() == 0) {
+                    try {
+                        bullet = method.invoke(gunData);
+                    } catch (ReflectiveOperationException | RuntimeException exception) {
+                        return 0.0D;
+                    }
+                    break;
+                }
+            }
+            if (bullet == null) {
+                return 0.0D;
+            }
+            double life = number(bullet, "getLife", 0.0D);
+            double speed = number(bullet, "getSpeed", 0.0D);
+            return life * speed;
+        } catch (RuntimeException exception) {
+            return 0.0D;
+        }
+    }
+
+    private static double number(Object owner, String name, double fallback) {
+        for (java.lang.reflect.Method method : owner.getClass().getMethods()) {
+            if (method.getName().equals(name) && method.getParameterCount() == 0) {
+                try {
+                    Object value = method.invoke(owner);
+                    return value instanceof Number number ? number.doubleValue() : fallback;
+                } catch (ReflectiveOperationException | RuntimeException exception) {
+                    return fallback;
+                }
+            }
+        }
+        return fallback;
+    }
+
     static String readFireMode(Object gunData) {
         GunDataAccessors accessors = gunDataAccessors(gunData);
         if (!accessors.supported()) {

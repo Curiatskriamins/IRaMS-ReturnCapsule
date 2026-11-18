@@ -40,6 +40,7 @@ public final class HumanoidCommand {
         CommandDispatcher<CommandSourceStack> dispatcher = event.getDispatcher();
         dispatcher.register(Commands.literal("returncapsule")
                 .then(Commands.literal("info").executes(HumanoidCommand::info))
+                .then(Commands.literal("debug").executes(HumanoidCommand::debugNearest))
                 .then(Commands.literal("reset").executes(HumanoidCommand::reset))
                 .then(Commands.literal("target")
                         .then(Commands.argument("distance", DoubleArgumentType.doubleArg(4.0D, 512.0D))
@@ -48,12 +49,25 @@ public final class HumanoidCommand {
                                         .suggests(TARGET_TYPE_SUGGESTIONS)
                                         .executes(context -> spawnTarget(context,
                                                 StringArgumentType.getString(context, "type"))))))
-                .then(Commands.argument("target", StringArgumentType.word())
+                .then(Commands.argument("scope", StringArgumentType.word())
                         .suggests(TARGET_SUGGESTIONS)
                         .then(Commands.argument("slot", StringArgumentType.word())
                                 .suggests(SLOT_SUGGESTIONS)
                                 .then(Commands.argument("enabled", IntegerArgumentType.integer(0, 1))
                                         .executes(HumanoidCommand::apply)))));
+    }
+
+    private static int debugNearest(CommandContext<CommandSourceStack> context) {
+        CommandSourceStack source = context.getSource();
+        List<NeutralHumanoid> found = collect(source, "nearby");
+        if (found.isEmpty()) {
+            source.sendFailure(Component.literal("[returncapsule] no humanoid nearby"));
+            return 0;
+        }
+        for (NeutralHumanoid humanoid : found) {
+            source.sendSuccess(() -> Component.literal("[returncapsule] " + humanoid.debugState()), false);
+        }
+        return found.size();
     }
 
     private static final SuggestionProvider<CommandSourceStack> TARGET_TYPE_SUGGESTIONS =
@@ -114,7 +128,7 @@ public final class HumanoidCommand {
 
     private static int apply(CommandContext<CommandSourceStack> context) {
         CommandSourceStack source = context.getSource();
-        String target = StringArgumentType.getString(context, "target");
+        String target = StringArgumentType.getString(context, "scope");
         String slotName = StringArgumentType.getString(context, "slot");
         int enabled = IntegerArgumentType.getInteger(context, "enabled");
 

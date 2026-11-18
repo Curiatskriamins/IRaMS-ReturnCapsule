@@ -13,8 +13,20 @@ public class HumanoidCombatGoal extends Goal {
 
     private static final double STANCE_HYSTERESIS = 1.5D;
 
-    private static final double MIN_GUN_RANGE = 5.0D;
+    private static final double MIN_GUN_RANGE = 4.0D;
     private static final double APPROACH_SPEED = 1.0D;
+
+    private static final double DIRECT_STEER_RANGE = 14.0D;
+
+    private static final double NAVIGATE_RANGE = 32.0D;
+
+    private static final double MIN_APPROACH_RANGE = 10.0D;
+
+    private static final int AIM_SETTLE_TICKS = 2;
+
+    private static final int SIGHT_CACHE_TICKS = 5;
+
+    private static final int AIM_SWITCH_TICKS = 20;
 
     private static final int STEP_BACK_TICKS = 8;
 
@@ -30,7 +42,11 @@ public class HumanoidCombatGoal extends Goal {
 
     private static final int STALL_TIMEOUT = 200;
 
-    private static final int NO_SIGHT_TIMEOUT = 60;
+    private static final int SIGHT_MEMORY = 40;
+
+    private static final int FLANK_AFTER = 80;
+
+    private static final int MAX_FLANKS = 2;
     private static final double BASE_ATTACK_SPEED = 4.0D;
     private static final double TICKS_PER_SECOND = 20.0D;
 
@@ -47,9 +63,36 @@ public class HumanoidCombatGoal extends Goal {
 
     private int noSightTicks;
 
+    private int flanksUsed;
+
+    private int flankCooldown;
+
+    private boolean flanking;
+
+    private int aimTicks;
+
+    private AimMode aimMode = AimMode.HEAD;
+
+    private int repositionAttempts;
+
+    private enum AimMode { HEAD, BODY }
+
+    private int sightTargetId = -1;
+
+    private int sightTicks;
+
+    private boolean sightResult;
+
     private int repositionTicks;
 
     private int lastSweepParticle = -100;
+
+    private int fallbackTicks;
+
+    private int fallbackCooldown;
+
+    private static final int FALLBACK_TICKS = 40;
+    private static final int FALLBACK_COOLDOWN = 120;
 
     private static final int SWEEP_PARTICLE_INTERVAL = 10;
 
@@ -60,6 +103,9 @@ public class HumanoidCombatGoal extends Goal {
 
     @Override
     public boolean canUse() {
+        if (this.mob.isDowned() || this.mob.isPassenger()) {
+            return false;
+        }
         LivingEntity target = this.mob.getTarget();
         if (target == null || !target.isAlive() || !this.mob.canAttack(target)) {
             return false;
@@ -90,7 +136,15 @@ public class HumanoidCombatGoal extends Goal {
         if (target == null) {
             return;
         }
-        this.mob.getLookControl().setLookAt(target, 30.0F, 30.0F);
+        boolean visible = this.visibleTo(target);
+        if (visible) {
+            this.noSightTicks = 0;
+            this.flanksUsed = 0;
+            this.flanking = false;
+            this.mob.getLookControl().setLookAt(target, 30.0F, 30.0F);
+        } else {
+            this.noSightTicks++;
+        }
         if (this.abandonIfStalled(target)) {
             return;
         }
@@ -102,12 +156,68 @@ public class HumanoidCombatGoal extends Goal {
         boolean gun = this.mob.shouldHoldGun(distance, STANCE_HYSTERESIS);
         this.mob.useStance(gun ? NeutralHumanoid.Stance.RANGED : NeutralHumanoid.Stance.MELEE);
 
+        if (!visible) {
+            if (HumanoidGrenadier.tryThrow(this.mob, target, true)) {
+                return;
+            }
+            if (this.noSightTicks > FLANK_AFTER) {
+                if (this.flanksUsed >= MAX_FLANKS) {
+                    this.flanksUsed = 0;
+                    this.noSightTicks = 0;
+                    this.mob.setTarget(null);
+                    return;
+                }
+                if (this.flankCooldown <= 0) {
+                    this.flanksUsed++;
+                    this.flankCooldown = 60;
+                    this.flanking = this.startFlank(target);
+                }
+            }
+            if (this.flankCooldown > 0) {
+                this.flankCooldown--;
+            }
+            if (this.flanking) {
+                this.mob.setSprinting(true);
+                return;
+            }
+            if (this.noSightTicks > SIGHT_MEMORY) {
+                return;
+            }
+        }
+        if (this.openGroundFallback(target)) {
+            return;
+        }
+        if (this.holdAtEdge(target)) {
+            return;
+        }
         if (this.mob.isRangedStance()) {
             this.mob.chooseGunFor(distance);
+            boolean flat = target.getY() - this.mob.getY() <= 1.5D;
+            boolean stationary = distance <= this.mob.engagementRadiusFor(target);
+            this.mob.setCombatProne(flat && stationary && !this.flanking);
+            if (this.edgeGuard(target)) {
+                if (this.attackCooldown > 0) {
+                    this.attackCooldown--;
+                    return;
+                }
+                this.attack(target, distance);
+                return;
+            }
             this.holdRange(target, distance);
+            HumanoidGrenadier.tryThrow(this.mob, target, false);
+            if (!HumanoidSight.canSee(this.mob.level(), this.mob, target)) {
+                this.attackCooldown = 5;
+                return;
+            }
         } else {
+            if (this.holdAtEdge(target)) {
+                this.turnToward(target);
+                return;
+            }
+            this.mob.setCombatProne(false);
             this.turnToward(target);
             this.meleeMovement(target, distance);
+            this.mob.setSprinting(true);
         }
 
         if (this.attackCooldown > 0) {
@@ -128,14 +238,133 @@ public class HumanoidCombatGoal extends Goal {
         if (health < this.lastTargetHealth - 1.0E-4F) {
             this.lastTargetHealth = health;
             this.stalledTicks = 0;
+            this.aimMode = AimMode.HEAD;
+            this.repositionAttempts = 0;
             return false;
         }
-        if (++this.stalledTicks <= STALL_TIMEOUT) {
+        this.stalledTicks++;
+        if (this.stalledTicks == AIM_SWITCH_TICKS && this.aimMode == AimMode.HEAD) {
+            this.aimMode = AimMode.BODY;
+        }
+        if (this.stalledTicks <= STALL_TIMEOUT) {
             return false;
         }
         this.stalledTicks = 0;
+        if (this.repositionAttempts < 2) {
+            this.repositionAttempts++;
+            this.aimMode = AimMode.HEAD;
+            this.repositionTicks = REPOSITION_TICKS;
+            this.runAwayFrom(target);
+            if (this.startFlank(target)) {
+                this.flanking = true;
+            }
+            return false;
+        }
+        this.repositionAttempts = 0;
+        this.aimMode = AimMode.HEAD;
         this.targetId = -1;
         this.mob.setTarget(null);
+        return true;
+    }
+
+    private boolean openGroundFallback(LivingEntity target) {
+        if (this.fallbackTicks > 0) {
+            this.fallbackTicks--;
+            return this.fallbackTicks > 0;
+        }
+        if (this.mob.hurtTime <= 0 || this.fallbackCooldown > 0) {
+            return false;
+        }
+        if (this.fallbackCooldown > -200) {
+            this.fallbackCooldown--;
+        }
+        if (this.isOpenGround(this.mob.blockPosition())) {
+            this.fallbackCooldown = FALLBACK_COOLDOWN;
+            return false;
+        }
+        net.minecraft.core.BlockPos spot = this.findOpenGround();
+        if (spot == null) {
+            this.fallbackCooldown = FALLBACK_COOLDOWN;
+            return false;
+        }
+        this.mob.getNavigation().moveTo(spot.getX() + 0.5D, spot.getY(), spot.getZ() + 0.5D, 1.3D);
+        this.fallbackTicks = FALLBACK_TICKS;
+        this.fallbackCooldown = FALLBACK_COOLDOWN;
+        return true;
+    }
+
+    private boolean isOpenGround(net.minecraft.core.BlockPos origin) {
+        for (int dx = -1; dx <= 1; dx++) {
+            for (int dz = -1; dz <= 1; dz++) {
+                net.minecraft.core.BlockPos floor = origin.offset(dx, -1, dz);
+                if (this.mob.level().getBlockState(floor).getCollisionShape(this.mob.level(), floor).isEmpty()) {
+                    return false;
+                }
+                net.minecraft.core.BlockPos head = origin.offset(dx, 0, dz);
+                if (!this.mob.level().getBlockState(head).getCollisionShape(this.mob.level(), head).isEmpty()) {
+                    return false;
+                }
+                net.minecraft.core.BlockPos above = origin.offset(dx, 1, dz);
+                if (!this.mob.level().getBlockState(above).getCollisionShape(this.mob.level(), above).isEmpty()) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
+    private net.minecraft.core.BlockPos findOpenGround() {
+        net.minecraft.core.BlockPos origin = this.mob.blockPosition();
+        for (int radius = 2; radius <= 12; radius += 2) {
+            for (int dx = -radius; dx <= radius; dx += 2) {
+                for (int dz = -radius; dz <= radius; dz += 2) {
+                    net.minecraft.core.BlockPos candidate = origin.offset(dx, 0, dz);
+                    if (this.isOpenGround(candidate)) {
+                        return candidate;
+                    }
+                }
+            }
+        }
+        return null;
+    }
+
+    private static final double CHASE_DROP_LIMIT = 5.0D;
+
+    private boolean edgeGuardOn;
+
+    private boolean atEdge() {
+        net.minecraft.core.BlockPos feet = this.mob.blockPosition();
+        float yaw = (float) Math.toRadians(this.mob.getYRot());
+        double dirX = -Math.sin(yaw);
+        double dirZ = Math.cos(yaw);
+        for (double step = 0.7D; step <= 1.6D; step += 0.45D) {
+            int x = (int) Math.floor(this.mob.getX() + dirX * step);
+            int z = (int) Math.floor(this.mob.getZ() + dirZ * step);
+            net.minecraft.core.BlockPos below = new net.minecraft.core.BlockPos(x, feet.getY() - 1, z);
+            if (this.mob.level().getBlockState(below).getCollisionShape(this.mob.level(), below).isEmpty()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean edgeGuard(LivingEntity target) {
+        if (!atEdge()) {
+            if (this.edgeGuardOn) {
+                this.edgeGuardOn = false;
+                this.mob.setShiftKeyDown(false);
+                this.mob.setPose(net.minecraft.world.entity.Pose.STANDING);
+            }
+            return false;
+        }
+        if (!this.edgeGuardOn) {
+            this.edgeGuardOn = true;
+            this.mob.setShiftKeyDown(true);
+            this.mob.setPose(net.minecraft.world.entity.Pose.CROUCHING);
+        }
+        this.mob.getNavigation().stop();
+        this.mob.getMoveControl().strafe(0.0F, 0.0F);
+        this.faceTarget(target);
         return true;
     }
 
@@ -146,8 +375,13 @@ public class HumanoidCombatGoal extends Goal {
             this.mob.getNavigation().stop();
             this.mob.getMoveControl().strafe(-1.0F, 0.0F);
             this.mob.setSpeed(RETREAT_SPEED_FACTOR);
-        } else if (distance > this.mob.engagementRadiusFor(target)) {
-            this.navigateTo(target, APPROACH_SPEED);
+        } else if (distance > NAVIGATE_RANGE) {
+            this.faceTarget(target);
+            this.mob.getNavigation().stop();
+        } else if (distance > MIN_APPROACH_RANGE) {
+            if (!this.steerDirectly(target, APPROACH_SPEED)) {
+                this.navigateTo(target, APPROACH_SPEED);
+            }
         } else if (this.repositionTicks > 0) {
             this.repositionTicks--;
             this.runAwayFrom(target);
@@ -191,7 +425,7 @@ public class HumanoidCombatGoal extends Goal {
 
     private static final double REPOSITION_DISTANCE = 12.0D;
 
-    private static final double RETREAT_DISTANCE = 18.0D;
+    private static final double RETREAT_DISTANCE = 7.0D;
 
     private static final double REPOSITION_STEP = 8.0D;
 
@@ -224,6 +458,9 @@ public class HumanoidCombatGoal extends Goal {
     }
 
     private void closeIn(LivingEntity target, double distance) {
+        if (this.steerDirectly(target, APPROACH_SPEED)) {
+            return;
+        }
         if (distance > HumanoidCombatRules.MELEE_REACH) {
             this.navigateTo(target, APPROACH_SPEED);
         } else {
@@ -239,24 +476,52 @@ public class HumanoidCombatGoal extends Goal {
         return false;
     }
 
+    private boolean steerDirectly(LivingEntity target, double speed) {
+        double distance = Math.sqrt(this.mob.distanceToSqr(target));
+        if (distance > DIRECT_STEER_RANGE || !HumanoidSight.canSee(this.mob.level(), this.mob, target)) {
+            return false;
+        }
+        this.mob.getNavigation().stop();
+        this.mob.getMoveControl().setWantedPosition(target.getX(), target.getY(), target.getZ(), speed);
+        return true;
+    }
+
     private void navigateTo(LivingEntity target, double speed) {
         if (this.shouldRepath()) {
-            this.mob.getNavigation().moveTo(target, speed);
+            this.mob.requestMove(target, speed, 3);
         }
     }
 
     private void attack(LivingEntity target, double distance) {
         if (this.mob.isRangedStance()) {
-            if (!this.mob.getSensing().hasLineOfSight(target)) {
-
-            if (++this.noSightTicks > NO_SIGHT_TIMEOUT) {
-                this.noSightTicks = 0;
-                this.mob.setTarget(null);
+            boolean clear = this.mob.cluster() != null && this.mob.cluster().contains(target)
+                    ? HumanoidSight.canSee(this.mob.level(), this.mob, this.mob.getEyePosition(),
+                            this.mob.aimPointFor(target))
+                    : HumanoidSight.canSee(this.mob.level(), this.mob, target);
+            if (!clear) {
                 return;
             }
+            boolean precision = this.mob.precisionWeapon();
+            boolean aligned;
+            if (precision) {
+                aligned = this.mob.aimAt(target);
+            } else {
+                net.minecraft.world.phys.Vec3 point = this.mob.cluster() != null
+                        ? this.mob.aimPointFor(target)
+                        : this.aimMode == AimMode.HEAD
+                                ? new net.minecraft.world.phys.Vec3(target.getX(), target.getEyeY(), target.getZ())
+                                : target.getBoundingBox().getCenter();
+                aligned = this.mob.aimAtPoint(point, this.mob.cluster() != null ? 12.0F : 7.0F);
+            }
+            if (!aligned) {
+                this.aimTicks = 0;
                 return;
             }
-            this.attackCooldown = this.gunInterval();
+            if (++this.aimTicks < (precision ? AIM_SETTLE_TICKS : 1)) {
+                return;
+            }
+            this.aimTicks = 0;
+            this.attackCooldown = 0;
             this.mob.fireGun(target);
             return;
         }
@@ -298,6 +563,80 @@ public class HumanoidCombatGoal extends Goal {
             nearby.invulnerableTime = 0;
             nearby.hurt(this.mob.damageSources().mobAttack(this.mob), cleave);
         }
+    }
+
+    private boolean visibleTo(LivingEntity target) {
+        int id = target.getId();
+        if (id != this.sightTargetId || this.sightTicks <= 0) {
+            this.sightTargetId = id;
+            this.sightTicks = SIGHT_CACHE_TICKS;
+            if (this.mob.cluster() != null && this.mob.cluster().contains(target)) {
+                this.sightResult = HumanoidSight.canSee(this.mob.level(), this.mob,
+                        this.mob.getEyePosition(), this.mob.aimPointFor(target));
+            } else {
+                this.sightResult = HumanoidSight.canSee(this.mob.level(), this.mob, target);
+            }
+        }
+        this.sightTicks--;
+        return this.sightResult;
+    }
+
+
+    private boolean holdAtEdge(LivingEntity target) {
+        double drop = this.mob.getY() - target.getY();
+        boolean platform = this.mob.onHighPlatform()
+                && target.getY() < this.mob.platformY() - 2.0D;
+        if (platform) {
+            this.edgeGuardOn = true;
+            this.mob.setShiftKeyDown(true);
+            this.mob.setPose(net.minecraft.world.entity.Pose.CROUCHING);
+            this.mob.getNavigation().stop();
+            this.mob.getLookControl().setLookAt(target, 30.0F, 30.0F);
+            return true;
+        }
+        if (drop < CHASE_DROP_LIMIT) {
+            return false;
+        }
+        if (this.mob.atPlatformEdge() || this.edgeGuardOn) {
+            this.edgeGuardOn = true;
+            this.mob.setShiftKeyDown(true);
+            this.mob.setPose(net.minecraft.world.entity.Pose.CROUCHING);
+            this.mob.getNavigation().stop();
+            this.mob.getLookControl().setLookAt(target, 30.0F, 30.0F);
+            return true;
+        }
+        net.minecraft.core.BlockPos here = this.mob.blockPosition();
+        for (int step = 1; step <= 6; step++) {
+            net.minecraft.core.BlockPos probe = here.relative(
+                    net.minecraft.core.Direction.fromYRot(this.mob.getYRot()), step);
+            if (!this.mob.level().getBlockState(probe.below()).getCollisionShape(
+                    this.mob.level(), probe.below()).isEmpty()) {
+                this.mob.getNavigation().moveTo(probe.getX() + 0.5D, probe.getY(),
+                        probe.getZ() + 0.5D, 1.0D);
+                break;
+            }
+        }
+        return true;
+    }
+
+    private boolean startFlank(LivingEntity target) {
+        net.minecraft.core.BlockPos targetPos = target.blockPosition();
+        for (int attempt = 0; attempt < 8; attempt++) {
+            double angle = this.mob.getRandom().nextDouble() * Math.PI * 2.0D;
+            double radius = 6.0D + this.mob.getRandom().nextDouble() * 3.0D;
+            net.minecraft.core.BlockPos spot = net.minecraft.core.BlockPos.containing(
+                    targetPos.getX() + Math.cos(angle) * radius, this.mob.getY(),
+                    targetPos.getZ() + Math.sin(angle) * radius);
+            if (!HumanoidTraversal.canStandOn(this.mob.level(), spot)) {
+                continue;
+            }
+            if (this.mob.onHighPlatform() && Math.abs(spot.getY() - this.mob.platformY()) > 1) {
+                continue;
+            }
+            this.mob.getNavigation().moveTo(spot.getX() + 0.5D, spot.getY(), spot.getZ() + 0.5D, 1.3D);
+            return true;
+        }
+        return false;
     }
 
     private void turnToward(LivingEntity target) {

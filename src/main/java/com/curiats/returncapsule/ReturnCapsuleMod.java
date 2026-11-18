@@ -28,6 +28,8 @@ public final class ReturnCapsuleMod {
 
     public ReturnCapsuleMod() {
         IEventBus modBus = FMLJavaModLoadingContext.get().getModEventBus();
+        LOGGER.info("[returncapsule] navigation={}",
+                Boolean.getBoolean("returncapsule.vanillaNavigation") ? "vanilla" : "custom");
 
         ModBlocks.BLOCKS.register(modBus);
         ModItems.ITEMS.register(modBus);

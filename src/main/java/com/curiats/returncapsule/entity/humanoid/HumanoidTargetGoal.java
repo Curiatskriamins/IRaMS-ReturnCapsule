@@ -14,6 +14,10 @@ import java.util.UUID;
 @SuppressWarnings({"this-escape"})
 public class HumanoidTargetGoal extends Goal {
 
+    private static final double MAX_SCAN = 64.0D;
+
+    private static final int MAX_CANDIDATES = 64;
+
     private static final double CLOSE_RADIUS = 16.0D;
     private static final int CLOSE_INTERVAL = 5;
 
@@ -68,8 +72,7 @@ public class HumanoidTargetGoal extends Goal {
         if (this.chosen != null) {
             LivingEntity current = this.mob.getTarget();
             boolean keepCurrent = current != null && current.isAlive()
-                    && HumanoidCombatRules.priority(this.mob, current)
-                            >= HumanoidCombatRules.priority(this.mob, this.chosen);
+                    && !HumanoidCombatRules.outranks(this.mob, this.chosen, current);
             if (!keepCurrent) {
                 this.mob.setTarget(this.chosen);
             }
@@ -85,17 +88,24 @@ public class HumanoidTargetGoal extends Goal {
     @Nullable
     private LivingEntity findTarget(double radius) {
         LivingEntity best = null;
-        double bestPriority = -Double.MAX_VALUE;
+        LivingEntity fallback = null;
+        java.util.Set<LivingEntity> engaged = engagedTargets();
 
+        int examined = 0;
         for (LivingEntity candidate : this.mob.level().getEntitiesOfClass(
                 LivingEntity.class, this.scanArea(radius), this::isCandidate)) {
+            if (++examined > MAX_CANDIDATES) {
+                break;
+            }
             if (!this.worthEngaging(candidate)) {
                 continue;
             }
-            double priority = HumanoidCombatRules.priority(this.mob, candidate);
-            if (priority > bestPriority) {
-                bestPriority = priority;
-                best = candidate;
+            if (HumanoidCombatRules.outranks(this.mob, candidate, best)) {
+                if (!engaged.contains(candidate)) {
+                    best = candidate;
+                } else if (fallback == null) {
+                    fallback = candidate;
+                }
             }
         }
 
@@ -108,14 +118,24 @@ public class HumanoidTargetGoal extends Goal {
                 if (!this.worthEngaging(candidate)) {
                     continue;
                 }
-                double priority = HumanoidCombatRules.priority(this.mob, candidate);
-                if (priority > bestPriority) {
-                    bestPriority = priority;
+                if (HumanoidCombatRules.outranks(this.mob, candidate, best)) {
                     best = candidate;
                 }
             }
         }
-        return best;
+        return best != null ? best : fallback;
+    }
+
+    private java.util.Set<LivingEntity> engagedTargets() {
+        java.util.Set<LivingEntity> engaged = java.util.Collections.newSetFromMap(
+                new java.util.IdentityHashMap<>());
+        for (NeutralHumanoid other : this.mob.level().getEntitiesOfClass(NeutralHumanoid.class,
+                this.mob.getBoundingBox().inflate(64.0D))) {
+            if (other != this.mob && other.getTarget() != null) {
+                engaged.add(other.getTarget());
+            }
+        }
+        return engaged;
     }
 
     private AABB scanArea(double radius) {
@@ -124,7 +144,7 @@ public class HumanoidTargetGoal extends Goal {
     }
 
     private boolean worthEngaging(LivingEntity candidate) {
-        double radius = this.mob.engagementRadiusFor(candidate);
+        double radius = Math.min(this.mob.engagementRadiusFor(candidate), MAX_SCAN);
         return this.mob.distanceToSqr(candidate) <= radius * radius;
     }
 
@@ -141,8 +161,11 @@ public class HumanoidTargetGoal extends Goal {
             return false;
         }
 
-        return HumanoidCombatRules.isHostileEnemy(candidate)
-                || HumanoidCombatRules.threatensAllies(candidate);
+        if (!HumanoidCombatRules.isHostileEnemy(candidate)
+                && !HumanoidCombatRules.threatensAllies(candidate)) {
+            return false;
+        }
+        return HumanoidSight.canSee(this.mob.level(), this.mob, candidate);
     }
 
     @Override

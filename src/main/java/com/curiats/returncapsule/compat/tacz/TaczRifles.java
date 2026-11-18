@@ -22,7 +22,14 @@ public final class TaczRifles {
     private static final int MOB_MAGAZINE = 30;
     private static final int MOB_DUMMY_AMMO = 9_999;
 
-    private static final Set<String> SERVICE_TYPES = Set.of("rifle", "sniper", "dmr");
+    private static final Set<String> SERVICE_TYPES = Set.of("rifle", "sniper", "dmr", "mg", "smg", "rpg");
+
+    private static final List<String> EXCLUDED_GUN_KEYWORDS =
+            List.of("m134", "minigun", "gatling", "chain_gun", "chain gun");
+
+    private static final Set<String> LONG_SLOT_TYPES = Set.of("sniper", "dmr", "rpg");
+
+    private static final double MIN_SERVICE_RANGE = 16.0D;
 
     private static volatile boolean resolved;
     private static volatile boolean warnedEmpty;
@@ -71,7 +78,45 @@ public final class TaczRifles {
     }
 
     public static boolean isServiceGun(ItemStack stack) {
-        return SERVICE_TYPES.contains(gunType(stack));
+        if (!SERVICE_TYPES.contains(gunType(stack))) {
+            return false;
+        }
+        return !isExcluded(gunId(stack));
+    }
+
+    public static boolean isMeleeGun(ItemStack stack) {
+        ResourceLocation id = gunId(stack);
+        if (id == null) {
+            return false;
+        }
+        for (GunInfo gun : TaczCatalog.snapshot().guns()) {
+            if (gun.id().equals(id)) {
+                return gun.range() > 0.0D && gun.range() < MIN_SERVICE_RANGE;
+            }
+        }
+        return false;
+    }
+
+    public static boolean isLongSlot(String type) {
+        return type != null && LONG_SLOT_TYPES.contains(type.toLowerCase(Locale.ROOT));
+    }
+
+
+    private static boolean shortRange(GunInfo gun) {
+        return gun.range() > 0.0D && gun.range() < MIN_SERVICE_RANGE;
+    }
+
+    private static boolean isExcluded(ResourceLocation id) {
+        if (id == null) {
+            return false;
+        }
+        String path = id.getPath().toLowerCase(Locale.ROOT);
+        for (String keyword : EXCLUDED_GUN_KEYWORDS) {
+            if (path.contains(keyword)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     public static double effectiveRange(String type) {
@@ -98,7 +143,8 @@ public final class TaczRifles {
 
             List<GunInfo> unfiltered = new ArrayList<>();
             for (GunInfo gun : TaczCatalog.snapshot().guns()) {
-                if (SERVICE_TYPES.contains(gun.type().toLowerCase(Locale.ROOT))) {
+                if (SERVICE_TYPES.contains(gun.type().toLowerCase(Locale.ROOT))
+                        && !isExcluded(gun.id()) && !shortRange(gun)) {
                     unfiltered.add(gun);
                 }
             }
@@ -107,6 +153,9 @@ public final class TaczRifles {
         List<GunInfo> built = new ArrayList<>();
         for (GunInfo gun : TaczCatalog.snapshot().guns()) {
             if (!SERVICE_TYPES.contains(gun.type().toLowerCase(Locale.ROOT))) {
+                continue;
+            }
+            if (isExcluded(gun.id()) || shortRange(gun)) {
                 continue;
             }
             if (!renderable.isEmpty() && !renderable.contains(gun.id())) {
@@ -161,7 +210,7 @@ public final class TaczRifles {
         List<GunInfo> pool = new java.util.ArrayList<>();
         for (GunInfo gun : serviceGuns()) {
             String type = gun.type().toLowerCase(Locale.ROOT);
-            if ("sniper".equals(type) || "dmr".equals(type)) {
+            if (isLongSlot(type)) {
                 pool.add(gun);
             }
         }
@@ -182,7 +231,7 @@ public final class TaczRifles {
 
         List<GunInfo> rifles = new java.util.ArrayList<>();
         for (GunInfo gun : pool) {
-            if ("rifle".equalsIgnoreCase(gun.type())) {
+            if (!isLongSlot(gun.type())) {
                 rifles.add(gun);
             }
         }
