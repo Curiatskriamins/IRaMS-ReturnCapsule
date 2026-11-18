@@ -1,6 +1,7 @@
 package com.curiats.returncapsule.mixin;
 
 import com.curiats.returncapsule.compat.ragdoll.RagdollSkinSupport;
+import com.raiiiden.ragdollified.client.ClientRagdoll;
 import net.minecraft.client.model.HumanoidModel;
 import net.minecraft.client.model.PlayerModel;
 import net.minecraft.client.model.geom.builders.CubeDeformation;
@@ -15,9 +16,11 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 /**
  * Makes Ragdollified render our humanoid ragdoll with a player model, so the humanoid skin layer works.
  *
- * <p>The ragdoll parameter is declared as {@link Object} (a Mixin surrogate type) and its mob type is read by
- * name through {@link RagdollSkinSupport}. Ragdollified therefore stays optional: this file names no
- * Ragdollified type, and {@link Pseudo} plus {@code require = 0} keep it inert when the mod is absent.</p>
+ * <p>The {@code ClientRagdoll} parameter type comes from the compile only {@code compatStub} source set, not from
+ * a Ragdollified jar: Mixin validates this handler descriptor exactly, so the parameter cannot be widened to
+ * {@code Object}. The stub is never packaged and no member is called on it - the mob type is read reflectively
+ * through {@link RagdollSkinSupport}, and {@link Pseudo} plus {@code require = 0} keep the mixin inert when
+ * Ragdollified is absent.</p>
  */
 @Pseudo
 @Mixin(targets = "com.raiiiden.ragdollified.client.ClientRagdollRenderer", remap = false)
@@ -26,7 +29,7 @@ public class RagdollifiedSkinLayerMixin {
     private static PlayerModel<?> returncapsule$playerModel;
 
     @Inject(method = "humanoidModelFor", at = @At("HEAD"), cancellable = true, require = 0)
-    private static void returncapsule$usePlayerModel(Object ragdoll,
+    private static void returncapsule$usePlayerModel(ClientRagdoll ragdoll,
                                                     CallbackInfoReturnable<HumanoidModel<?>> callback) {
         if (!RagdollSkinSupport.isHumanoidRagdoll(ragdoll)) {
             return;

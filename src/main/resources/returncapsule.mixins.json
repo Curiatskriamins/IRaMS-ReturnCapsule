@@ -10,13 +10,6 @@
         "LivingEntityHealLockMixin",
         "HumanoidAggroGuardMixin"
     ],
-    "client": [
-        "TaczPlayerAnimatorMixin",
-        "RagdollifiedSkinLayerMixin",
-        "MobendsLoadedCrossbowMixin",
-        "MobendsGunLayerMixin",
-        "ReactionsVehicleMixin"
-    ],
     "injectors": {
         "defaultRequire": 1
     }
