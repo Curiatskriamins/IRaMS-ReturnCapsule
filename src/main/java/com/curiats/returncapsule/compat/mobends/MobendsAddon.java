@@ -34,6 +34,7 @@ public final class MobendsAddon {
     private static final String CORE_CLIENT_CONFIG = "goblinbob.mobends.core.configuration.CoreClientConfig";
     private static final String MUTATOR = "goblinbob.mobends.core.mutators.Mutator";
     private static final String LIVING_ENTITY_DATA = "goblinbob.mobends.core.data.LivingEntityData";
+    private static final String ANIMATION_CONTROL = "goblinbob.mobends.api.animation.MoBendsAnimationControl";
 
     private static final String[] FALLBACK_ANIMATIONS =
             {"walk", "sprint", "jump", "fall", "sneak", "swim", "attack", "ride", "climb"};
@@ -150,13 +151,27 @@ public final class MobendsAddon {
         }
         try {
             register();
-
-            goblinbob.mobends.api.animation.MoBendsAnimationControl.unregister("tacz");
-            goblinbob.mobends.api.animation.MoBendsAnimationControl.unregister("superbwarfare");
+            unregisterForeignBenders(MobendsAddon.class.getClassLoader());
         } catch (ReflectiveOperationException | RuntimeException | LinkageError exception) {
             ReturnCapsuleMod.LOGGER.warn(
                     "MoBends is installed but its addon API could not be used; humanoids keep vanilla animation",
                     exception);
+        }
+    }
+
+    /**
+     * Stops MoBends' own benders from animating TaCZ and Superb Warfare items, so only this addon drives the
+     * humanoids. The class is looked up by name (some MoBends builds do not ship it at all) and a failure here is
+     * cosmetic, hence the local catch instead of failing the whole registration.
+     */
+    private static void unregisterForeignBenders(ClassLoader loader) {
+        try {
+            Class<?> control = Class.forName(ANIMATION_CONTROL, false, loader);
+            Method unregister = control.getMethod("unregister", String.class);
+            unregister.invoke(null, "tacz");
+            unregister.invoke(null, "superbwarfare");
+        } catch (ReflectiveOperationException | RuntimeException | LinkageError exception) {
+            ReturnCapsuleMod.LOGGER.debug("MoBends animation control unavailable: {}", exception.toString());
         }
     }
 

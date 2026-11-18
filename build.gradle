@@ -59,11 +59,9 @@ repositories {
 dependencies {
     annotationProcessor 'org.spongepowered:mixin:0.8.5:processor'
     minecraft "net.minecraftforge:forge:${minecraft_version}-${forge_version}"
-    // MoBends (MIT) is compiled against only: a custom mutator has to extend its generic classes, which reflection
-    // cannot do. compileOnly keeps it out of the built jar, so nothing is redistributed.
-    compileOnly files('libs/mobends-1.20.1-6.1.1-forge.jar')
-    // Ragdollified: only to write a mixin against its renderer; never shipped.
-    compileOnly files('libs/ragdollified-forge-1.20.1-1.2.2.jar')
+    // MoBends and Ragdollified are optional integrations and are never shipped. They are reached through
+    // reflection, java.lang.reflect.Proxy addons and string-targeted @Pseudo mixins only (see compat/mobends
+    // and compat/ragdoll), so neither jar is required to compile this project.
 }
 
 tasks.named('processResources', ProcessResources).configure {
