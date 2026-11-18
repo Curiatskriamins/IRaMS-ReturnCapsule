@@ -187,22 +187,8 @@ public class HumanoidCombatGoal extends Goal {
         if (this.openGroundFallback(target)) {
             return;
         }
-        if (this.holdAtEdge(target)) {
-            return;
-        }
         if (this.mob.isRangedStance()) {
             this.mob.chooseGunFor(distance);
-            boolean flat = target.getY() - this.mob.getY() <= 1.5D;
-            boolean stationary = distance <= this.mob.engagementRadiusFor(target);
-            this.mob.setCombatProne(flat && stationary && !this.flanking);
-            if (this.edgeGuard(target)) {
-                if (this.attackCooldown > 0) {
-                    this.attackCooldown--;
-                    return;
-                }
-                this.attack(target, distance);
-                return;
-            }
             this.holdRange(target, distance);
             HumanoidGrenadier.tryThrow(this.mob, target, false);
             if (!HumanoidSight.canSee(this.mob.level(), this.mob, target)) {
@@ -210,11 +196,6 @@ public class HumanoidCombatGoal extends Goal {
                 return;
             }
         } else {
-            if (this.holdAtEdge(target)) {
-                this.turnToward(target);
-                return;
-            }
-            this.mob.setCombatProne(false);
             this.turnToward(target);
             this.meleeMovement(target, distance);
             this.mob.setSprinting(true);
@@ -329,44 +310,6 @@ public class HumanoidCombatGoal extends Goal {
     }
 
     private static final double CHASE_DROP_LIMIT = 5.0D;
-
-    private boolean edgeGuardOn;
-
-    private boolean atEdge() {
-        net.minecraft.core.BlockPos feet = this.mob.blockPosition();
-        float yaw = (float) Math.toRadians(this.mob.getYRot());
-        double dirX = -Math.sin(yaw);
-        double dirZ = Math.cos(yaw);
-        for (double step = 0.7D; step <= 1.6D; step += 0.45D) {
-            int x = (int) Math.floor(this.mob.getX() + dirX * step);
-            int z = (int) Math.floor(this.mob.getZ() + dirZ * step);
-            net.minecraft.core.BlockPos below = new net.minecraft.core.BlockPos(x, feet.getY() - 1, z);
-            if (this.mob.level().getBlockState(below).getCollisionShape(this.mob.level(), below).isEmpty()) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    private boolean edgeGuard(LivingEntity target) {
-        if (!atEdge()) {
-            if (this.edgeGuardOn) {
-                this.edgeGuardOn = false;
-                this.mob.setShiftKeyDown(false);
-                this.mob.setPose(net.minecraft.world.entity.Pose.STANDING);
-            }
-            return false;
-        }
-        if (!this.edgeGuardOn) {
-            this.edgeGuardOn = true;
-            this.mob.setShiftKeyDown(true);
-            this.mob.setPose(net.minecraft.world.entity.Pose.CROUCHING);
-        }
-        this.mob.getNavigation().stop();
-        this.mob.getMoveControl().strafe(0.0F, 0.0F);
-        this.faceTarget(target);
-        return true;
-    }
 
     private void holdRange(LivingEntity target, double distance) {
         if (distance < MIN_GUN_RANGE) {
@@ -581,43 +524,6 @@ public class HumanoidCombatGoal extends Goal {
         return this.sightResult;
     }
 
-
-    private boolean holdAtEdge(LivingEntity target) {
-        double drop = this.mob.getY() - target.getY();
-        boolean platform = this.mob.onHighPlatform()
-                && target.getY() < this.mob.platformY() - 2.0D;
-        if (platform) {
-            this.edgeGuardOn = true;
-            this.mob.setShiftKeyDown(true);
-            this.mob.setPose(net.minecraft.world.entity.Pose.CROUCHING);
-            this.mob.getNavigation().stop();
-            this.mob.getLookControl().setLookAt(target, 30.0F, 30.0F);
-            return true;
-        }
-        if (drop < CHASE_DROP_LIMIT) {
-            return false;
-        }
-        if (this.mob.atPlatformEdge() || this.edgeGuardOn) {
-            this.edgeGuardOn = true;
-            this.mob.setShiftKeyDown(true);
-            this.mob.setPose(net.minecraft.world.entity.Pose.CROUCHING);
-            this.mob.getNavigation().stop();
-            this.mob.getLookControl().setLookAt(target, 30.0F, 30.0F);
-            return true;
-        }
-        net.minecraft.core.BlockPos here = this.mob.blockPosition();
-        for (int step = 1; step <= 6; step++) {
-            net.minecraft.core.BlockPos probe = here.relative(
-                    net.minecraft.core.Direction.fromYRot(this.mob.getYRot()), step);
-            if (!this.mob.level().getBlockState(probe.below()).getCollisionShape(
-                    this.mob.level(), probe.below()).isEmpty()) {
-                this.mob.getNavigation().moveTo(probe.getX() + 0.5D, probe.getY(),
-                        probe.getZ() + 0.5D, 1.0D);
-                break;
-            }
-        }
-        return true;
-    }
 
     private boolean startFlank(LivingEntity target) {
         net.minecraft.core.BlockPos targetPos = target.blockPosition();

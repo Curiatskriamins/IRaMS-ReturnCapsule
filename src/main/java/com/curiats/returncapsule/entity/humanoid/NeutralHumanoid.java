@@ -63,8 +63,6 @@ public class NeutralHumanoid extends PathfinderMob implements RangedAttackMob {
 
     private boolean crawling;
 
-    private boolean combatProne;
-
     private long vehicleShotMillis;
 
     private boolean drivingVehicle;
@@ -90,6 +88,12 @@ public class NeutralHumanoid extends PathfinderMob implements RangedAttackMob {
     private int runUpDone;
 
     private boolean runUpReady;
+
+    private String parkourReason = "idle";
+
+    private int parkourBlocked;
+
+    private double parkourGap = -1.0D;
 
     private double runUpX;
 
@@ -117,7 +121,23 @@ public class NeutralHumanoid extends PathfinderMob implements RangedAttackMob {
 
     private int movePriority;
 
-    private net.minecraft.core.BlockPos testGoal;
+    private static final double DIRECT_RANGE = 20.0D;
+
+    private double lastMoveX;
+
+    private double lastMoveY;
+
+    private double lastMoveZ;
+
+    private boolean stillHeadingTo(double x, double y, double z) {
+        if (this.getNavigation().getPath() == null || this.getNavigation().isDone()) {
+            return false;
+        }
+        double dx = x - this.lastMoveX;
+        double dy = y - this.lastMoveY;
+        double dz = z - this.lastMoveZ;
+        return dx * dx + dy * dy + dz * dz < 4.0D;
+    }
 
     private HostileCluster cluster;
 
@@ -128,16 +148,6 @@ public class NeutralHumanoid extends PathfinderMob implements RangedAttackMob {
     private static final int CLUSTER_CHECK_TICKS = 20;
 
     private static final int CLUSTER_EMPTY_CHECKS = 5;
-
-    private int testGoalRetry;
-
-    private int testGoalRescan;
-
-    private int testGoalFailures;
-
-    private int testGoalStall;
-
-    private net.minecraft.world.phys.Vec3 testGoalLastPos = net.minecraft.world.phys.Vec3.ZERO;
 
     private int platformY = Integer.MIN_VALUE;
 
@@ -169,6 +179,10 @@ public class NeutralHumanoid extends PathfinderMob implements RangedAttackMob {
     private static final float SHIELD_BREAK_DAMAGE = 100.0F;
 
     private static final int BLADE_SKILL_INTERVAL = 200;
+
+    private static final net.minecraft.network.syncher.EntityDataAccessor<Integer> DATA_GRACE =
+            net.minecraft.network.syncher.SynchedEntityData.defineId(NeutralHumanoid.class,
+                    net.minecraft.network.syncher.EntityDataSerializers.INT);
 
     private static final net.minecraft.network.syncher.EntityDataAccessor<Boolean> DATA_LEAP =
             net.minecraft.network.syncher.SynchedEntityData.defineId(NeutralHumanoid.class,
@@ -737,11 +751,13 @@ public class NeutralHumanoid extends PathfinderMob implements RangedAttackMob {
         }
         this.tickStuckRecovery();
         this.tickReturnToPlayer();
-        this.tickPlatformReposition();
         this.tickRunUp();
         com.curiats.returncapsule.compat.vehicle.VehicleRider.tick(this);
         com.curiats.returncapsule.compat.vehicle.VehicleGunner.tick(this);
         com.curiats.returncapsule.compat.vehicle.VehicleDriverCompat.tick(this);
+        if (!this.level().isClientSide && this.entityData.get(DATA_GRACE) > 0) {
+            this.entityData.set(DATA_GRACE, this.entityData.get(DATA_GRACE) - 1);
+        }
         this.tickLeapFlag();
         if (this.moveCooldown > 0) {
             this.moveCooldown--;
@@ -749,7 +765,6 @@ public class NeutralHumanoid extends PathfinderMob implements RangedAttackMob {
             this.movePriority = 0;
         }
         this.tickClusters();
-        this.tickTestGoal();
         this.tickPlatformState();
         this.tickCrawl();
         this.tickLaneCentering();
@@ -929,6 +944,9 @@ public class NeutralHumanoid extends PathfinderMob implements RangedAttackMob {
     }
 
     public void suppressReactions(int ticks) {
+        if (!this.level().isClientSide) {
+            this.entityData.set(DATA_GRACE, Math.max(this.entityData.get(DATA_GRACE), ticks));
+        }
         this.reactionGraceTicks = Math.max(this.reactionGraceTicks, ticks);
     }
 
@@ -982,6 +1000,10 @@ public class NeutralHumanoid extends PathfinderMob implements RangedAttackMob {
         return amount > 0.0F;
     }
 
+    public boolean teleportGrace() {
+        return this.entityData.get(DATA_GRACE) > 0;
+    }
+
     public boolean isLeaping() {
         return this.entityData.get(DATA_LEAP);
     }
@@ -1025,29 +1047,6 @@ public class NeutralHumanoid extends PathfinderMob implements RangedAttackMob {
     private void tickRunUp() {
         if (this.runUpTicks > 0) {
             this.runUpTicks--;
-        }
-    }
-
-    private void tickPlatformReposition() {
-        if (this.level().isClientSide || this.getTarget() != null || !this.isRangedStance()) {
-            return;
-        }
-        if (this.testGoal != null || this.atPlatformEdge() == false) {
-            return;
-        }
-        if (this.tickCount % 80 != 0) {
-            return;
-        }
-        net.minecraft.core.BlockPos here = this.blockPosition();
-        for (int attempt = 0; attempt < 12; attempt++) {
-            int dx = this.random.nextInt(13) - 6;
-            int dz = this.random.nextInt(13) - 6;
-            net.minecraft.core.BlockPos candidate = here.offset(dx, 0, dz);
-            if (HumanoidTraversal.canStandOn(this.level(), candidate)) {
-                this.requestMove(candidate.getX() + 0.5D, candidate.getY(),
-                        candidate.getZ() + 0.5D, 1.0D, 1);
-                return;
-            }
         }
     }
 
@@ -1110,20 +1109,53 @@ public class NeutralHumanoid extends PathfinderMob implements RangedAttackMob {
             }
         }
         return "pos=" + this.blockPosition()
-                + " testGoal=" + (this.testGoal == null ? "none" : this.testGoal)
                 + " navDone=" + this.getNavigation().isDone()
                 + " node=" + node
                 + " leapCd=" + this.leapCooldown
                 + " runUp=" + this.runUpTicks + "/" + this.runUpReady
                 + " ground=" + this.onGround()
                 + " moveCd=" + this.moveCooldown + " prio=" + this.movePriority
+                + " parkour=" + this.parkourReason + "/" + Math.round(this.parkourGap)
                 + " platform=" + this.platformY
                 + " combat=" + this.vehicleCombat
-                + " | " + com.curiats.returncapsule.compat.vehicle.VehicleGunner.describe(this);
+                + " | " + com.curiats.returncapsule.compat.vehicle.VehicleGunner.describe(this)
+                + " | " + com.curiats.returncapsule.compat.vehicle.VehicleDriverCompat.describeDriver(this);
     }
 
-    public boolean hasTestGoal() {
-        return this.testGoal != null;
+    public boolean walkDirect(double x, double y, double z, double speed) {
+        if (!this.onGround() || this.isPassenger() || this.isDowned()) {
+            return false;
+        }
+        double dx = x - this.getX();
+        double dz = z - this.getZ();
+        double flat = Math.sqrt(dx * dx + dz * dz);
+        if (flat > DIRECT_RANGE || flat < 0.3D) {
+            return false;
+        }
+        if (!this.clearStraightPath(dx / flat, dz / flat, flat)) {
+            return false;
+        }
+        this.getNavigation().stop();
+        this.getMoveControl().setWantedPosition(x, y, z, speed);
+        return true;
+    }
+
+    private boolean clearStraightPath(double dirX, double dirZ, double distance) {
+        for (double step = 1.2D; step <= distance; step += 1.2D) {
+            net.minecraft.core.BlockPos feet = net.minecraft.core.BlockPos.containing(
+                    this.getX() + dirX * step, this.getY(), this.getZ() + dirZ * step);
+            if (HumanoidTraversal.isHazard(this.level(), feet)
+                    || HumanoidTraversal.isHazard(this.level(), feet.above())) {
+                return false;
+            }
+            boolean ground = HumanoidTraversal.canStandOn(this.level(), feet);
+            boolean blocked = !this.level().getBlockState(feet).getCollisionShape(this.level(), feet).isEmpty()
+                    && !this.level().getBlockState(feet.above()).getCollisionShape(this.level(), feet.above()).isEmpty();
+            if (blocked || (!ground && HumanoidTraversal.platformDrop(this.level(), feet) > 1)) {
+                return false;
+            }
+        }
+        return true;
     }
 
     public boolean requestMove(double x, double y, double z, double speed, int priority) {
@@ -1133,137 +1165,33 @@ public class NeutralHumanoid extends PathfinderMob implements RangedAttackMob {
         if (this.moveCooldown > 0 && priority <= this.movePriority) {
             return false;
         }
+        if (this.stillHeadingTo(x, y, z)) {
+            return true;
+        }
+        this.lastMoveX = x;
+        this.lastMoveY = y;
+        this.lastMoveZ = z;
         this.movePriority = priority;
         this.moveCooldown = MOVE_INTERVAL;
         return this.getNavigation().moveTo(x, y, z, speed);
     }
 
     public boolean requestMove(net.minecraft.world.entity.Entity target, double speed, int priority) {
+        if (this.stillHeadingTo(target.getX(), target.getY(), target.getZ())) {
+            return true;
+        }
         if (priority < this.movePriority) {
             return false;
         }
         if (this.moveCooldown > 0 && priority <= this.movePriority) {
             return false;
         }
+        this.lastMoveX = target.getX();
+        this.lastMoveY = target.getY();
+        this.lastMoveZ = target.getZ();
         this.movePriority = priority;
         this.moveCooldown = MOVE_INTERVAL;
         return this.getNavigation().moveTo(target, speed);
-    }
-
-    private void tickTestGoal() {
-        if (this.level().isClientSide) {
-            return;
-        }
-        if (this.getTarget() != null || this.isPassenger() || this.isDowned()) {
-            return;
-        }
-        if (this.testGoalRescan > 0) {
-            this.testGoalRescan--;
-        }
-        if (this.testGoalRetry > 0) {
-            this.testGoalRetry--;
-        }
-        if (this.testGoalStall > 0) {
-            this.testGoalStall--;
-        }
-        if (this.testGoal == null && this.testGoalRescan <= 0) {
-            this.testGoal = this.findTestGoal();
-            this.testGoalRescan = 200;
-            this.testGoalFailures = 0;
-            this.testGoalStall = 0;
-            this.testGoalLastPos = this.position();
-        }
-        if (this.testGoal == null) {
-            return;
-        }
-        net.minecraft.core.BlockPos stand = this.testGoal.above();
-        if (this.blockPosition().equals(stand)) {
-            this.getNavigation().stop();
-            return;
-        }
-        if (this.tickCount % 20 == 0) {
-            if (this.position().distanceToSqr(this.testGoalLastPos) < 0.25D) {
-                this.testGoalStall++;
-            } else {
-                this.testGoalStall = 0;
-            }
-            this.testGoalLastPos = this.position();
-        }
-        if (this.testGoalStall >= 2) {
-            this.testGoalFailures++;
-            this.testGoalStall = 0;
-            this.getNavigation().stop();
-            if (this.testGoalFailures >= 3) {
-                this.testGoal = null;
-                this.testGoalRescan = 400;
-                this.testGoalRetry = 60;
-                return;
-            }
-            this.testGoalRetry = 40 * this.testGoalFailures;
-            return;
-        }
-        if (this.testGoalRetry > 0) {
-            return;
-        }
-        if (this.tryClimbOnto(stand)) {
-            this.testGoalRetry = 20;
-            return;
-        }
-        double flat = Math.sqrt(this.distanceToSqr(stand.getX() + 0.5D, this.getY(), stand.getZ() + 0.5D));
-        if (flat <= 16.0D) {
-            this.getNavigation().stop();
-            this.getMoveControl().setWantedPosition(stand.getX() + 0.5D, stand.getY(),
-                    stand.getZ() + 0.5D, 1.1D);
-            return;
-        }
-        if (!this.getNavigation().isDone()) {
-            return;
-        }
-        this.requestMove(stand.getX() + 0.5D, stand.getY(), stand.getZ() + 0.5D, 1.2D, 2);
-        this.testGoalRetry = 40;
-    }
-
-    private boolean tryClimbOnto(net.minecraft.core.BlockPos stand) {
-        if (!this.onGround() || this.blockPosition().equals(stand)) {
-            return false;
-        }
-        if (!this.horizontalCollision) {
-            return false;
-        }
-        double dx = stand.getX() + 0.5D - this.getX();
-        double dz = stand.getZ() + 0.5D - this.getZ();
-        double flat = Math.sqrt(dx * dx + dz * dz);
-        double dy = stand.getY() - this.getY();
-        if (flat > 1.8D || dy < 0.3D || dy > 1.6D) {
-            return false;
-        }
-        if (this.leapCooldown > 0) {
-            return false;
-        }
-        this.getNavigation().stop();
-        double push = 0.26D;
-        this.setDeltaMovement(dx / flat * push, 0.42D, dz / flat * push);
-        this.hasImpulse = true;
-        this.leapCooldown = 10;
-        return true;
-    }
-
-    private net.minecraft.core.BlockPos findTestGoal() {
-        net.minecraft.core.BlockPos here = this.blockPosition();
-        net.minecraft.core.BlockPos best = null;
-        double bestDistance = 24.0D * 24.0D;
-        for (net.minecraft.core.BlockPos pos : net.minecraft.core.BlockPos.betweenClosed(
-                here.offset(-24, -4, -24), here.offset(24, 4, 24))) {
-            if (!this.level().getBlockState(pos).is(net.minecraft.world.level.block.Blocks.NETHERITE_BLOCK)) {
-                continue;
-            }
-            double distance = pos.distSqr(here);
-            if (distance < bestDistance) {
-                bestDistance = distance;
-                best = pos.immutable();
-            }
-        }
-        return best;
     }
 
     private void tickPlatformState() {
@@ -1275,45 +1203,8 @@ public class NeutralHumanoid extends PathfinderMob implements RangedAttackMob {
                 : Integer.MIN_VALUE;
     }
 
-    public void setCombatProne(boolean prone) {
-        if (this.combatProne == prone) {
-            return;
-        }
-        this.combatProne = prone;
-        if (this.isDowned()) {
-            return;
-        }
-        this.setShiftKeyDown(prone);
-        this.setPose(prone
-                ? net.minecraft.world.entity.Pose.SWIMMING
-                : net.minecraft.world.entity.Pose.STANDING);
-    }
-
-    public boolean isCombatProne() {
-        return this.combatProne;
-    }
-
-    public boolean atPlatformEdge() {
-        net.minecraft.core.BlockPos feet = this.blockPosition();
-        float yaw = (float) Math.toRadians(this.getYRot());
-        double dirX = -Math.sin(yaw);
-        double dirZ = Math.cos(yaw);
-        for (double step = 0.7D; step <= 1.6D; step += 0.45D) {
-            int x = (int) Math.floor(this.getX() + dirX * step);
-            int z = (int) Math.floor(this.getZ() + dirZ * step);
-            net.minecraft.core.BlockPos below = new net.minecraft.core.BlockPos(x, feet.getY() - 1, z);
-            if (this.level().getBlockState(below).getCollisionShape(this.level(), below).isEmpty()) {
-                return true;
-            }
-        }
-        return false;
-    }
-
     private void tickCrawl() {
         if (this.level().isClientSide || this.isDowned()) {
-            return;
-        }
-        if (this.combatProne) {
             return;
         }
         if (this.onHighPlatform()
@@ -1377,7 +1268,7 @@ public class NeutralHumanoid extends PathfinderMob implements RangedAttackMob {
         if (this.level().isClientSide || this.isDowned() || this.isPassenger()) {
             return;
         }
-        if (this.testGoal != null) {
+        if (this.tickCount % 3 != 0) {
             return;
         }
         net.minecraft.world.phys.Vec3 delta = this.getDeltaMovement();
@@ -1395,6 +1286,41 @@ public class NeutralHumanoid extends PathfinderMob implements RangedAttackMob {
         double dirZ = delta.z / speed;
         double push = offset * 0.02D;
         this.setDeltaMovement(delta.x - dirZ * push, delta.y, delta.z + dirX * push);
+    }
+
+    private boolean reachesLanding(double forward, double required) {
+        double vx = forward;
+        double vy = JUMP_UP;
+        double travelled = 0.0D;
+        for (int tick = 0; tick < 40; tick++) {
+            travelled += vx;
+            vy -= 0.08D;
+            vx *= 0.91D;
+            vy *= 0.98D;
+            if (vy < 0.0D && travelled >= required) {
+                return true;
+            }
+            if (vy < -0.5D) {
+                break;
+            }
+        }
+        return false;
+    }
+
+    private void chooseAnotherRoute() {
+        this.parkourBlocked = 40;
+        if (!this.getNavigation().isDone()) {
+            return;
+        }
+        net.minecraft.world.entity.LivingEntity target = this.getTarget();
+        if (target != null) {
+            this.requestMove(target, 1.1D, 2);
+            return;
+        }
+        net.minecraft.world.entity.player.Player player = this.level().getNearestPlayer(this, 48.0D);
+        if (player != null) {
+            this.requestMove(player, 1.1D, 1);
+        }
     }
 
     private double pathGap(double dirX, double dirZ, net.minecraft.core.BlockPos next) {
@@ -1485,6 +1411,10 @@ public class NeutralHumanoid extends PathfinderMob implements RangedAttackMob {
         if (this.level().isClientSide || this.isDowned()) {
             return;
         }
+        if (this.parkourBlocked > 0) {
+            this.parkourBlocked--;
+            return;
+        }
         if (this.runUpTicks > 0) {
             this.runUpTicks--;
             if (this.runUpTicks == 0) {
@@ -1499,6 +1429,7 @@ public class NeutralHumanoid extends PathfinderMob implements RangedAttackMob {
         if (chase != null && chase.getY() < this.getY() - 5.0D) {
             return;
         }
+        this.parkourReason = "search";
         net.minecraft.core.BlockPos next = this.intendedStep();
         double dx;
         double dz;
@@ -1522,53 +1453,73 @@ public class NeutralHumanoid extends PathfinderMob implements RangedAttackMob {
         dx /= length;
         dz /= length;
         double yaw = Math.toRadians(this.getYRot());
-        if (dx * -Math.sin(yaw) + dz * Math.cos(yaw) < 0.3D) {
-            this.getLookControl().setLookAt(next.getX() + 0.5D, next.getY() + 1.0D, next.getZ() + 0.5D,
-                    30.0F, 30.0F);
+        if (dx * -Math.sin(yaw) + dz * Math.cos(yaw) < 0.7D) {
             this.setYRot((float) Math.toDegrees(Math.atan2(-dx, dz)));
             this.yBodyRot = this.getYRot();
+            this.setYHeadRot(this.getYRot());
             return;
         }
-        double gap = HumanoidTraversal.gapWidthAhead(this.level(), this.blockPosition(), dx, dz, 6);
-        if (gap < 0.0D) {
-            gap = this.pathGap(dx, dz, next);
+        net.minecraft.core.BlockPos landing = HumanoidTraversal.landingOf(this.level(),
+                this.blockPosition(), dx, dz, 7);
+        if (landing == null) {
+            this.parkourReason = "no-landing";
+            this.runUpReady = false;
+            this.chooseAnotherRoute();
+            return;
         }
-        if (gap < 0.0D) {
+        double dy = landing.getY() - this.getY();
+        if (dy < -0.6D) {
+            this.parkourReason = "drop";
             this.runUpReady = false;
             return;
         }
-        if (this.onHighPlatform()) {
-            net.minecraft.core.BlockPos landing = HumanoidTraversal.landingOf(this.level(),
-                    this.blockPosition(), dx, dz, 6);
-            if (landing == null || Math.abs(landing.getY() - this.platformY) > 1) {
+        if (dy > 1.2D) {
+            return;
+        }
+        if (this.onHighPlatform() && Math.abs(landing.getY() - this.platformY) > 1) {
+            this.runUpReady = false;
+            return;
+        }
+        net.minecraft.core.BlockPos goalPos = chase != null
+                ? chase.blockPosition()
+                : net.minecraft.core.BlockPos.containing(this.getX() + dx * 8.0D, this.getY(),
+                        this.getZ() + dz * 8.0D);
+        if (landing.distSqr(goalPos) > this.blockPosition().distSqr(goalPos) - 0.25D) {
+            return;
+        }
+        double gap = HumanoidTraversal.gapWidthAhead(this.level(), this.blockPosition(), dx, dz, 7);
+        if (gap < 0.0D) {
+            double nodeDistance = Math.sqrt(next.distSqr(this.blockPosition()));
+            if (nodeDistance < 2.2D) {
                 this.runUpReady = false;
                 return;
             }
+            gap = this.pathGap(dx, dz, next);
         }
-        if (this.onHighPlatform()) {
-            net.minecraft.core.BlockPos landing = HumanoidTraversal.landingOf(this.level(),
-                    this.blockPosition(), dx, dz, 6);
-            if (landing != null && landing.getY() > this.getY()) {
-                this.setDeltaMovement(dx * 0.28D, JUMP_UP, dz * 0.28D);
-                this.hasImpulse = true;
-                this.leapCooldown = 8;
-                return;
-            }
-        }
-        net.minecraft.core.BlockPos goalPos = this.getTarget() != null
-                ? this.getTarget().blockPosition()
-                : net.minecraft.core.BlockPos.containing(this.getX() + dx * 8.0D, this.getY(),
-                        this.getZ() + dz * 8.0D);
-        double before = Math.sqrt(this.blockPosition().distSqr(goalPos));
-        double after = Math.sqrt(HumanoidTraversal.landingOf(this.level(), this.blockPosition(),
-                dx, dz, 6) != null
-                ? HumanoidTraversal.landingOf(this.level(), this.blockPosition(), dx, dz, 6).distSqr(goalPos)
-                : this.blockPosition().distSqr(goalPos));
-        if (after > before - 0.5D) {
+        if (gap < 0.0D) {
+            this.parkourReason = "no-gap";
+            this.runUpReady = false;
             return;
         }
+        this.parkourGap = gap;
         double edgeGap = Math.max(0.0D, gap - this.getBbWidth());
-        boolean sprint = edgeGap > SPRINT_JUMP_REACH && !this.stepUpAhead(dx, dz);
+        if (edgeGap < 0.35D) {
+            this.parkourReason = "too-small";
+            return;
+        }
+        if (dy > 0.4D) {
+            this.setDeltaMovement(dx * 0.28D, JUMP_UP, dz * 0.28D);
+            this.hasImpulse = true;
+            this.leapCooldown = 8;
+            return;
+        }
+        if (edgeGap > MAX_JUMP_REACH) {
+            this.parkourReason = "too-wide";
+            this.runUpReady = false;
+            this.chooseAnotherRoute();
+            return;
+        }
+        boolean sprint = edgeGap > SPRINT_JUMP_REACH;
         if (sprint && !this.runUpReady) {
             if (!this.roomBehind(dx, dz)) {
                 this.runUpReady = true;
@@ -1579,17 +1530,20 @@ public class NeutralHumanoid extends PathfinderMob implements RangedAttackMob {
                 return;
             }
         }
-        if (edgeGap > MAX_JUMP_REACH) {
+        double forward = Math.min(0.72D, Math.max(0.34D, (edgeGap + 0.8D) / 7.0D));
+        if (!this.reachesLanding(forward, edgeGap + 0.4D)) {
+            this.parkourReason = "short";
+            this.runUpReady = false;
+            this.chooseAnotherRoute();
             return;
         }
-        net.minecraft.world.phys.Vec3 momentum = this.getDeltaMovement();
-        double boost = sprint ? SPRINT_JUMP_BOOST : 0.0D;
         this.setSprinting(sprint);
         this.entityData.set(DATA_LEAP, true);
-        this.setDeltaMovement(momentum.x + dx * boost, JUMP_UP, momentum.z + dz * boost);
+        this.setDeltaMovement(dx * forward, JUMP_UP, dz * forward);
         this.hasImpulse = true;
         this.leapCooldown = 12;
         this.runUpReady = false;
+        this.parkourReason = "jumped";
     }
 
     private void tickStuckRecovery() {
@@ -1926,6 +1880,7 @@ public class NeutralHumanoid extends PathfinderMob implements RangedAttackMob {
         this.entityData.define(DATA_ATTACK_SEQ, 0);
         this.entityData.define(DATA_DOWNED, false);
         this.entityData.define(DATA_LEAP, false);
+        this.entityData.define(DATA_GRACE, 0);
     }
 
     public int markAttack() {

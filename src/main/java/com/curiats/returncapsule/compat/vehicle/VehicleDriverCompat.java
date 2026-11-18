@@ -87,7 +87,7 @@ public final class VehicleDriverCompat {
             boolean ownerAboard = owner != null && owner.getVehicle() == vehicle;
             net.minecraft.world.phys.Vec3 aim = target != null
                     ? target.position()
-                    : owner != null && !ownerAboard && humanoid.distanceToSqr(owner) > 48.0D * 48.0D
+                    : owner != null && !ownerAboard && humanoid.distanceToSqr(owner) > 24.0D * 24.0D
                             ? owner.position() : null;
             if (aim == null) {
                 stopAll(control);
@@ -113,7 +113,7 @@ public final class VehicleDriverCompat {
             double clearance = clearanceTo(vehicle, target, owner);
             double distance = rawDistance - clearance;
             double keep = target != null ? Math.max(MIN_ENGAGE_RANGE, weaponRange(vehicle))
-                    : rawDistance > 128.0D ? 12.0D : 24.0D;
+                    : 10.0D;
             double frontClear = cornerClearance(vehicle, yawError);
             double safeFront = vehicle.getBbWidth() * 0.5D + 2.0D;
             boolean groundAhead = groundAhead(vehicle);
@@ -178,8 +178,8 @@ public final class VehicleDriverCompat {
                     }
                 }
             }
-            boolean left = false;
-            boolean right = false;
+            boolean left = yawError < -4.0D;
+            boolean right = yawError > 4.0D;
             boolean handbrake = !forward && !backward;
             forwardField.setBoolean(control, forward);
             backwardField.setBoolean(control, backward);
@@ -188,8 +188,8 @@ public final class VehicleDriverCompat {
             handbrakeField.setBoolean(control, handbrake);
             float desiredYaw = (float) Math.toDegrees(Math.atan2(-(aim.x - vehicle.getX()),
                     aim.z - vehicle.getZ()));
-            leftYawField.setBoolean(control, yawError < -4.0D);
-            rightYawField.setBoolean(control, yawError > 4.0D);
+            leftYawField.setBoolean(control, false);
+            rightYawField.setBoolean(control, false);
         } catch (ReflectiveOperationException | RuntimeException exception) {
             broken = true;
         }
@@ -483,6 +483,27 @@ public final class VehicleDriverCompat {
             return best;
         } catch (ReflectiveOperationException | RuntimeException exception) {
             return 0.0D;
+        }
+    }
+
+    public static String describeDriver(NeutralHumanoid humanoid) {
+        Entity vehicle = humanoid.getVehicle();
+        if (vehicle == null || !resolve()) {
+            return "drive=none";
+        }
+        try {
+            List<?> seats = (List<?>) seatsField.get(vehicle);
+            Object seatZero = seats.get(0);
+            Object riderId = seatZero.getClass().getField("passengerId").get(seatZero);
+            boolean drives = riderId instanceof Integer id && id == humanoid.getId();
+            net.minecraft.world.entity.player.Player owner = humanoid.level().getNearestPlayer(humanoid, 256.0D);
+            boolean ownerAboard = owner != null && owner.getVehicle() == vehicle;
+            String mode = humanoid.getTarget() != null ? "target"
+                    : owner != null && !ownerAboard ? "player" : "idle";
+            double distance = owner == null ? -1.0D : Math.sqrt(humanoid.distanceToSqr(owner));
+            return "drive=" + drives + " mode=" + mode + " ownerDist=" + Math.round(distance);
+        } catch (ReflectiveOperationException | RuntimeException exception) {
+            return "drive=error";
         }
     }
 

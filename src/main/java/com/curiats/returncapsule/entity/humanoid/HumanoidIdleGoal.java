@@ -50,9 +50,6 @@ public class HumanoidIdleGoal extends Goal {
 
     @Override
     public boolean canUse() {
-        if (this.mob.hasTestGoal()) {
-            return false;
-        }
         if (this.mob.isDowned()) {
             return false;
         }
@@ -186,7 +183,9 @@ public class HumanoidIdleGoal extends Goal {
             this.mob.requestMove(ladder.getX() + 0.5D, ladder.getY(), ladder.getZ() + 0.5D, speed, 1);
             return;
         }
-        this.mob.requestMove(target, speed, 1);
+        if (!this.mob.walkDirect(target.getX(), target.getY(), target.getZ(), speed)) {
+            this.mob.requestMove(target, speed, 1);
+        }
     }
 
     private net.minecraft.core.BlockPos ladderDown(net.minecraft.world.entity.LivingEntity target) {

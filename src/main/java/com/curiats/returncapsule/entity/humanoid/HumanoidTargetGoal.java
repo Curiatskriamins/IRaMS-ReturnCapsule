@@ -18,6 +18,8 @@ public class HumanoidTargetGoal extends Goal {
 
     private static final int MAX_CANDIDATES = 64;
 
+    private static final int MAX_SIGHT_CHECKS = 12;
+
     private static final double CLOSE_RADIUS = 16.0D;
     private static final int CLOSE_INTERVAL = 5;
 
@@ -92,12 +94,17 @@ public class HumanoidTargetGoal extends Goal {
         java.util.Set<LivingEntity> engaged = engagedTargets();
 
         int examined = 0;
+        int sightChecks = 0;
         for (LivingEntity candidate : this.mob.level().getEntitiesOfClass(
                 LivingEntity.class, this.scanArea(radius), this::isCandidate)) {
             if (++examined > MAX_CANDIDATES) {
                 break;
             }
             if (!this.worthEngaging(candidate)) {
+                continue;
+            }
+            if (++sightChecks <= MAX_SIGHT_CHECKS
+                    && !HumanoidSight.canSee(this.mob.level(), this.mob, candidate)) {
                 continue;
             }
             if (HumanoidCombatRules.outranks(this.mob, candidate, best)) {
@@ -160,12 +167,8 @@ public class HumanoidTargetGoal extends Goal {
         if (candidate instanceof Player || candidate instanceof NeutralHumanoid) {
             return false;
         }
-
-        if (!HumanoidCombatRules.isHostileEnemy(candidate)
-                && !HumanoidCombatRules.threatensAllies(candidate)) {
-            return false;
-        }
-        return HumanoidSight.canSee(this.mob.level(), this.mob, candidate);
+        return HumanoidCombatRules.isHostileEnemy(candidate)
+                || HumanoidCombatRules.threatensAllies(candidate);
     }
 
     @Override

@@ -26,6 +26,8 @@ public final class VehicleGunner {
 
     private static final int AIM_SETTLE = 12;
 
+    private static final int FAIL_OPEN_TICKS = 60;
+
     private static boolean resolved;
     private static boolean broken;
     private static Field seatsField;
@@ -39,6 +41,9 @@ public final class VehicleGunner {
     private static Method getOwnOperatorUnit;
 
     private static Method getRootParentWeaponUnit;
+
+    private static Method toggleEngine;
+    private static Method isEngineOn;
 
     private static Class<?> weaponUnitClass;
 
@@ -81,6 +86,7 @@ public final class VehicleGunner {
         if (vehicle == null || !resolve()) {
             return;
         }
+        ensureEngine(vehicle);
         List<Object> units = weaponUnitsFor(humanoid, vehicle);
         LivingEntity target = humanoid.getTarget();
         if (target == null) {
@@ -106,6 +112,9 @@ public final class VehicleGunner {
                 continue;
             }
             Object owner = rootUnit(unit);
+            if (!aligned(owner, target) && settle < FAIL_OPEN_TICKS) {
+                continue;
+            }
             fire(owner, humanoid, getCurrentWeapon, false);
             if (getCurrentSecondaryWeapon != null) {
                 fire(unit, humanoid, getCurrentSecondaryWeapon, true);
@@ -115,6 +124,15 @@ public final class VehicleGunner {
 
     private static boolean aiming(Object unit) {
         return !Float.isNaN(VehicleAim.turretYaw(unit));
+    }
+
+    private static void ensureEngine(Entity vehicle) {
+        try {
+            if (isEngineOn != null && toggleEngine != null && !(Boolean) isEngineOn.invoke(vehicle)) {
+                toggleEngine.invoke(vehicle, Boolean.TRUE);
+            }
+        } catch (ReflectiveOperationException | RuntimeException ignored) {
+        }
     }
 
     private static boolean aligned(Object unit, LivingEntity target) {
@@ -196,6 +214,7 @@ public final class VehicleGunner {
         if (!resolve()) {
             return "vehicle=" + vehicle.getClass().getSimpleName() + " resolved=false";
         }
+        ensureEngine(vehicle);
         List<Object> units = weaponUnitsFor(humanoid, vehicle);
         StringBuilder text = new StringBuilder("vehicle=")
                 .append(vehicle.getClass().getSimpleName())
@@ -337,6 +356,13 @@ public final class VehicleGunner {
             }
             shoot = unitClass.getMethod("shoot", int.class, List.class, LivingEntity.class);
             changeSeat = vehicleClass.getMethod("changeSeat", LivingEntity.class, int.class);
+            try {
+                toggleEngine = vehicleClass.getMethod("toggleEngine", Boolean.class);
+                isEngineOn = vehicleClass.getMethod("isEngineOn");
+            } catch (NoSuchMethodException ignored) {
+                toggleEngine = null;
+                isEngineOn = null;
+            }
             try {
                 getRootParentWeaponUnit = unitClass.getMethod("getRootParentWeaponUnit");
             } catch (NoSuchMethodException ignored) {

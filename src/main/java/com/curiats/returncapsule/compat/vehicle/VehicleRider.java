@@ -14,6 +14,12 @@ public final class VehicleRider {
     private static Method passengerCapacity;
     private static Field seatsField;
     private static Field seatPassengerId;
+    private static final java.util.Map<String, Integer> BLACKLIST = new java.util.concurrent.ConcurrentHashMap<>();
+
+    private static final java.util.Map<Integer, Integer> WAITING = new java.util.concurrent.ConcurrentHashMap<>();
+
+    private static int ticks;
+
     private static boolean resolved;
     private static boolean broken;
 
@@ -21,7 +27,7 @@ public final class VehicleRider {
     }
 
     public static void tick(NeutralHumanoid humanoid) {
-        if (humanoid.level().isClientSide || humanoid.isDowned() || humanoid.tickCount % 20 != 0) {
+        if (humanoid.level().isClientSide || humanoid.isDowned() || humanoid.tickCount % 10 != 0) {
             return;
         }
         if (!humanoid.isVehicleCombat()) {
@@ -29,37 +35,87 @@ public final class VehicleRider {
         }
         Entity ridden = humanoid.getVehicle();
         if (ridden != null) {
+            takeWheel(humanoid, ridden);
             return;
         }
-        Entity best = null;
-        double bestDistance = SEARCH_RADIUS * SEARCH_RADIUS;
+        ticks++;
+        java.util.List<Entity> candidates = new java.util.ArrayList<>();
         for (Entity candidate : humanoid.level().getEntities(humanoid,
                 humanoid.getBoundingBox().inflate(SEARCH_RADIUS))) {
-            if (candidate == humanoid || candidate.getPassengers().contains(humanoid)) {
+            if (candidate == humanoid || !isVehicle(candidate)) {
                 continue;
             }
-            if (!isVehicle(candidate)) {
+            if (blacklisted(humanoid, candidate)) {
                 continue;
             }
             if (freeSeat(candidate) < 0) {
                 continue;
             }
-            double distance = humanoid.distanceToSqr(candidate);
-            if (distance < bestDistance) {
-                bestDistance = distance;
-                best = candidate;
-            }
+            candidates.add(candidate);
         }
-        if (best == null) {
-            humanoid.setVehicleCombat(false);
+        if (candidates.isEmpty()) {
+            int waiting = WAITING.merge(humanoid.getId(), 1, Integer::sum);
+            if (waiting > 60) {
+                WAITING.remove(humanoid.getId());
+                humanoid.setVehicleCombat(false);
+            }
             return;
         }
-        if (humanoid.distanceToSqr(best) > 16.0D) {
-            humanoid.requestMove(best, 1.3D, 2);
+        WAITING.remove(humanoid.getId());
+        candidates.sort(java.util.Comparator.comparingDouble(humanoid::distanceToSqr));
+        Entity nearest = candidates.get(0);
+        if (humanoid.distanceToSqr(nearest) > 16.0D) {
+            if (humanoid.getNavigation().isDone()) {
+                humanoid.requestMove(nearest, 1.3D, 2);
+            }
             return;
         }
         humanoid.getNavigation().stop();
-        humanoid.startRiding(best, true);
+        for (Entity candidate : candidates) {
+            if (humanoid.distanceToSqr(candidate) > 16.0D) {
+                continue;
+            }
+            if (humanoid.startRiding(candidate, true)) {
+                return;
+            }
+            BLACKLIST.put(key(humanoid, candidate), ticks + 200);
+        }
+    }
+
+    private static String key(NeutralHumanoid humanoid, Entity vehicle) {
+        return humanoid.getId() + ":" + vehicle.getId();
+    }
+
+    private static boolean blacklisted(NeutralHumanoid humanoid, Entity vehicle) {
+        Integer expiry = BLACKLIST.get(key(humanoid, vehicle));
+        return expiry != null && expiry > ticks;
+    }
+
+    private static void takeWheel(NeutralHumanoid humanoid, Entity vehicle) {
+        if (!resolve(vehicle)) {
+            return;
+        }
+        int seat = seatIndexOf(vehicle, humanoid);
+        if (seat <= 0) {
+            return;
+        }
+        if (occupantOf(vehicle, 0) != null) {
+            return;
+        }
+        try {
+            changeSeat.invoke(vehicle, humanoid, 0);
+        } catch (ReflectiveOperationException | RuntimeException ignored) {
+        }
+    }
+
+    private static int seatIndexOf(Entity vehicle, Entity entity) {
+        int capacity = capacity(vehicle);
+        for (int index = 0; index < capacity; index++) {
+            if (occupantOf(vehicle, index) == entity) {
+                return index;
+            }
+        }
+        return -1;
     }
 
     public static boolean releaseDriver(Entity vehicle) {

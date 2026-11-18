@@ -42,7 +42,7 @@ public final class HumanoidImpactDetector {
         if (lastPos == null || lastVel == null) {
             return;
         }
-        if (humanoid.isDownedSynced() || humanoid.isLeaping()) {
+        if (humanoid.isDownedSynced() || humanoid.isLeaping() || humanoid.teleportGrace()) {
             return;
         }
         double velocityJump = velocity.subtract(lastVel).length();
