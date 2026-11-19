@@ -31,7 +31,6 @@ public final class KillMarkerRenderer {
     private static final double ANGLE = 0.0085D;
     private static final float MIN = 0.02F;
     private static final float MAX = 64.0F;
-    private static final int DIAGNOSTIC_INTERVAL = 100;
 
     private static final RenderStateShard.TransparencyStateShard TRANSLUCENT =
             new RenderStateShard.TransparencyStateShard("returncapsule_translucent", () -> {
@@ -60,8 +59,6 @@ public final class KillMarkerRenderer {
                     .setOverlayState(new RenderStateShard.OverlayStateShard(true))
                     .setWriteMaskState(new RenderStateShard.WriteMaskStateShard(true, false))
                     .createCompositeState(false));
-
-    private static long lastDiagnosticTick = Long.MIN_VALUE;
 
     @SubscribeEvent
     public static void onRenderLevel(RenderLevelStageEvent event) {
@@ -103,9 +100,6 @@ public final class KillMarkerRenderer {
         if (markers > 0) {
             buffer.endBatch(MARKER);
         }
-        if (bombs > 0) {
-            logDiagnostics(minecraft, bombs, markers);
-        }
     }
 
     @Nullable
@@ -122,18 +116,6 @@ public final class KillMarkerRenderer {
             return null;
         }
         return point.add(0.0D, 1.5D, 0.0D);
-    }
-
-    private static void logDiagnostics(Minecraft minecraft, int bombs, int markers) {
-        if (minecraft.level == null) {
-            return;
-        }
-        long gameTime = minecraft.level.getGameTime();
-        if (gameTime % DIAGNOSTIC_INTERVAL != 0L || gameTime == lastDiagnosticTick) {
-            return;
-        }
-        lastDiagnosticTick = gameTime;
-        ReturnCapsuleMod.LOGGER.info("[kill-marker] bombs={} markers={}", bombs, markers);
     }
 
     private KillMarkerRenderer() {

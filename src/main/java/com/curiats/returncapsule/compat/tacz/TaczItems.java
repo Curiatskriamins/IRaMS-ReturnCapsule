@@ -59,18 +59,18 @@ final class TaczItems {
     static void randomizeAttachments(ItemStack gun, RandomSource random) {
 
         if (gun.isEmpty() || !TaczApi.resolve()) {
-            ReturnCapsuleMod.LOGGER.info("[humanoid] no attachments: TaCZ API unavailable");
+            ReturnCapsuleMod.LOGGER.debug("[humanoid] no attachments: TaCZ API unavailable");
             return;
         }
         try {
             Object gunHandle = TaczApi.gunOrNull(gun);
             if (gunHandle == null) {
-                ReturnCapsuleMod.LOGGER.info("[humanoid] no attachments: IGun handle is null for {}", gun.getItem());
+                ReturnCapsuleMod.LOGGER.debug("[humanoid] no attachments: IGun handle is null for {}", gun.getItem());
                 return;
             }
             ResourceLocation gunId = TaczRifles.gunId(gun);
             if (gunId == null) {
-                ReturnCapsuleMod.LOGGER.info("[humanoid] no attachments: gun has no GunId tag");
+                ReturnCapsuleMod.LOGGER.debug("[humanoid] no attachments: gun has no GunId tag");
                 return;
             }
             Object[] types = Class.forName(ATTACHMENT_TYPE_CLASS).getEnumConstants();
@@ -96,12 +96,12 @@ final class TaczItems {
                     }
                 }
             }
-            ReturnCapsuleMod.LOGGER.info("[humanoid] gun {} fitted {}/{} attachments (allowAttachmentType said {}/{})",
+            ReturnCapsuleMod.LOGGER.debug("[humanoid] gun {} fitted {}/{} attachments (allowAttachmentType said {}/{})",
                     gunId, fitted, types.length, allowed, types.length);
 
-            ReturnCapsuleMod.LOGGER.info("[humanoid] gun {} nbt keys after fit: {}", gunId, gun.getOrCreateTag().getAllKeys());
+            ReturnCapsuleMod.LOGGER.debug("[humanoid] gun {} nbt keys after fit: {}", gunId, gun.getOrCreateTag().getAllKeys());
         } catch (ReflectiveOperationException | RuntimeException exception) {
-            ReturnCapsuleMod.LOGGER.info("[humanoid] could not fit attachments: {}", exception.toString());
+            ReturnCapsuleMod.LOGGER.debug("[humanoid] could not fit attachments: {}", exception.toString());
         }
     }
 
@@ -112,7 +112,7 @@ final class TaczItems {
             String key = ((Enum<?>) type).name() + "Attachment";
             root.put(key, attachment.save(new net.minecraft.nbt.CompoundTag()));
         } catch (RuntimeException exception) {
-            ReturnCapsuleMod.LOGGER.info("[humanoid] could not write attachment: {}", exception.toString());
+            ReturnCapsuleMod.LOGGER.debug("[humanoid] could not write attachment: {}", exception.toString());
         }
     }
 

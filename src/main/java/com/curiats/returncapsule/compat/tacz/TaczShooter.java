@@ -133,7 +133,7 @@ public final class TaczShooter {
         if (!reportedOutcomes.add(outcome)) {
             return;
         }
-        ReturnCapsuleMod.LOGGER.info("[humanoid] TaCZ refused a shot: {} (target {})", outcome, target.getName().getString());
+        ReturnCapsuleMod.LOGGER.debug("[humanoid] TaCZ refused a shot: {} (target {})", outcome, target.getName().getString());
     }
 
     private static Object operator(NeutralHumanoid mob) throws ReflectiveOperationException {

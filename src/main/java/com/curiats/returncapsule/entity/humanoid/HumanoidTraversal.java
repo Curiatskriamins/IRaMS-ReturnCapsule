@@ -134,39 +134,53 @@ public final class HumanoidTraversal {
         return 32;
     }
 
-    public static BlockPos landingOf(Level level, BlockPos feet, double dirX, double dirZ, int maxGap) {
+    /**
+     * Plans a jump across a same level gap.
+     *
+     * <p>The near edge is searched from 0.25 to 1.6 blocks ahead, so a humanoid that stopped a little short of the
+     * edge still recognises the gap (the old 0.4-0.8 window only worked once the mob's centre was nearly over the
+     * edge, which is why approaches kept aborting). The reported width is the real air span - far edge minus near
+     * edge - instead of a distance measured from the mob centre, and {@code travel} is how far the jump has to
+     * carry the mob's centre to be safely inside the far block.</p>
+     */
+    public static JumpPlan planJump(Level level, BlockPos feet, double dirX, double dirZ, int maxGap) {
         double length = Math.sqrt(dirX * dirX + dirZ * dirZ);
         if (length < 1.0E-3D) {
             return null;
         }
         dirX /= length;
         dirZ /= length;
-        boolean gap = false;
-        for (double distance = 0.4D; distance <= 0.8D; distance += 0.3D) {
+        double edge = -1.0D;
+        for (double distance = 0.25D; distance <= 1.6D; distance += 0.25D) {
             BlockPos probe = new BlockPos((int) Math.floor(feet.getX() + 0.5D + dirX * distance),
                     feet.getY() - 1,
                     (int) Math.floor(feet.getZ() + 0.5D + dirZ * distance));
             if (level.getBlockState(probe).getCollisionShape(level, probe).isEmpty()) {
-                gap = true;
+                edge = distance;
                 break;
             }
         }
-        if (!gap) {
+        if (edge < 0.0D) {
             return null;
         }
-        for (double distance = 1.0D; distance <= maxGap; distance += 0.4D) {
+        for (double distance = edge + 0.25D; distance <= maxGap; distance += 0.25D) {
             BlockPos landing = new BlockPos((int) Math.floor(feet.getX() + 0.5D + dirX * distance),
                     feet.getY() - 1,
                     (int) Math.floor(feet.getZ() + 0.5D + dirZ * distance));
-            if (!level.getBlockState(landing).getCollisionShape(level, landing).isEmpty()) {
-                BlockPos stand = landing.above();
-                if (isHazard(level, stand) || isHazard(level, stand.above())) {
-                    return null;
-                }
-                return stand;
+            if (level.getBlockState(landing).getCollisionShape(level, landing).isEmpty()) {
+                continue;
             }
+            BlockPos stand = landing.above();
+            if (isHazard(level, stand) || isHazard(level, stand.above())) {
+                return null;
+            }
+            return new JumpPlan(stand, distance - edge, distance + 0.5D);
         }
         return null;
+    }
+
+    /** Landing spot, true air width of the gap, and the horizontal distance the jump has to cover. */
+    public record JumpPlan(BlockPos landing, double gapWidth, double travel) {
     }
 
     public static double corridorOffset(Level level, BlockPos feet, double dirX, double dirZ, int maxLateral) {
@@ -216,39 +230,6 @@ public final class HumanoidTraversal {
         boolean feetSolid = !level.getBlockState(feet).getCollisionShape(level, feet).isEmpty();
         boolean headFree = level.getBlockState(head).getCollisionShape(level, head).isEmpty();
         return feetSolid && headFree;
-    }
-
-    public static double gapWidthAhead(Level level, BlockPos feet, double dirX, double dirZ, int maxGap) {
-        double length = Math.sqrt(dirX * dirX + dirZ * dirZ);
-        if (length < 1.0E-3D) {
-            return -1.0D;
-        }
-        dirX /= length;
-        dirZ /= length;
-        double edge = -1.0D;
-        for (double distance = 0.4D; distance <= 2.0D; distance += 0.25D) {
-            int x = (int) Math.floor(feet.getX() + 0.5D + dirX * distance);
-            int z = (int) Math.floor(feet.getZ() + 0.5D + dirZ * distance);
-            BlockPos below = new BlockPos(x, feet.getY() - 1, z);
-            if (level.getBlockState(below).getCollisionShape(level, below).isEmpty()) {
-                edge = distance;
-                break;
-            }
-        }
-        if (edge < 0.0D) {
-            return -1.0D;
-        }
-        for (double distance = edge + 0.4D; distance <= maxGap; distance += 0.4D) {
-            int x = (int) Math.floor(feet.getX() + 0.5D + dirX * distance);
-            int z = (int) Math.floor(feet.getZ() + 0.5D + dirZ * distance);
-            BlockPos landing = new BlockPos(x, feet.getY() - 1, z);
-            if (!level.getBlockState(landing).getCollisionShape(level, landing).isEmpty()) {
-                boolean safe = !isHazard(level, landing.above())
-                        && !isHazard(level, landing.above(2));
-                return safe ? distance : -1.0D;
-            }
-        }
-        return -1.0D;
     }
 
     public static BlockPos findLandingSpot(Level level, BlockPos around, int radius) {

@@ -141,7 +141,16 @@ public class HumanoidCombatGoal extends Goal {
             this.noSightTicks = 0;
             this.flanksUsed = 0;
             this.flanking = false;
-            this.mob.getLookControl().setLookAt(target, 30.0F, 30.0F);
+            if (!this.mob.isRangedStance()) {
+                this.mob.getLookControl().setLookAt(target, 30.0F, 30.0F);
+            } else {
+                // The look control keeps its last wanted position, so a leftover melee target used to drag the head and
+                // body off the gun aim every tick. Point it at the same spot the gun aims at instead of dropping it.
+                net.minecraft.world.phys.Vec3 point = this.aimMode == AimMode.HEAD || this.mob.precisionWeapon()
+                        ? new net.minecraft.world.phys.Vec3(target.getX(), target.getEyeY(), target.getZ())
+                        : target.getBoundingBox().getCenter();
+                this.mob.getLookControl().setLookAt(point.x, point.y, point.z);
+            }
         } else {
             this.noSightTicks++;
         }
@@ -469,6 +478,10 @@ public class HumanoidCombatGoal extends Goal {
             return;
         }
         if (distance > HumanoidCombatRules.MELEE_REACH) {
+            return;
+        }
+        if (!this.visibleTo(target)) {
+            // Melee used to swing through walls: only the distance and facing were checked.
             return;
         }
 

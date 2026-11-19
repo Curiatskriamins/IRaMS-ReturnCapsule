@@ -43,7 +43,19 @@ public class NeutralHumanoid extends PathfinderMob implements RangedAttackMob {
 
     private static final int REGEN_INTERVAL = 20;
 
-    private static final float MAX_HIT_FRACTION = 0.35F;
+    /**
+     * Per hit ceiling, as a fraction of max health <em>before</em> armour. Expressed so that the effective hit after
+     * armour is about eight points on the base profile: 200 x 0.20 = 40 pre armour, and armour with twenty toughness
+     * keeps about 20% of that. Roughly twenty five hits to drop a full pool, instead of the old three.
+     */
+    private static final float MAX_HIT_FRACTION = 0.20F;
+
+    /**
+     * Per second ceiling, also before armour. A per hit cap cannot answer a swarm: two hits a second simply doubles it.
+     * This is the horde valve, and with the five point per second regeneration it leaves a sustained drain of a few
+     * points per second instead of a melt.
+     */
+    private static final float MAX_DAMAGE_PER_SECOND = 0.25F;
 
     private static final float MIN_MEANINGFUL_HIT = 6.0F;
 
@@ -59,6 +71,11 @@ public class NeutralHumanoid extends PathfinderMob implements RangedAttackMob {
 
     private int lastAcceptedHit = -100;
 
+    /** Second (tick / 20) and amount already taken in it, for the per second damage budget. */
+    private long budgetSecond = -1L;
+
+    private float budgetTaken;
+
     private int leapCooldown;
 
     private boolean crawling;
@@ -69,25 +86,21 @@ public class NeutralHumanoid extends PathfinderMob implements RangedAttackMob {
 
     private boolean vehicleCombat;
 
-    private static final double SPRINT_JUMP_REACH = 1.0D;
-
+    /**
+     * Longest jumpable gap, measured as the real air width minus the body width ({@code gapWidth - bbWidth}).
+     * A 4 block gap therefore reads as 3.4 and stays under the cap, which is the intended extreme jump; 5 blocks
+     * reads as 4.4 and is routed around instead.
+     */
     private static final double MAX_JUMP_REACH = 3.5D;
 
-    private static final double SPRINT_JUMP_BOOST = 0.2D;
+    private static final double MIN_JUMP_FORWARD = 0.26D;
 
-
+    private static final double MAX_JUMP_FORWARD = 0.72D;
 
     private static final double JUMP_UP = 0.42D;
 
-    private static final int RUN_UP_TICKS = 12;
-
-    private static final double RUN_UP_DISTANCE = 2.0D;
-
-    private int runUpTicks;
-
-    private int runUpDone;
-
-    private boolean runUpReady;
+    /** Long enough to cover the flight of the widest jump plus the landing tick, so the landing never ragdolls. */
+    private static final int LEAP_REACTION_GRACE = 30;
 
     private String parkourReason = "idle";
 
@@ -95,9 +108,13 @@ public class NeutralHumanoid extends PathfinderMob implements RangedAttackMob {
 
     private double parkourGap = -1.0D;
 
-    private double runUpX;
+    private double jumpDirX;
 
-    private double runUpZ;
+    private double jumpDirZ;
+
+    private double jumpSpeed;
+
+    private net.minecraft.core.BlockPos jumpTarget;
 
     private double lastFallSpeed;
 
@@ -172,6 +189,17 @@ public class NeutralHumanoid extends PathfinderMob implements RangedAttackMob {
     private boolean applyingHit;
 
     private boolean convertedHit;
+
+    /**
+     * Last entity that actually hurt this humanoid. Damage written straight into health carries no source, so without
+     * remembering the attacker the converted hit would have to fall back to a sourceless damage type - no aggro, no
+     * death message, no credit.
+     */
+    private LivingEntity lastAttacker;
+
+    private int lastAttackerAt = -1000;
+
+    private static final int ATTACKER_MEMORY_TICKS = 80;
 
     private static final double LONG_RANGE_HYSTERESIS = 8.0D;
     private static final double AIRBORNE_SWITCH_HEIGHT = 2.0D;
@@ -331,7 +359,7 @@ public class NeutralHumanoid extends PathfinderMob implements RangedAttackMob {
 
             this.gunsIssued = true;
 
-            ReturnCapsuleMod.LOGGER.info("[humanoid] issued guns: rifle={} ({}) long={} ({})",
+            ReturnCapsuleMod.LOGGER.debug("[humanoid] issued guns: rifle={} ({}) long={} ({})",
                     com.curiats.returncapsule.compat.tacz.TaczRifles.gunId(this.rangedWeapon),
                     fireModeOf(this.rangedWeapon),
                     com.curiats.returncapsule.compat.tacz.TaczRifles.gunId(this.longRangedWeapon),
@@ -360,7 +388,7 @@ public class NeutralHumanoid extends PathfinderMob implements RangedAttackMob {
             return;
         }
         this.lastOffhand = now;
-        ReturnCapsuleMod.LOGGER.info("[humanoid] offhand -> {} (stance={}, shieldSlot={})",
+        ReturnCapsuleMod.LOGGER.debug("[humanoid] offhand -> {} (stance={}, shieldSlot={})",
                 now, this.stance, describe(this.shield));
     }
 
@@ -369,7 +397,7 @@ public class NeutralHumanoid extends PathfinderMob implements RangedAttackMob {
             return;
         }
         this.loadoutLogged = true;
-        ReturnCapsuleMod.LOGGER.info("[humanoid] spawned {}: ranged={} gun={} long={} melee={} shield={}",
+        ReturnCapsuleMod.LOGGER.debug("[humanoid] spawned {}: ranged={} gun={} long={} melee={} shield={}",
                 this.profile.id(),
                 describe(this.rangedWeapon),
                 com.curiats.returncapsule.compat.tacz.TaczRifles.gunId(this.rangedWeapon),
@@ -401,6 +429,7 @@ public class NeutralHumanoid extends PathfinderMob implements RangedAttackMob {
         return PathfinderMob.createMobAttributes()
                 .add(Attributes.MAX_HEALTH, profile.maxHealth())
                 .add(Attributes.ARMOR, profile.armor())
+                .add(Attributes.ARMOR_TOUGHNESS, profile.armorToughness())
                 .add(Attributes.MOVEMENT_SPEED, HumanoidProfile.WALK_SPEED)
                 .add(Attributes.ATTACK_SPEED, HumanoidProfile.PLAYER_ATTACK_SPEED)
                 .add(Attributes.ATTACK_DAMAGE, 1.0D)
@@ -599,8 +628,7 @@ public class NeutralHumanoid extends PathfinderMob implements RangedAttackMob {
     public boolean fireGun(LivingEntity target) {
         if (friendlyOnLine(target)) {
             return false;
-        }
-        GunAim aim = this.gunAim;
+        }        GunAim aim = this.gunAim;
         aim.track(target);
         double distance = Math.sqrt(this.distanceToSqr(target));
         aim.resolveExpired(this.level().getGameTime(), distance);
@@ -751,7 +779,6 @@ public class NeutralHumanoid extends PathfinderMob implements RangedAttackMob {
         }
         this.tickStuckRecovery();
         this.tickReturnToPlayer();
-        this.tickRunUp();
         com.curiats.returncapsule.compat.vehicle.VehicleRider.tick(this);
         com.curiats.returncapsule.compat.vehicle.VehicleGunner.tick(this);
         com.curiats.returncapsule.compat.vehicle.VehicleDriverCompat.tick(this);
@@ -772,6 +799,7 @@ public class NeutralHumanoid extends PathfinderMob implements RangedAttackMob {
         this.tickParkour();
         this.tickDowned();
         this.applyMovementReactions();
+        this.tickLeapSteer();
         this.updateSprint();
         if (this.bladeSkillCooldown > 0) {
             this.bladeSkillCooldown--;
@@ -780,7 +808,7 @@ public class NeutralHumanoid extends PathfinderMob implements RangedAttackMob {
 
             this.shieldBreakTicks--;
             if (this.shieldBreakTicks == 0) {
-                ReturnCapsuleMod.LOGGER.info("[humanoid] shield is back up");
+                ReturnCapsuleMod.LOGGER.debug("[humanoid] shield is back up");
             }
         }
         this.auditOffhand();
@@ -842,7 +870,7 @@ public class NeutralHumanoid extends PathfinderMob implements RangedAttackMob {
                 net.minecraft.resources.ResourceLocation after =
                         com.curiats.returncapsule.compat.tacz.TaczRifles.gunId(stack);
                 if (before != null && after != null && !before.equals(after)) {
-                    ReturnCapsuleMod.LOGGER.info("[humanoid] main hand gun {} -> {} from {}", before, after,
+                    ReturnCapsuleMod.LOGGER.debug("[humanoid] main hand gun {} -> {} from {}", before, after,
                             StackWalker.getInstance().walk(frames -> frames
                                     .skip(1).limit(1)
                                     .map(frame -> frame.getClassName() + "." + frame.getMethodName())
@@ -862,9 +890,12 @@ public class NeutralHumanoid extends PathfinderMob implements RangedAttackMob {
 
     @Override
     public boolean hurt(DamageSource source, float amount) {
+        long traceTime = this.level().getGameTime();
+        com.curiats.returncapsule.compat.HumanoidDamageTrace.flushIfDue(traceTime);
         if (this.level().isClientSide || this.isInvulnerableTo(source)) {
             return false;
         }
+        String traceKey = com.curiats.returncapsule.compat.HumanoidDamageTrace.keyFor(source);
         if (this.isDowned()) {
             return false;
         }
@@ -877,7 +908,11 @@ public class NeutralHumanoid extends PathfinderMob implements RangedAttackMob {
         }
 
         if (isFriendlySource(source)) {
+            com.curiats.returncapsule.compat.HumanoidDamageTrace.rejectedFriendly(traceKey);
             return false;
+        }
+        if (source.getEntity() instanceof LivingEntity attacker) {
+            this.rememberAttacker(attacker);
         }
 
         if (isCreativeSource(source)) {
@@ -890,6 +925,7 @@ public class NeutralHumanoid extends PathfinderMob implements RangedAttackMob {
         }
 
         if (this.blocksWithShield(source)) {
+            com.curiats.returncapsule.compat.HumanoidDamageTrace.shieldBlocked(traceKey);
 
             boolean breaking = amount > SHIELD_BREAK_DAMAGE;
             if (breaking) {
@@ -903,20 +939,43 @@ public class NeutralHumanoid extends PathfinderMob implements RangedAttackMob {
 
         if (amount < MIN_MEANINGFUL_HIT && !this.convertedHit
                 && !source.is(net.minecraft.world.damagesource.DamageTypes.MAGIC)) {
+            com.curiats.returncapsule.compat.HumanoidDamageTrace.rejectedLow(traceKey, amount);
             return false;
         }
 
         if (!source.is(net.minecraft.world.damagesource.DamageTypes.MAGIC)) {
             int now = this.tickCount;
             if (now - this.lastAcceptedHit < HIT_GATE_TICKS) {
+                com.curiats.returncapsule.compat.HumanoidDamageTrace.rejectedGate(traceKey, amount);
                 return false;
             }
             this.lastAcceptedHit = now;
         }
         float reduced = amount * (1.0F - (float) this.profile.damageReduction());
+        com.curiats.returncapsule.compat.HumanoidDamageTrace.reductionApplied(amount, reduced);
 
         if (!source.is(net.minecraft.world.damagesource.DamageTypes.MAGIC)) {
-            reduced = Math.min(reduced, this.getMaxHealth() * MAX_HIT_FRACTION);
+            float capped = Math.min(reduced, this.getMaxHealth() * MAX_HIT_FRACTION);
+            if (capped < reduced) {
+                com.curiats.returncapsule.compat.HumanoidDamageTrace.capped();
+            }
+            reduced = capped;
+            // Per second budget: the per hit cap alone lets a swarm multiply the intake by however many hits it lands.
+            long second = this.tickCount / 20L;
+            if (second != this.budgetSecond) {
+                this.budgetSecond = second;
+                this.budgetTaken = 0.0F;
+            }
+            float budget = this.getMaxHealth() * MAX_DAMAGE_PER_SECOND - this.budgetTaken;
+            if (budget <= 0.0F) {
+                com.curiats.returncapsule.compat.HumanoidDamageTrace.budgetBlocked();
+                return false;
+            }
+            if (reduced > budget) {
+                reduced = budget;
+                com.curiats.returncapsule.compat.HumanoidDamageTrace.budgetCapped();
+            }
+            this.budgetTaken += reduced;
         }
         if (reduced <= 0.0F) {
             return false;
@@ -927,15 +986,23 @@ public class NeutralHumanoid extends PathfinderMob implements RangedAttackMob {
             this.setHealth(1.0F);
             this.lastStandUntil = this.tickCount + LAST_STAND_GRACE;
             this.lastStandReadyAt = this.tickCount + LAST_STAND_COOLDOWN;
-            ReturnCapsuleMod.LOGGER.info("[humanoid] last stand triggered");
+            com.curiats.returncapsule.compat.HumanoidDamageTrace.lastStand();
+            ReturnCapsuleMod.LOGGER.debug("[humanoid] last stand triggered");
             return true;
         }
+        com.curiats.returncapsule.compat.HumanoidDamageTrace.observedArmour(
+                this.getArmorValue(), (float) this.getAttributeValue(net.minecraft.world.entity.ai.attributes.Attributes.ARMOR_TOUGHNESS));
         this.applyingHit = true;
         boolean hurt;
+        float healthBefore = this.getHealth();
         try {
             hurt = super.hurt(source, reduced);
         } finally {
             this.applyingHit = false;
+        }
+        if (hurt) {
+            com.curiats.returncapsule.compat.HumanoidDamageTrace.accepted(
+                    traceKey, traceTime, amount, reduced, healthBefore, this.getHealth());
         }
         if (hurt && source.getEntity() instanceof LivingEntity attacker) {
             HumanoidSquad.report(this.level(), attacker);
@@ -952,6 +1019,13 @@ public class NeutralHumanoid extends PathfinderMob implements RangedAttackMob {
 
     private void applyMovementReactions() {
         if (this.level().isClientSide) {
+            return;
+        }
+        if (this.isPassenger()) {
+            // Riding copies the seat position every tick, which looks like a huge push to the rules below and knocked
+            // the humanoid down as soon as the vehicle drove faster than DOWNED_PUSH_DISTANCE per tick.
+            this.lastPosition = this.position();
+            this.lastFallSpeed = 0.0D;
             return;
         }
         if (this.reactionGraceTicks > 0) {
@@ -1008,6 +1082,16 @@ public class NeutralHumanoid extends PathfinderMob implements RangedAttackMob {
         return this.entityData.get(DATA_LEAP);
     }
 
+    /**
+     * True when the only way to reach {@code entity} is a jump across a gap. Used by the follow goal so it does not
+     * consider itself "close enough" while standing on the far side of a trench.
+     */
+    public boolean gapToward(net.minecraft.world.entity.LivingEntity entity) {
+        double dx = entity.getX() - this.getX();
+        double dz = entity.getZ() - this.getZ();
+        return HumanoidTraversal.planJump(this.level(), this.blockPosition(), dx, dz, 7) != null;
+    }
+
     public boolean isDownedSynced() {
         return this.entityData.get(DATA_DOWNED);
     }
@@ -1042,12 +1126,6 @@ public class NeutralHumanoid extends PathfinderMob implements RangedAttackMob {
             return null;
         }
         return new net.minecraft.world.phys.Vec3(dx / length, 0.0D, dz / length);
-    }
-
-    private void tickRunUp() {
-        if (this.runUpTicks > 0) {
-            this.runUpTicks--;
-        }
     }
 
     public boolean onHighPlatform() {
@@ -1112,7 +1190,6 @@ public class NeutralHumanoid extends PathfinderMob implements RangedAttackMob {
                 + " navDone=" + this.getNavigation().isDone()
                 + " node=" + node
                 + " leapCd=" + this.leapCooldown
-                + " runUp=" + this.runUpTicks + "/" + this.runUpReady
                 + " ground=" + this.onGround()
                 + " moveCd=" + this.moveCooldown + " prio=" + this.movePriority
                 + " parkour=" + this.parkourReason + "/" + Math.round(this.parkourGap)
@@ -1240,18 +1317,37 @@ public class NeutralHumanoid extends PathfinderMob implements RangedAttackMob {
     private void tickLeapFlag() {
         if (!this.level().isClientSide && this.entityData.get(DATA_LEAP) && this.onGround()) {
             this.entityData.set(DATA_LEAP, false);
+            this.jumpTarget = null;
         }
     }
 
-    private boolean roomBehind(double dirX, double dirZ) {
-        for (double step = 1.0D; step <= RUN_UP_DISTANCE; step += 0.75D) {
-            net.minecraft.core.BlockPos probe = net.minecraft.core.BlockPos.containing(
-                    this.getX() - dirX * step, this.getY(), this.getZ() - dirZ * step);
-            if (!HumanoidTraversal.canStandOn(this.level(), probe)) {
-                return false;
+    /**
+     * Holds a committed jump on the arc it was solved for.
+     *
+     * <p>The navigation's move control rewrites the horizontal velocity on every tick, so a plain impulse decays
+     * early and narrow gaps ended up landing on the far edge (or short of it). Re-applying the solved speed with
+     * the same 0.91 air drag keeps the flight length predictable, and steering toward the target block centre
+     * corrects lateral drift, which is what made the 1 and 2 block jumps inaccurate.</p>
+     */
+    private void tickLeapSteer() {
+        if (!this.entityData.get(DATA_LEAP) || this.onGround()) {
+            this.jumpTarget = null;
+            return;
+        }
+        this.jumpSpeed *= 0.91D;
+        double dx = this.jumpDirX;
+        double dz = this.jumpDirZ;
+        net.minecraft.core.BlockPos target = this.jumpTarget;
+        if (target != null) {
+            double tx = target.getX() + 0.5D - this.getX();
+            double tz = target.getZ() + 0.5D - this.getZ();
+            double length = Math.sqrt(tx * tx + tz * tz);
+            if (length > 0.35D) {
+                dx = tx / length;
+                dz = tz / length;
             }
         }
-        return true;
+        this.setDeltaMovement(dx * this.jumpSpeed, this.getDeltaMovement().y, dz * this.jumpSpeed);
     }
 
     private boolean stepUpAhead(double dirX, double dirZ) {
@@ -1307,6 +1403,19 @@ public class NeutralHumanoid extends PathfinderMob implements RangedAttackMob {
         return false;
     }
 
+    /**
+     * Picks the slowest horizontal impulse that still clears {@code required} before the jump arc ends, so a narrow
+     * gap gets a short hop and a wide one gets a full speed leap. Returns 0 when no legal impulse can reach it.
+     */
+    private double solveForward(double required) {
+        for (double candidate = MIN_JUMP_FORWARD; candidate <= MAX_JUMP_FORWARD + 1.0E-4D; candidate += 0.02D) {
+            if (this.reachesLanding(candidate, required)) {
+                return candidate;
+            }
+        }
+        return 0.0D;
+    }
+
     private void chooseAnotherRoute() {
         this.parkourBlocked = 40;
         if (!this.getNavigation().isDone()) {
@@ -1321,28 +1430,6 @@ public class NeutralHumanoid extends PathfinderMob implements RangedAttackMob {
         if (player != null) {
             this.requestMove(player, 1.1D, 1);
         }
-    }
-
-    private double pathGap(double dirX, double dirZ, net.minecraft.core.BlockPos next) {
-        double dx = next.getX() + 0.5D - this.getX();
-        double dz = next.getZ() + 0.5D - this.getZ();
-        double flat = Math.sqrt(dx * dx + dz * dz);
-        if (flat < 1.6D) {
-            return -1.0D;
-        }
-        for (double step = 0.6D; step <= flat; step += 0.4D) {
-            net.minecraft.core.BlockPos probe = net.minecraft.core.BlockPos.containing(
-                    this.getX() + dirX * step, this.getY() - 1.0D, this.getZ() + dirZ * step);
-            if (this.level().getBlockState(probe).getCollisionShape(this.level(), probe).isEmpty()) {
-                net.minecraft.core.BlockPos landing = net.minecraft.core.BlockPos.containing(
-                        this.getX() + dirX * flat, this.getY() - 1.0D, this.getZ() + dirZ * flat);
-                if (this.level().getBlockState(landing).getCollisionShape(this.level(), landing).isEmpty()) {
-                    return -1.0D;
-                }
-                return flat;
-            }
-        }
-        return -1.0D;
     }
 
     private void tickClimb() {
@@ -1415,13 +1502,6 @@ public class NeutralHumanoid extends PathfinderMob implements RangedAttackMob {
             this.parkourBlocked--;
             return;
         }
-        if (this.runUpTicks > 0) {
-            this.runUpTicks--;
-            if (this.runUpTicks == 0) {
-                this.runUpReady = true;
-            }
-            return;
-        }
         if (!this.onGround() || this.leapCooldown > 0) {
             return;
         }
@@ -1430,28 +1510,12 @@ public class NeutralHumanoid extends PathfinderMob implements RangedAttackMob {
             return;
         }
         this.parkourReason = "search";
-        net.minecraft.core.BlockPos next = this.intendedStep();
-        double dx;
-        double dz;
-        if (next != null) {
-            dx = next.getX() + 0.5D - this.getX();
-            dz = next.getZ() + 0.5D - this.getZ();
-        } else {
-            net.minecraft.world.phys.Vec3 intent = this.intendedDirection();
-            if (intent == null) {
-                return;
-            }
-            dx = intent.x;
-            dz = intent.z;
-            next = net.minecraft.core.BlockPos.containing(this.getX() + dx * 4.0D, this.getY(),
-                    this.getZ() + dz * 4.0D);
-        }
-        double length = Math.sqrt(dx * dx + dz * dz);
-        if (length < 0.6D) {
+        double[] dir = this.jumpDirection();
+        if (dir == null) {
             return;
         }
-        dx /= length;
-        dz /= length;
+        double dx = dir[0];
+        double dz = dir[1];
         double yaw = Math.toRadians(this.getYRot());
         if (dx * -Math.sin(yaw) + dz * Math.cos(yaw) < 0.7D) {
             this.setYRot((float) Math.toDegrees(Math.atan2(-dx, dz)));
@@ -1459,25 +1523,22 @@ public class NeutralHumanoid extends PathfinderMob implements RangedAttackMob {
             this.setYHeadRot(this.getYRot());
             return;
         }
-        net.minecraft.core.BlockPos landing = HumanoidTraversal.landingOf(this.level(),
+        HumanoidTraversal.JumpPlan plan = HumanoidTraversal.planJump(this.level(),
                 this.blockPosition(), dx, dz, 7);
-        if (landing == null) {
+        if (plan == null) {
             this.parkourReason = "no-landing";
-            this.runUpReady = false;
-            this.chooseAnotherRoute();
             return;
         }
+        net.minecraft.core.BlockPos landing = plan.landing();
         double dy = landing.getY() - this.getY();
         if (dy < -0.6D) {
             this.parkourReason = "drop";
-            this.runUpReady = false;
             return;
         }
         if (dy > 1.2D) {
             return;
         }
         if (this.onHighPlatform() && Math.abs(landing.getY() - this.platformY) > 1) {
-            this.runUpReady = false;
             return;
         }
         net.minecraft.core.BlockPos goalPos = chase != null
@@ -1487,63 +1548,75 @@ public class NeutralHumanoid extends PathfinderMob implements RangedAttackMob {
         if (landing.distSqr(goalPos) > this.blockPosition().distSqr(goalPos) - 0.25D) {
             return;
         }
-        double gap = HumanoidTraversal.gapWidthAhead(this.level(), this.blockPosition(), dx, dz, 7);
-        if (gap < 0.0D) {
-            double nodeDistance = Math.sqrt(next.distSqr(this.blockPosition()));
-            if (nodeDistance < 2.2D) {
-                this.runUpReady = false;
-                return;
-            }
-            gap = this.pathGap(dx, dz, next);
-        }
-        if (gap < 0.0D) {
-            this.parkourReason = "no-gap";
-            this.runUpReady = false;
-            return;
-        }
-        this.parkourGap = gap;
-        double edgeGap = Math.max(0.0D, gap - this.getBbWidth());
+        this.parkourGap = plan.travel();
+        double edgeGap = Math.max(0.0D, plan.gapWidth() - this.getBbWidth());
         if (edgeGap < 0.35D) {
             this.parkourReason = "too-small";
             return;
         }
-        if (dy > 0.4D) {
-            this.setDeltaMovement(dx * 0.28D, JUMP_UP, dz * 0.28D);
-            this.hasImpulse = true;
-            this.leapCooldown = 8;
-            return;
-        }
         if (edgeGap > MAX_JUMP_REACH) {
             this.parkourReason = "too-wide";
-            this.runUpReady = false;
             this.chooseAnotherRoute();
             return;
         }
-        boolean sprint = edgeGap > SPRINT_JUMP_REACH;
-        if (sprint && !this.runUpReady) {
-            if (!this.roomBehind(dx, dz)) {
-                this.runUpReady = true;
-            } else {
-                this.runUpTicks = RUN_UP_TICKS;
-                this.requestMove(this.getX() - dx * RUN_UP_DISTANCE, this.getY(),
-                        this.getZ() - dz * RUN_UP_DISTANCE, 1.3D, 3);
-                return;
-            }
-        }
-        double forward = Math.min(0.72D, Math.max(0.34D, (edgeGap + 0.8D) / 7.0D));
-        if (!this.reachesLanding(forward, edgeGap + 0.4D)) {
+        double forward = this.solveForward(plan.travel() + 0.1D);
+        if (forward <= 0.0D) {
             this.parkourReason = "short";
-            this.runUpReady = false;
             this.chooseAnotherRoute();
             return;
         }
-        this.setSprinting(sprint);
+        this.setSprinting(forward > 0.5D);
         this.entityData.set(DATA_LEAP, true);
+        this.jumpDirX = dx;
+        this.jumpDirZ = dz;
+        this.jumpSpeed = forward;
+        this.jumpTarget = landing;
+        this.suppressReactions(LEAP_REACTION_GRACE);
         this.setDeltaMovement(dx * forward, JUMP_UP, dz * forward);
         this.hasImpulse = true;
         this.leapCooldown = 12;
-        this.runUpReady = false;
         this.parkourReason = "jumped";
+    }
+
+    /**
+     * Chooses the direction to jump in, or {@code null} when nothing should be attempted this tick.
+     *
+     * <p>The next path node is tried first, which is what makes combat parkour reliable: the target is across the
+     * gap, so the path is aimed at it. Following a player is different - the pathfinder cannot cross the gap, so
+     * the path ends on the near edge and the next node points <em>along</em> the gap, not across it. The raw goal
+     * direction is therefore tried as a second candidate whenever the path direction has no jumpable gap.</p>
+     */
+    private double[] jumpDirection() {
+        java.util.List<double[]> candidates = new java.util.ArrayList<>(2);
+        net.minecraft.core.BlockPos next = this.intendedStep();
+        if (next != null) {
+            double dx = next.getX() + 0.5D - this.getX();
+            double dz = next.getZ() + 0.5D - this.getZ();
+            double length = Math.sqrt(dx * dx + dz * dz);
+            if (length > 0.6D) {
+                candidates.add(new double[]{dx / length, dz / length});
+            }
+        }
+        net.minecraft.world.phys.Vec3 intent = this.intendedDirection();
+        if (intent != null) {
+            boolean duplicate = false;
+            for (double[] candidate : candidates) {
+                if (candidate[0] * intent.x + candidate[1] * intent.z > 0.98D) {
+                    duplicate = true;
+                    break;
+                }
+            }
+            if (!duplicate) {
+                candidates.add(new double[]{intent.x, intent.z});
+            }
+        }
+        for (double[] candidate : candidates) {
+            if (HumanoidTraversal.planJump(this.level(), this.blockPosition(),
+                    candidate[0], candidate[1], 7) != null) {
+                return candidate;
+            }
+        }
+        return candidates.isEmpty() ? null : candidates.get(0);
     }
 
     private void tickStuckRecovery() {
@@ -1683,6 +1756,24 @@ public class NeutralHumanoid extends PathfinderMob implements RangedAttackMob {
         return this.applyingHit;
     }
 
+    /** Records whoever hit us so a converted direct health write can be replayed with a real attacker. */
+    public void rememberAttacker(LivingEntity attacker) {
+        if (attacker == null || attacker == this) {
+            return;
+        }
+        this.lastAttacker = attacker;
+        this.lastAttackerAt = this.tickCount;
+    }
+
+    /** @return the attacker to blame for the current hit, or {@code null} when it is not recent enough */
+    public LivingEntity recentAttacker() {
+        if (this.lastAttacker == null || this.lastAttacker.isRemoved()
+                || this.tickCount - this.lastAttackerAt > ATTACKER_MEMORY_TICKS) {
+            return null;
+        }
+        return this.lastAttacker;
+    }
+
     public boolean bypassesProtections() {
         return this.bypassProtections;
     }
@@ -1738,14 +1829,14 @@ public class NeutralHumanoid extends PathfinderMob implements RangedAttackMob {
         this.shieldBreakTicks = SHIELD_BREAK_TICKS;
         this.shieldBreaks++;
         if (this.shieldBreaks < SHIELD_BREAK_LIMIT) {
-            ReturnCapsuleMod.LOGGER.info("[humanoid] shield broken ({}/{}), down for {} ticks",
+            ReturnCapsuleMod.LOGGER.debug("[humanoid] shield broken ({}/{}), down for {} ticks",
                     this.shieldBreaks, SHIELD_BREAK_LIMIT, SHIELD_BREAK_TICKS);
             return;
         }
         this.shield = ItemStack.EMPTY;
         this.shieldBreaks = 0;
         this.setItemSlot(EquipmentSlot.OFFHAND, ItemStack.EMPTY);
-        ReturnCapsuleMod.LOGGER.info("[humanoid] shield destroyed permanently");
+        ReturnCapsuleMod.LOGGER.debug("[humanoid] shield destroyed permanently");
     }
 
     private static final int SHIELD_BREAK_TICKS = 100;
@@ -1784,7 +1875,7 @@ public class NeutralHumanoid extends PathfinderMob implements RangedAttackMob {
         }
         this.usingLongGun = wantLong;
         this.setItemSlot(EquipmentSlot.MAINHAND, wanted.copy());
-        ReturnCapsuleMod.LOGGER.info("[humanoid] gun switch at {} blocks: {} -> {}",
+        ReturnCapsuleMod.LOGGER.debug("[humanoid] gun switch at {} blocks: {} -> {}",
                 Math.round(distance),
                 com.curiats.returncapsule.compat.tacz.TaczRifles.gunId(this.getMainHandItem()),
                 com.curiats.returncapsule.compat.tacz.TaczRifles.gunId(wanted));
@@ -1824,10 +1915,10 @@ public class NeutralHumanoid extends PathfinderMob implements RangedAttackMob {
     public void die(DamageSource source) {
 
         if (this.getHealth() > 0.0F && !this.bypassProtections) {
-            ReturnCapsuleMod.LOGGER.info("[humanoid] refused a forced death event (health {})", this.getHealth());
+            ReturnCapsuleMod.LOGGER.debug("[humanoid] refused a forced death event (health {})", this.getHealth());
             return;
         }
-        ReturnCapsuleMod.LOGGER.info("[humanoid] died from {}", source.getMsgId());
+        ReturnCapsuleMod.LOGGER.debug("[humanoid] died from {}", source.getMsgId());
 
         com.curiats.returncapsule.util.DamageLock.clearAll();
         super.die(source);
@@ -1865,7 +1956,7 @@ public class NeutralHumanoid extends PathfinderMob implements RangedAttackMob {
         }
         this.level().playSound(null, this.getX(), this.getY(), this.getZ(),
                 SoundEvents.GENERIC_EXPLODE, net.minecraft.sounds.SoundSource.HOSTILE, 4.0F, 0.8F);
-        ReturnCapsuleMod.LOGGER.info("[humanoid] death blast fired");
+        ReturnCapsuleMod.LOGGER.debug("[humanoid] death blast fired");
     }
 
     private static final double DEATH_BLAST_RADIUS = 8.0D;

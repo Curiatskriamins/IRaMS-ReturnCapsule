@@ -51,8 +51,11 @@ public final class HumanoidImpactDetector {
             return;
         }
         boolean knocked = humanoid.hurtTime > 0;
+        // A position jump alone is far too noisy: being shoved by a vehicle or a doorway correction looks identical to
+        // an impact. Only treat it as one while the humanoid is actually falling, and keep the velocity branch for real
+        // hits.
         boolean impact = velocityJump > VELOCITY_JUMP
-                || (!knocked && positionJump > POSITION_JUMP);
+                || (humanoid.fallDistance > 1.5F && positionJump > POSITION_JUMP);
         if (impact) {
             COOLDOWN.put(id, COOLDOWN_TICKS);
             com.curiats.returncapsule.network.ModNetwork.sendRagdollStart(id);

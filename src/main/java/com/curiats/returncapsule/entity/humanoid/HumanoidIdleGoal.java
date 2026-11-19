@@ -87,7 +87,8 @@ public class HumanoidIdleGoal extends Goal {
                     if (this.mob.getRandom().nextInt(FOLLOW_DECISION_CHANCE) == 0) {
                         this.following = true;
                     }
-                } else if (this.following && distanceSqr < FOLLOW_GAP * FOLLOW_GAP) {
+                } else if (this.following && distanceSqr < FOLLOW_GAP * FOLLOW_GAP
+                        && !this.mob.gapToward(owner)) {
                     this.following = false;
                 }
                 if (this.following) {

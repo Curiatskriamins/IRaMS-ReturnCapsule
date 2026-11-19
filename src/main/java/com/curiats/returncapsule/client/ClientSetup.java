@@ -40,7 +40,7 @@ public final class ClientSetup {
             CapsuleClientHooks.install(ClientTrail::onFallingTick);
             BoomClientHooks.install(BoomClientTrail::onTick);
             net.minecraftforge.common.MinecraftForge.EVENT_BUS.register(KillMarkerRenderer.class);
-            ReturnCapsuleMod.LOGGER.info("[kill-marker] renderer registered");
+            ReturnCapsuleMod.LOGGER.debug("[kill-marker] renderer registered");
             com.curiats.returncapsule.compat.mobends.MobendsAddon.registerIfPresent();
         });
     }

@@ -64,7 +64,7 @@ public final class MobendsAddon {
             registryClass.getMethod("setAnimateForKey", String.class, boolean.class)
                     .invoke(registry, registeredKey, enabled);
             registryClass.getMethod("clearCache").invoke(registry);
-            ReturnCapsuleMod.LOGGER.info("[humanoid] MoBends animation for {} set to {}", registeredKey, enabled);
+            ReturnCapsuleMod.LOGGER.debug("[humanoid] MoBends animation for {} set to {}", registeredKey, enabled);
         } catch (ReflectiveOperationException | RuntimeException exception) {
             ReturnCapsuleMod.LOGGER.warn("Could not toggle MoBends animation", exception);
         }
@@ -233,7 +233,7 @@ public final class MobendsAddon {
                 }
             }
         }
-        ReturnCapsuleMod.LOGGER.info("[humanoid] MoBends addon '{}' registered={}", ADDON_ID, present);
+        ReturnCapsuleMod.LOGGER.debug("[humanoid] MoBends addon '{}' registered={}", ADDON_ID, present);
     }
 
     private static void registerEntity(Object registry, Object dataFactory, Object mutatorFactory,
@@ -256,7 +256,7 @@ public final class MobendsAddon {
         Object key = register.invoke(registry, ADDON_ID, "entity.returncapsule.base_humanoid", BaseHumanoid.class,
                 dataFactory, mutatorFactory, renderer, previewer, animations, parts);
         registeredKey = key instanceof String name ? name : null;
-        ReturnCapsuleMod.LOGGER.info("[humanoid] MoBends bender registered as {} (animations={}, parts={})",
+        ReturnCapsuleMod.LOGGER.debug("[humanoid] MoBends bender registered as {} (animations={}, parts={})",
                 key, animations.length, parts.length);
         enableAnimation(key, loader);
     }
@@ -277,7 +277,7 @@ public final class MobendsAddon {
                 .invoke(registry, BaseHumanoid.class);
         boolean animated = bender != null
                 && Boolean.TRUE.equals(bender.getClass().getMethod("isAnimated").invoke(bender));
-        ReturnCapsuleMod.LOGGER.info("[humanoid] MoBends animation active for {}: {}", key, animated);
+        ReturnCapsuleMod.LOGGER.debug("[humanoid] MoBends animation active for {}: {}", key, animated);
     }
 
     private static boolean configuredAnimate(String key, ClassLoader loader) {

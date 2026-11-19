@@ -17,6 +17,40 @@ public final class VehicleDriverCompat {
 
     private static final double STOP_RANGE = 12.0D;
 
+    /** How close a following vehicle closes in on the owner's trail before it stops. */
+    private static final double FOLLOW_KEEP_RANGE = 8.0D;
+
+    /** Owner distance that wakes a following vehicle up. Was a hard 24 block dead zone. */
+    private static final double FOLLOW_START_RANGE = 16.0D;
+
+    /** How many ticks behind the owner the follow point sits. */
+    private static final double FOLLOW_TRAIL_TICKS = 10.0D;
+
+    /** Heading error above which the vehicle must roll forward to turn instead of pivoting. */
+    private static final double TURN_FIRST_DEGREES = 35.0D;
+
+    /** Enemies are counted around the owner, never around the helicopter, or it would fly off chasing spawns. */
+    private static final double ENEMY_RANGE = 64.0D;
+
+    private static final double ESCORT_RADIUS = 20.0D;
+
+    private static final double ESCORT_ALTITUDE = 14.0D;
+
+    private static final double ORBIT_STEP = 0.02D;
+
+    private static final double CRUISE_PITCH = 12.0D;
+
+    private static final double LAND_SEARCH_RADIUS = 64.0D;
+
+    private static final double LAND_ALTITUDE = 12.0D;
+
+    private static final double MAX_SINK = 0.25D;
+
+    private static final java.util.Map<Integer, Double> ORBIT = new java.util.concurrent.ConcurrentHashMap<>();
+
+    private static final java.util.Map<Integer, net.minecraft.core.BlockPos> LANDING_SPOT =
+            new java.util.concurrent.ConcurrentHashMap<>();
+
     private static final String CONTROL_CLASS = "org.ywzj.vehicle.vehicle.control.ControlUnit";
 
     private static boolean resolved;
@@ -31,6 +65,9 @@ public final class VehicleDriverCompat {
     private static Field rightYawField;
     private static Field yRotField;
     private static Field yRotKeepField;
+    private static Field downField;
+    private static Field xRotField;
+    private static Field xRotKeepField;
     private static Field seatsField;
     private static java.lang.reflect.Method toggleEngine;
     private static java.lang.reflect.Method isEngineOn;
@@ -44,9 +81,41 @@ public final class VehicleDriverCompat {
 
     private static final java.util.Map<Integer, Integer> RECOVERY = new java.util.concurrent.ConcurrentHashMap<>();
 
-    private static final int RECOVERY_TICKS = 1200;
+    /** Rolling hysteresis so a following vehicle does not stutter between throttle and handbrake. */
+    private static final java.util.Map<Integer, Boolean> ROLLING = new java.util.concurrent.ConcurrentHashMap<>();
 
-    private static final int RECOVERY_PHASE = 60;
+    /** Wall avoidance: panic distance, the angle searched either side, and how long a side choice is held. */
+    private static final double WALL_PANIC = 10.0D;
+
+    private static final float DETOUR_ANGLE = 60.0F;
+
+    private static final int DETOUR_HOLD = 80;
+
+    private static final double DETOUR_COMMIT_DEGREES = 60.0D;
+
+    private static final int DETOUR_CYCLE = 40;
+
+    private static final int DETOUR_HALF = 20;
+
+    private static final java.util.Map<Integer, Integer> DETOUR = new java.util.concurrent.ConcurrentHashMap<>();
+
+    private static final java.util.Map<Integer, Double> DETOUR_YAW = new java.util.concurrent.ConcurrentHashMap<>();
+
+    private static final java.util.Map<Integer, Integer> DETOUR_TICKS = new java.util.concurrent.ConcurrentHashMap<>();
+
+    private static final java.util.Map<Integer, Integer> UNSTICK = new java.util.concurrent.ConcurrentHashMap<>();
+
+    /** Ticks of "throttle but no movement" before the AI treats the vehicle as wedged on something thin. */
+    private static final int JAM_TICKS = 8;
+
+    private static final java.util.Map<Integer, Integer> JAM = new java.util.concurrent.ConcurrentHashMap<>();
+
+    /** Whether the last tick asked for forward; only forward throttle that fails to move counts as jammed. */
+    private static final java.util.Map<Integer, Boolean> LAST_FORWARD = new java.util.concurrent.ConcurrentHashMap<>();
+
+    private static final int RECOVERY_TICKS = 60;
+
+    private static final int RECOVERY_PHASE = 10;
 
     private static final java.util.Map<Integer, int[]> REPLAY = new java.util.concurrent.ConcurrentHashMap<>();
 
@@ -60,6 +129,13 @@ public final class VehicleDriverCompat {
         Entity vehicle = humanoid.getVehicle();
         if (vehicle == null) {
             humanoid.setDrivingVehicle(false);
+            ROLLING.remove(humanoid.getId());
+            DETOUR.remove(humanoid.getId());
+            DETOUR_TICKS.remove(humanoid.getId());
+            DETOUR_YAW.remove(humanoid.getId());
+            JAM.remove(humanoid.getId());
+            LAST_FORWARD.remove(humanoid.getId());
+            VehiclePathPlanner.forget(humanoid.getId());
             return;
         }
         if (!resolve()) {
@@ -82,14 +158,39 @@ public final class VehicleDriverCompat {
             if (!drives) {
                 return;
             }
+            if (isFixedWing(vehicle)) {
+                // Ground controls on a fixed wing aircraft are worse than no controls at all: clamp the stick.
+                ROLLING.remove(humanoid.getId());
+                parkFlightControls(control);
+                return;
+            }
+            if (isRotaryWing(vehicle)) {
+                ROLLING.remove(humanoid.getId());
+                tickRotorWing(humanoid, vehicle, control);
+                return;
+            }
             LivingEntity target = humanoid.getTarget();
             net.minecraft.world.entity.player.Player owner = humanoid.level().getNearestPlayer(humanoid, 256.0D);
             boolean ownerAboard = owner != null && owner.getVehicle() == vehicle;
-            net.minecraft.world.phys.Vec3 aim = target != null
-                    ? target.position()
-                    : owner != null && !ownerAboard && humanoid.distanceToSqr(owner) > 24.0D * 24.0D
-                            ? owner.position() : null;
+            net.minecraft.world.phys.Vec3 aim = null;
+            if (target != null) {
+                aim = target.position();
+            } else if (owner != null && !ownerAboard) {
+                // Aim at the owner's trail rather than the owner: chasing the live position made the vehicle
+                // overshoot and brake, and the old 24 block gate cut driving off exactly inside that band.
+                net.minecraft.world.phys.Vec3 trail = owner.position()
+                        .subtract(owner.getDeltaMovement().scale(FOLLOW_TRAIL_TICKS));
+                if (humanoid.distanceToSqr(owner) > FOLLOW_START_RANGE * FOLLOW_START_RANGE) {
+                    aim = trail;
+                }
+            }
             if (aim == null) {
+                ROLLING.remove(humanoid.getId());
+                DETOUR.remove(humanoid.getId());
+                DETOUR_TICKS.remove(humanoid.getId());
+                DETOUR_YAW.remove(humanoid.getId());
+                JAM.remove(humanoid.getId());
+                VehiclePathPlanner.forget(humanoid.getId());
                 stopAll(control);
                 return;
             }
@@ -108,20 +209,106 @@ public final class VehicleDriverCompat {
             if (replayAim != null) {
                 aim = replayAim;
             }
+            if (target == null) {
+                // Route around obstacles instead of only reacting to them: a hull sized grid search can thread the gaps
+                // between street furniture, which ray probes cannot express.
+                net.minecraft.world.phys.Vec3 routed = VehiclePathPlanner.route(vehicle, aim);
+                if (routed != null) {
+                    aim = routed;
+                }
+            }
             double yawError = yawErrorTo(vehicle, aim);
             double rawDistance = vehicle.position().distanceTo(aim);
-            double clearance = clearanceTo(vehicle, target, owner);
+            // Follow mode wants to close the gap, not to hold a fighting standoff: subtracting the full body clearance
+            // parked the vehicle 15+ blocks behind the player, which read as "it cannot keep up".
+            double clearance = target != null ? clearanceTo(vehicle, target, owner) : 2.0D;
             double distance = rawDistance - clearance;
             double keep = target != null ? Math.max(MIN_ENGAGE_RANGE, weaponRange(vehicle))
-                    : 10.0D;
+                    : FOLLOW_KEEP_RANGE;
+            boolean tracked = isTracked(vehicle);
             double frontClear = cornerClearance(vehicle, yawError);
             double safeFront = vehicle.getBbWidth() * 0.5D + 2.0D;
             boolean groundAhead = groundAhead(vehicle);
-            boolean forward = distance > keep && Math.abs(yawError) < 70.0D
-                    && frontClear > safeFront && groundAhead;
-            boolean backward = target != null ? distance < STOP_RANGE : distance < 9.0D;
-            boolean complexTerrain = frontClear < 10.0D || !groundAhead
-                    || Math.abs(yawError) > 22.0D || sideTight(vehicle);
+            double aheadClear = clearanceAlong(vehicle, vehicle.getYRot());
+            double groundSpeed = vehicle.getDeltaMovement().horizontalDistance();
+            // Braking distance gate, capped: the raw v^2 figure demanded 20+ blocks at walking pace on a heavy hull and
+            // throttled it to a crawl even down an empty street.
+            double stopping = Math.min(12.0D, groundSpeed * groundSpeed / 0.05D + vehicle.getBbWidth());
+            boolean mustBrake = aheadClear < stopping + 3.0D;
+            double stopAt = ROLLING.getOrDefault(humanoid.getId(), false) ? keep - 3.0D : keep;
+            boolean forward = !mustBrake && distance > stopAt && Math.abs(yawError) < 70.0D
+                    && Math.min(frontClear, aheadClear) > safeFront && groundAhead;
+            boolean backward = mustBrake || (target != null ? distance < STOP_RANGE : distance < 6.0D);
+            // Jam = forward was asked for and the hull did not move. Reverse and pivot phases must not count, otherwise
+            // a stuck tracked vehicle kept refreshing its own jam timer while turning on the spot.
+            boolean askedForward = LAST_FORWARD.getOrDefault(humanoid.getId(), false);
+            if (askedForward && groundSpeed < 0.05D) {
+                JAM.merge(humanoid.getId(), 1, Integer::sum);
+            } else if (groundSpeed > 0.15D) {
+                JAM.remove(humanoid.getId());
+            }
+            int jamTicks = JAM.getOrDefault(humanoid.getId(), 0);
+            int steerSide = 0;
+            int detourTicks = DETOUR_TICKS.getOrDefault(humanoid.getId(), 0);
+            boolean freeAgain = jamTicks < JAM_TICKS && aheadClear >= WALL_PANIC + 4.0D && groundSpeed > 0.15D;
+            if (freeAgain) {
+                detourTicks = 0;
+            }
+            if (!freeAgain && (aheadClear < WALL_PANIC || jamTicks >= JAM_TICKS || detourTicks > 0)) {
+                Double lockedYaw = DETOUR_YAW.get(humanoid.getId());
+                boolean committed = lockedYaw != null
+                        && Math.abs(net.minecraft.util.Mth.wrapDegrees(
+                                vehicle.getYRot() - lockedYaw.floatValue())) < DETOUR_COMMIT_DEGREES;
+                if (jamTicks >= JAM_TICKS * 6) {
+                    // Wedged without rotating: try the other side instead of pushing the same way forever.
+                    DETOUR.put(humanoid.getId(), -DETOUR.getOrDefault(humanoid.getId(), -1));
+                    DETOUR_YAW.put(humanoid.getId(), (double) vehicle.getYRot());
+                    JAM.remove(humanoid.getId());
+                    detourTicks = DETOUR_HOLD;
+                } else if (detourTicks <= 0 && !committed) {
+                    double leftRoom = clearanceAlong(vehicle, vehicle.getYRot() - DETOUR_ANGLE);
+                    double rightRoom = clearanceAlong(vehicle, vehicle.getYRot() + DETOUR_ANGLE);
+                    DETOUR.put(humanoid.getId(), leftRoom >= rightRoom ? -1 : 1);
+                    DETOUR_YAW.put(humanoid.getId(), (double) vehicle.getYRot());
+                    detourTicks = DETOUR_HOLD;
+                } else if (detourTicks > 0) {
+                    detourTicks--;
+                }
+                DETOUR_TICKS.put(humanoid.getId(), detourTicks);
+                int side = DETOUR.getOrDefault(humanoid.getId(), -1);
+                int phase = (int) (UNSTICK.merge(humanoid.getId(), 1, Integer::sum) % DETOUR_CYCLE);
+                boolean reversePhase = phase < DETOUR_HALF;
+                if (reversePhase) {
+                    // Backing off frees a hull pressed onto a post, and reverse steering needs the opposite input.
+                    forward = false;
+                    backward = true;
+                } else if (tracked && (!groundAhead || Math.min(frontClear, aheadClear) < safeFront)) {
+                    // A tracked hull can pivot when there is no room to roll forward; a wheeled one cannot.
+                    forward = false;
+                    backward = false;
+                } else {
+                    forward = true;
+                    backward = false;
+                }
+                // Reversing with the wheel turned the same way rotates the hull the other way, so the wheel is flipped
+                // during the reverse half; with the same sign the two halves cancel and the vehicle only wiggles.
+                steerSide = reversePhase ? -side : side;
+            } else {
+                DETOUR.remove(humanoid.getId());
+                DETOUR_TICKS.remove(humanoid.getId());
+                DETOUR_YAW.remove(humanoid.getId());
+                UNSTICK.remove(humanoid.getId());
+            }
+            // Wheeled and tracked hulls turn differently. A wheeled vehicle only changes heading while it rolls, so a
+            // large error has to be solved with throttle; a tracked one pivots on the spot and must not be forced to
+            // drive just to turn (that is what dragged it into circles).
+            if (!tracked && Math.abs(yawError) > TURN_FIRST_DEGREES && distance > 2.0D
+                    && frontClear > safeFront && groundAhead) {
+                forward = true;
+                backward = false;
+            }
+            boolean complexTerrain = steerSide == 0 && (frontClear < 5.0D || !groundAhead
+                    || Math.abs(yawError) > 25.0D || sideTight(vehicle));
             if (complexTerrain) {
                 int throttle = THROTTLE.getOrDefault(humanoid.getId(), 0) + 1;
                 THROTTLE.put(humanoid.getId(), throttle);
@@ -138,7 +325,7 @@ public final class VehicleDriverCompat {
                 THROTTLE.remove(humanoid.getId());
             }
             int recovery = RECOVERY.getOrDefault(humanoid.getId(), 0);
-            if (recovery > 0) {
+            if (recovery > 0 && steerSide == 0) {
                 RECOVERY.put(humanoid.getId(), recovery - 1);
                 int phase = (RECOVERY_TICKS - recovery) / RECOVERY_PHASE % 4;
                 forward = phase >= 2;
@@ -166,7 +353,7 @@ public final class VehicleDriverCompat {
             } else if (forward) {
                 STUCK_TICKS.remove(humanoid.getId());
             }
-            if (target != null) {
+            if (target != null && steerSide == 0) {
                 double[] pitch = pitchWindow(vehicle, target);
                 if (pitch != null) {
                     if (pitch[0] < pitch[1]) {
@@ -178,9 +365,17 @@ public final class VehicleDriverCompat {
                     }
                 }
             }
-            boolean left = yawError < -4.0D;
-            boolean right = yawError > 4.0D;
-            boolean handbrake = !forward && !backward;
+            LAST_FORWARD.put(humanoid.getId(), forward);
+            boolean moving = forward || backward;
+            boolean pivoting = tracked && !moving && (Math.abs(yawError) > 8.0D || steerSide != 0);
+            boolean left = steerSide < 0 || (steerSide == 0 && (moving || pivoting) && yawError < -4.0D);
+            boolean right = steerSide > 0 || (steerSide == 0 && (moving || pivoting) && yawError > 4.0D);
+            boolean handbrake = !moving && !pivoting;
+            if (moving) {
+                ROLLING.put(humanoid.getId(), true);
+            } else {
+                ROLLING.remove(humanoid.getId());
+            }
             forwardField.setBoolean(control, forward);
             backwardField.setBoolean(control, backward);
             leftField.setBoolean(control, left);
@@ -310,6 +505,260 @@ public final class VehicleDriverCompat {
         return false;
     }
 
+    private static boolean isRotaryWing(Entity vehicle) {
+        return superclassNamed(vehicle, "RotaryWing");
+    }
+
+    private static boolean isFixedWing(Entity vehicle) {
+        return superclassNamed(vehicle, "FixedWing");
+    }
+
+    private static boolean superclassNamed(Entity vehicle, String needle) {
+        for (Class<?> type = vehicle.getClass(); type != null; type = type.getSuperclass()) {
+            if (type.getSimpleName().contains(needle)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Clamps every stick for an aircraft the AI deliberately does not fly. {@code stopAll} is not usable here: it
+     * raises {@code up}, which on a flight vehicle is the collective (climb), while on a ground vehicle it is the
+     * handbrake.
+     */
+    private static void parkFlightControls(Object control) throws IllegalAccessException {
+        forwardField.setBoolean(control, false);
+        backwardField.setBoolean(control, false);
+        leftField.setBoolean(control, false);
+        rightField.setBoolean(control, false);
+        handbrakeField.setBoolean(control, false);
+        if (downField != null) {
+            downField.setBoolean(control, false);
+        }
+        yRotKeepField.setBoolean(control, true);
+        if (xRotKeepField != null) {
+            xRotKeepField.setBoolean(control, true);
+        }
+    }
+
+    /**
+     * Helicopter behaviour: guard the player while enemies are in sight from the sky, land when the sky is clear.
+     *
+     * <p>Rotor wing vehicles read the control unit with completely different meanings: {@code up}/{@code down} are
+     * the collective (climb and sink), while the ground vehicle reads {@code up} as the handbrake. Attitude is
+     * commanded through {@code xRot}/{@code yRot}: the mod's own stabilisers turn the hull toward {@code yRot} and
+     * level the nose at {@code xRot}, so the AI never touches roll or rudder. It never flies a fixed wing aircraft
+     * at all.</p>
+     */
+    private static void tickRotorWing(NeutralHumanoid humanoid, Entity vehicle, Object control)
+            throws IllegalAccessException {
+        centreSticks(control);
+        if (downField == null) {
+            return;
+        }
+        net.minecraft.world.entity.player.Player owner = vehicle.level().getNearestPlayer(vehicle, 256.0D);
+        LivingEntity enemy = enemyVisibleFromSky(humanoid, vehicle, owner);
+        if (enemy != null) {
+            escortPlayer(vehicle, owner, control);
+        } else {
+            landNearPlayer(vehicle, owner, control);
+        }
+    }
+
+    private static void centreSticks(Object control) throws IllegalAccessException {
+        forwardField.setBoolean(control, false);
+        backwardField.setBoolean(control, false);
+        leftField.setBoolean(control, false);
+        rightField.setBoolean(control, false);
+        handbrakeField.setBoolean(control, false);
+        leftYawField.setBoolean(control, false);
+        rightYawField.setBoolean(control, false);
+        yRotKeepField.setBoolean(control, false);
+        if (xRotKeepField != null) {
+            xRotKeepField.setBoolean(control, false);
+        }
+        if (downField != null) {
+            downField.setBoolean(control, false);
+        }
+    }
+
+    /**
+     * An enemy counts when it sits inside the player's 64 block bubble and a straight line from 40 blocks above it
+     * is not blocked, i.e. it is actually engageable from the air. Enemies in caves or under a canopy never pull the
+     * helicopter away from its owner.
+     */
+    private static LivingEntity enemyVisibleFromSky(NeutralHumanoid humanoid, Entity vehicle,
+                                                    net.minecraft.world.entity.player.Player owner) {
+        net.minecraft.world.phys.Vec3 center = owner != null ? owner.position() : vehicle.position();
+        for (LivingEntity candidate : vehicle.level().getEntitiesOfClass(LivingEntity.class,
+                new net.minecraft.world.phys.AABB(center, center).inflate(ENEMY_RANGE),
+                entity -> entity instanceof net.minecraft.world.entity.monster.Enemy && entity.isAlive())) {
+            net.minecraft.world.phys.Vec3 fromSky = candidate.position().add(0.0D, 40.0D, 0.0D);
+            if (com.curiats.returncapsule.entity.humanoid.HumanoidSight.canSee(
+                    vehicle.level(), vehicle, fromSky, candidate.getEyePosition())) {
+                return candidate;
+            }
+        }
+        return null;
+    }
+
+    /** Slow orbit around the owner, 20 blocks out and low enough to keep the gunners in range. */
+    private static void escortPlayer(Entity vehicle, net.minecraft.world.entity.player.Player owner, Object control)
+            throws IllegalAccessException {
+        double phase = ORBIT.merge(vehicle.getId(), 0.0D, (old, step) -> old + ORBIT_STEP);
+        double centerX = owner != null ? owner.getX() : vehicle.getX();
+        double centerZ = owner != null ? owner.getZ() : vehicle.getZ();
+        double targetX = centerX + Math.cos(phase) * ESCORT_RADIUS;
+        double targetZ = centerZ + Math.sin(phase) * ESCORT_RADIUS;
+        float heading = headingTo(vehicle, targetX, targetZ);
+        if (blockedAhead(vehicle, heading)) {
+            heading += 55.0F;
+            setPitch(control, 0.0D);
+        } else {
+            setPitch(control, CRUISE_PITCH);
+        }
+        setHeading(control, heading);
+        holdAltitude(control, vehicle, surfaceY(vehicle, targetX, targetZ) + ESCORT_ALTITUDE);
+    }
+
+    private static void landNearPlayer(Entity vehicle, net.minecraft.world.entity.player.Player owner, Object control)
+            throws IllegalAccessException {
+        net.minecraft.core.BlockPos pad = LANDING_SPOT.get(vehicle.getId());
+        if (pad == null || !padValid(vehicle.level(), pad)) {
+            pad = findPad(vehicle, owner);
+            if (pad == null) {
+                setPitch(control, 0.0D);
+                holdAltitude(control, vehicle,
+                        surfaceY(vehicle, vehicle.getX(), vehicle.getZ()) + ESCORT_ALTITUDE);
+                return;
+            }
+            LANDING_SPOT.put(vehicle.getId(), pad);
+        }
+        double dx = pad.getX() + 0.5D - vehicle.getX();
+        double dz = pad.getZ() + 0.5D - vehicle.getZ();
+        double flat = Math.sqrt(dx * dx + dz * dz);
+        if (flat > 4.0D) {
+            setHeading(control, headingTo(vehicle, pad.getX() + 0.5D, pad.getZ() + 0.5D));
+            setPitch(control, CRUISE_PITCH);
+            holdAltitude(control, vehicle, pad.getY() + LAND_ALTITUDE);
+            return;
+        }
+        setPitch(control, 0.0D);
+        setHeading(control, vehicle.getYRot());
+        if (vehicle.onGround()) {
+            centreSticks(control);
+            LANDING_SPOT.remove(vehicle.getId());
+            ORBIT.remove(vehicle.getId());
+            return;
+        }
+        double sink = -vehicle.getDeltaMovement().y;
+        if (sink > MAX_SINK) {
+            handbrakeField.setBoolean(control, true);
+        } else {
+            downField.setBoolean(control, true);
+        }
+    }
+
+    private static void setHeading(Object control, float yaw) throws IllegalAccessException {
+        yRotField.setFloat(control, yaw);
+        yRotKeepField.setBoolean(control, false);
+        leftYawField.setBoolean(control, false);
+        rightYawField.setBoolean(control, false);
+    }
+
+    /** Positive {@code xRot} is nose down in Minecraft, which is what makes the rotor disc pull forward. */
+    private static void setPitch(Object control, double noseDownDegrees) {
+        if (xRotField == null) {
+            return;
+        }
+        try {
+            if (xRotKeepField != null) {
+                xRotKeepField.setBoolean(control, false);
+            }
+            xRotField.setFloat(control, (float) noseDownDegrees);
+        } catch (IllegalAccessException ignored) {
+            // the vehicle keeps its current attitude
+        }
+    }
+
+    private static void holdAltitude(Object control, Entity vehicle, double targetY) throws IllegalAccessException {
+        double dy = targetY - vehicle.getY();
+        double vy = vehicle.getDeltaMovement().y;
+        if (dy > 1.5D || vy < -0.10D) {
+            handbrakeField.setBoolean(control, true);
+        } else if (dy < -1.5D || vy > 0.10D) {
+            downField.setBoolean(control, true);
+        }
+    }
+
+    private static float headingTo(Entity vehicle, double x, double z) {
+        double dx = x - vehicle.getX();
+        double dz = z - vehicle.getZ();
+        return (float) Math.toDegrees(Math.atan2(-dx, dz));
+    }
+
+    private static boolean blockedAhead(Entity vehicle, float heading) {
+        double radians = Math.toRadians(heading);
+        net.minecraft.world.phys.Vec3 from = vehicle.position().add(0.0D, 0.5D, 0.0D);
+        net.minecraft.world.phys.Vec3 to = from.add(-Math.sin(radians) * PROBE_RANGE, 0.0D,
+                Math.cos(radians) * PROBE_RANGE);
+        net.minecraft.world.phys.BlockHitResult hit = vehicle.level().clip(
+                new net.minecraft.world.level.ClipContext(from, to,
+                        net.minecraft.world.level.ClipContext.Block.COLLIDER,
+                        net.minecraft.world.level.ClipContext.Fluid.NONE, vehicle));
+        return hit.getType() != net.minecraft.world.phys.HitResult.Type.MISS;
+    }
+
+    private static double surfaceY(Entity vehicle, double x, double z) {
+        net.minecraft.core.BlockPos pos = vehicle.level().getHeightmapPos(
+                net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING_NO_LEAVES,
+                new net.minecraft.core.BlockPos((int) Math.floor(x), 0, (int) Math.floor(z)));
+        return pos.getY();
+    }
+
+    private static net.minecraft.core.BlockPos findPad(Entity vehicle,
+                                                       net.minecraft.world.entity.player.Player owner) {
+        net.minecraft.world.level.Level level = vehicle.level();
+        net.minecraft.core.BlockPos center = owner != null ? owner.blockPosition() : vehicle.blockPosition();
+        for (int radius = 8; radius <= (int) LAND_SEARCH_RADIUS; radius += 4) {
+            for (int angle = 0; angle < 360; angle += 30) {
+                int dx = (int) Math.round(Math.cos(Math.toRadians(angle)) * radius);
+                int dz = (int) Math.round(Math.sin(Math.toRadians(angle)) * radius);
+                net.minecraft.core.BlockPos surface = level.getHeightmapPos(
+                        net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING_NO_LEAVES,
+                        center.offset(dx, 0, dz));
+                if (padValid(level, surface)) {
+                    return surface;
+                }
+            }
+        }
+        return null;
+    }
+
+    private static boolean padValid(net.minecraft.world.level.Level level, net.minecraft.core.BlockPos pad) {
+        for (int dx = -1; dx <= 1; dx++) {
+            for (int dz = -1; dz <= 1; dz++) {
+                net.minecraft.core.BlockPos feet = pad.offset(dx, 0, dz);
+                if (!level.getBlockState(feet).getCollisionShape(level, feet).isEmpty()) {
+                    return false;
+                }
+                net.minecraft.core.BlockPos floor = feet.below();
+                if (level.getBlockState(floor).getCollisionShape(level, floor).isEmpty()
+                        || !level.getBlockState(floor).getFluidState().isEmpty()) {
+                    return false;
+                }
+                int height = level.getHeight(
+                        net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING_NO_LEAVES,
+                        feet.getX(), feet.getZ());
+                if (Math.abs(height - pad.getY()) > 1) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
     private static boolean sideTight(Entity vehicle) {
         net.minecraft.world.phys.Vec3 look = vehicle.getLookAngle();
         net.minecraft.world.phys.Vec3 forward = new net.minecraft.world.phys.Vec3(look.x, 0.0D, look.z).normalize();
@@ -355,6 +804,17 @@ public final class VehicleDriverCompat {
         if (Math.abs(yawError) > 20.0D) {
             return PROBE_RANGE;
         }
+        double best = PROBE_RANGE;
+        for (net.minecraft.world.phys.Vec3 corner : corners(vehicle)) {
+            best = Math.min(best, rayLength(vehicle, corner, forward, PROBE_RANGE));
+        }
+        return best;
+    }
+
+    private static double clearanceAlong(Entity vehicle, float heading) {
+        double radians = Math.toRadians(heading);
+        net.minecraft.world.phys.Vec3 forward = new net.minecraft.world.phys.Vec3(
+                -Math.sin(radians), 0.0D, Math.cos(radians));
         double best = PROBE_RANGE;
         for (net.minecraft.world.phys.Vec3 corner : corners(vehicle)) {
             best = Math.min(best, rayLength(vehicle, corner, forward, PROBE_RANGE));
@@ -501,7 +961,11 @@ public final class VehicleDriverCompat {
             String mode = humanoid.getTarget() != null ? "target"
                     : owner != null && !ownerAboard ? "player" : "idle";
             double distance = owner == null ? -1.0D : Math.sqrt(humanoid.distanceToSqr(owner));
-            return "drive=" + drives + " mode=" + mode + " ownerDist=" + Math.round(distance);
+            int detour = DETOUR.getOrDefault(humanoid.getId(), 0);
+            return "drive=" + drives + " mode=" + mode + " ownerDist=" + Math.round(distance)
+                    + " detour=" + detour + " detourTicks=" + DETOUR_TICKS.getOrDefault(humanoid.getId(), 0)
+                    + " jam=" + JAM.getOrDefault(humanoid.getId(), 0)
+                    + " aheadClear=" + Math.round(clearanceAlong(vehicle, vehicle.getYRot()));
         } catch (ReflectiveOperationException | RuntimeException exception) {
             return "drive=error";
         }
@@ -547,6 +1011,9 @@ public final class VehicleDriverCompat {
             rightYawField = controlClass.getField("rightYaw");
             yRotField = controlClass.getField("yRot");
             yRotKeepField = controlClass.getField("yRotKeep");
+            downField = controlClass.getField("down");
+            xRotField = controlClass.getField("xRot");
+            xRotKeepField = controlClass.getField("xRotKeep");
             return true;
         } catch (ReflectiveOperationException | RuntimeException exception) {
             broken = true;

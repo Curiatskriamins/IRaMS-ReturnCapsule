@@ -95,6 +95,13 @@ public final class VehicleRider {
         if (!resolve(vehicle)) {
             return;
         }
+        if (superclassNamed(vehicle, "FixedWing")) {
+            return;
+        }
+        if (superclassNamed(vehicle, "RotaryWing") && vehicle.onGround()) {
+            // A parked helicopter is still flyable by the player: do not take the stick just to sit in it.
+            return;
+        }
         int seat = seatIndexOf(vehicle, humanoid);
         if (seat <= 0) {
             return;
@@ -106,6 +113,15 @@ public final class VehicleRider {
             changeSeat.invoke(vehicle, humanoid, 0);
         } catch (ReflectiveOperationException | RuntimeException ignored) {
         }
+    }
+
+    private static boolean superclassNamed(Entity vehicle, String needle) {
+        for (Class<?> type = vehicle.getClass(); type != null; type = type.getSuperclass()) {
+            if (type.getSimpleName().contains(needle)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static int seatIndexOf(Entity vehicle, Entity entity) {

@@ -53,6 +53,9 @@ public final class VehicleGunner {
     private static Method changeSeat;
     private static Method getIndex;
     private static Method getShootInterval;
+    private static Method getWeaponData;
+    private static Method getVelocity;
+    private static Method setOwner;
 
     private VehicleGunner() {
     }
@@ -102,8 +105,19 @@ public final class VehicleGunner {
             return;
         }
         for (Object unit : units) {
+            if (!controlledBy(unit, humanoid)) {
+                // The turret belongs to somebody else (for example the player driving), and its direction follows that
+                // operator's controls. Aiming it would fight them and firing it blind is worse than staying silent.
+                continue;
+            }
+            bindOwner(unit, humanoid);
+            Object owner = rootUnit(unit);
+            if (!lineOfFire(vehicle, owner, target)) {
+                continue;
+            }
+            Vec3 aimPoint = leadPoint(owner, target);
             try {
-                aim.invoke(unit, target.getEyePosition());
+                aim.invoke(unit, aimPoint);
             } catch (ReflectiveOperationException | RuntimeException exception) {
                 continue;
             }
@@ -111,8 +125,9 @@ public final class VehicleGunner {
             if (settle < AIM_SETTLE) {
                 continue;
             }
-            Object owner = rootUnit(unit);
-            if (!aligned(owner, target) && settle < FAIL_OPEN_TICKS) {
+            if (!aligned(owner, aimPoint)) {
+                // No fail open: a turret that never converges (because another operator owns its direction) must not
+                // spray rounds at whatever it happens to be pointing at.
                 continue;
             }
             fire(owner, humanoid, getCurrentWeapon, false);
@@ -120,6 +135,73 @@ public final class VehicleGunner {
                 fire(unit, humanoid, getCurrentSecondaryWeapon, true);
             }
         }
+    }
+
+    /**
+     * Aim lead: the turret points where the target will be when the round gets there.
+     *
+     * <p>Vehicle rounds carry a per tick {@code velocity} (10 by default, i.e. 200 m/s), so even a walking target
+     * needs a lead of a few ticks at range. Aiming at the current eye position made cannon shells and especially
+     * preset-guidance missiles land behind the target, which read as "the missiles miss".</p>
+     */
+    private static Vec3 leadPoint(Object unit, LivingEntity target) {
+        Vec3 aim = target.getEyePosition();
+        Vec3 origin = VehicleAim.unitPosition(unit);
+        double velocity = weaponVelocity(unit);
+        if (origin == null || velocity <= 0.0D) {
+            return aim;
+        }
+        Vec3 motion = target.getDeltaMovement();
+        for (int iteration = 0; iteration < 2; iteration++) {
+            double flight = origin.distanceTo(aim) / velocity;
+            if (flight > 100.0D) {
+                break;
+            }
+            aim = target.getEyePosition().add(motion.scale(flight));
+        }
+        return aim;
+    }
+
+    private static double weaponVelocity(Object unit) {
+        if (getWeaponData == null || getVelocity == null || getCurrentWeapon == null) {
+            return 0.0D;
+        }
+        try {
+            Object optional = getCurrentWeapon.invoke(unit);
+            if (!(optional instanceof Optional<?> present) || present.isEmpty()) {
+                return 0.0D;
+            }
+            Object data = getWeaponData.invoke(present.get());
+            Object value = data == null ? null : getVelocity.invoke(data);
+            return value instanceof Number number ? Math.max(0.0D, number.doubleValue()) : 0.0D;
+        } catch (ReflectiveOperationException | RuntimeException exception) {
+            return 0.0D;
+        }
+    }
+
+    private static boolean controlledBy(Object unit, NeutralHumanoid humanoid) {
+        if (getOwner == null) {
+            return true;
+        }
+        try {
+            Object owner = getOwner.invoke(unit);
+            return owner == null || owner == humanoid;
+        } catch (ReflectiveOperationException | RuntimeException exception) {
+            return false;
+        }
+    }
+
+    /**
+     * Vehicle weapons used to fire at any target in range, including through city walls; the turret now needs an
+     * unobstructed line from the weapon mount before it aims or shoots.
+     */
+    private static boolean lineOfFire(Entity vehicle, Object unit, LivingEntity target) {
+        Vec3 from = VehicleAim.unitPosition(unit);
+        if (from == null) {
+            from = vehicle.position().add(0.0D, vehicle.getBbHeight() * 0.7D, 0.0D);
+        }
+        return com.curiats.returncapsule.entity.humanoid.HumanoidSight.canSee(
+                vehicle.level(), vehicle, from, target.getEyePosition());
     }
 
     private static boolean aiming(Object unit) {
@@ -135,13 +217,12 @@ public final class VehicleGunner {
         }
     }
 
-    private static boolean aligned(Object unit, LivingEntity target) {
+    private static boolean aligned(Object unit, Vec3 aim) {
         float yaw = VehicleAim.turretYaw(unit);
         net.minecraft.world.phys.Vec3 origin = VehicleAim.unitPosition(unit);
         if (Float.isNaN(yaw) || origin == null) {
             return false;
         }
-        net.minecraft.world.phys.Vec3 aim = target.getEyePosition();
         float desired = (float) Math.toDegrees(Math.atan2(-(aim.x - origin.x), aim.z - origin.z));
         float yawError = Math.abs(net.minecraft.util.Mth.wrapDegrees(desired - yaw));
         if (yawError > YAW_TOLERANCE) {
@@ -293,6 +374,16 @@ public final class VehicleGunner {
             if (!(seats instanceof List<?> list)) {
                 return found;
             }
+            boolean driving = isDriving(humanoid, list);
+            // The seat we are sitting in comes first: the driver can shoot too, and on many vehicles the driver
+            // seat's part unit is the weapon the pilot actually controls.
+            if (getOwnOperatorUnit != null) {
+                Object own = getOwnOperatorUnit.invoke(vehicle, humanoid);
+                if (own != null && weaponUnitClass.isInstance(own)) {
+                    bindOwner(own, humanoid);
+                    found.add(own);
+                }
+            }
             Object claimable = null;
             int claimableSeat = -1;
             for (int index = 0; index < list.size(); index++) {
@@ -302,21 +393,19 @@ public final class VehicleGunner {
                 }
                 Object owner = getOwner.invoke(unit);
                 if (owner == humanoid) {
-                    found.add(unit);
-                } else if (claimable == null && seatFree(list.get(index))) {
+                    if (!found.contains(unit)) {
+                        found.add(unit);
+                    }
+                } else if (claimable == null && !driving && seatFree(list.get(index))) {
                     claimable = unit;
                     claimableSeat = index;
                 }
             }
+            // Only look for another seat when we are not the driver: abandoning the wheel to man a turret used to
+            // leave the vehicle stopped and the driver seat empty.
             if (found.isEmpty() && claimable != null) {
                 changeSeat.invoke(vehicle, humanoid, claimableSeat);
                 found.add(claimable);
-            }
-            if (found.isEmpty() && getOwnOperatorUnit != null) {
-                Object own = getOwnOperatorUnit.invoke(vehicle, humanoid);
-                if (own != null && weaponUnitClass.isInstance(own)) {
-                    found.add(own);
-                }
             }
             if (found.isEmpty()) {
                 for (Object seat : list) {
@@ -329,6 +418,38 @@ public final class VehicleGunner {
         } catch (ReflectiveOperationException | RuntimeException exception) {
         }
         return found;
+    }
+
+    /**
+     * A weapon unit only stabilises and rotates toward {@code aim(...)} while it has an owner ({@code PartUnit.owner},
+     * which the mod sets when a player takes the seat). An AI boarder never goes through that path, so its turret stayed
+     * inert and never aligned - the gunner looked like it refused to use its own seat weapon. Claiming an unowned unit
+     * fixes both the aim and the ownership check.
+     */
+    private static void bindOwner(Object unit, NeutralHumanoid humanoid) {
+        if (setOwner == null) {
+            return;
+        }
+        try {
+            Object owner = getOwner == null ? null : getOwner.invoke(unit);
+            if (owner == null) {
+                setOwner.invoke(unit, humanoid);
+            }
+        } catch (ReflectiveOperationException | RuntimeException ignored) {
+            // the unit keeps its current owner
+        }
+    }
+
+    private static boolean isDriving(NeutralHumanoid humanoid, List<?> seats) {
+        if (seats.isEmpty()) {
+            return false;
+        }
+        try {
+            Object id = seatPassengerIdField.get(seats.get(0));
+            return id instanceof Integer passengerId && passengerId == humanoid.getId();
+        } catch (ReflectiveOperationException | RuntimeException exception) {
+            return false;
+        }
     }
 
     private static boolean resolve() {
@@ -381,6 +502,19 @@ public final class VehicleGunner {
             Class<?> weaponClass = Class.forName("org.ywzj.vehicle.vehicle.weapon.AbstractVehicleWeapon");
             getIndex = weaponClass.getMethod("getIndex");
             getShootInterval = weaponClass.getMethod("getShootInterval");
+            getWeaponData = weaponClass.getMethod("getData");
+            try {
+                setOwner = Class.forName("org.ywzj.vehicle.vehicle.part.PartUnit")
+                        .getMethod("setOwner", LivingEntity.class);
+            } catch (ReflectiveOperationException | RuntimeException ignored) {
+                setOwner = null;
+            }
+            try {
+                getVelocity = Class.forName("org.ywzj.vehicle.custom.weapon.data.BaseVehicleWeaponData")
+                        .getMethod("getVelocity");
+            } catch (ReflectiveOperationException | RuntimeException ignored) {
+                getVelocity = null;
+            }
             return true;
         } catch (ReflectiveOperationException | RuntimeException exception) {
             broken = true;

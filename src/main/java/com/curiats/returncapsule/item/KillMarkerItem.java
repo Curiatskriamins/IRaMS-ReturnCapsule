@@ -72,7 +72,6 @@ public class KillMarkerItem extends Item {
         player.startUsingItem(hand);
         if (!level.isClientSide && player instanceof ServerPlayer server) {
             server.playNotifySound(ModSounds.MISSILE_LOCK.get(), SoundSource.PLAYERS, 1.0F, 1.0F);
-            ReturnCapsuleMod.LOGGER.info("[sound] kill_marker use -> missile_lock");
         }
         return InteractionResultHolder.consume(stack);
     }
@@ -92,7 +91,6 @@ public class KillMarkerItem extends Item {
         player.startUsingItem(context.getHand());
         if (!context.getLevel().isClientSide && player instanceof ServerPlayer server) {
             server.playNotifySound(ModSounds.MISSILE_LOCK.get(), SoundSource.PLAYERS, 1.0F, 1.0F);
-            ReturnCapsuleMod.LOGGER.info("[sound] kill_marker useOn -> missile_lock");
         }
         return InteractionResult.SUCCESS;
     }

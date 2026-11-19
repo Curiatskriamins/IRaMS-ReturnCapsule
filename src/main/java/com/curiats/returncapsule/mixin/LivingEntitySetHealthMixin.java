@@ -1,5 +1,6 @@
 package com.curiats.returncapsule.mixin;
 
+import com.curiats.returncapsule.compat.SetHealthProbe;
 import com.curiats.returncapsule.entity.TransportCapsuleEntity;
 import com.curiats.returncapsule.entity.humanoid.NeutralHumanoid;
 import net.minecraft.server.level.ServerPlayer;
@@ -19,6 +20,11 @@ public abstract class LivingEntitySetHealthMixin {
         }
     }
 
+    @Inject(method = "setHealth", at = @At("HEAD"), require = 0)
+    private void returncapsule$probeSetHealth(float health, CallbackInfo ci) {
+        SetHealthProbe.seen();
+    }
+
     @Inject(method = "setHealth", at = @At("HEAD"), cancellable = true, require = 0)
     private void returncapsule$convertDirectHealthLoss(float health, CallbackInfo ci) {
         if (!((Object) this instanceof NeutralHumanoid humanoid) || humanoid.level().isClientSide) {
@@ -34,10 +40,16 @@ public abstract class LivingEntitySetHealthMixin {
         }
         ci.cancel();
         humanoid.setConvertedHit(true);
+        boolean applied;
         try {
-            humanoid.hurt(humanoid.damageSources().generic(), loss);
+            // mob_attack, not generic: generic is in the vanilla bypasses_armor tag, which silently skipped the
+            // humanoid's armour and toughness for every converted hit. The remembered attacker also keeps aggro and
+            // the death message intact, since a direct health write carries no source of its own.
+            applied = humanoid.hurt(humanoid.damageSources().mobAttack(humanoid.recentAttacker()), loss);
         } finally {
             humanoid.setConvertedHit(false);
         }
+        com.curiats.returncapsule.compat.HumanoidDamageTrace.converted(
+                humanoid.level().getGameTime(), loss, applied);
     }
 }

@@ -16,7 +16,7 @@ public abstract class EntityDiscardGuardMixin {
             return;
         }
 
-        ReturnCapsuleMod.LOGGER.info("[humanoid] removal requested: {} (health {})", reason, humanoid.getHealth());
+        ReturnCapsuleMod.LOGGER.debug("[humanoid] removal requested: {} (health {})", reason, humanoid.getHealth());
 
         boolean nearPlayer = humanoid.level().getNearestPlayer(humanoid, 64.0D) != null;
         boolean refused = reason == Entity.RemovalReason.DISCARDED
@@ -27,7 +27,7 @@ public abstract class EntityDiscardGuardMixin {
         if (humanoid.getHealth() <= 0.0F) {
             return;
         }
-        ReturnCapsuleMod.LOGGER.info("[humanoid] refused a discard while at {} health", humanoid.getHealth());
+        ReturnCapsuleMod.LOGGER.debug("[humanoid] refused a discard while at {} health", humanoid.getHealth());
         ci.cancel();
     }
 }

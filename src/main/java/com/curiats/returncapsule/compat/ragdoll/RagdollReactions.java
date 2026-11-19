@@ -46,6 +46,13 @@ public final class RagdollReactions {
         if (!available()) {
             return;
         }
+        if (humanoid.isPassenger()) {
+            // A passenger follows its vehicle's seat, not its own physics: no knockdown, and keep any ragdoll off.
+            if (HANDLES.containsKey(humanoid.getId())) {
+                end(humanoid);
+            }
+            return;
+        }
         boolean downed = humanoid.isDownedSynced();
         boolean active = HANDLES.containsKey(humanoid.getId());
         if (downed && !active) {

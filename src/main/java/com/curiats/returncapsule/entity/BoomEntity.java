@@ -388,19 +388,18 @@ public class BoomEntity extends Entity {
     }
 
     private void forceTargetChunk(ServerLevel server) {
-        if (this.controller == null) {
+        if (this.controller == null || !Config.BOOM_CHUNK_LOADING.get()) {
             return;
         }
-        this.forceChunk(server, new net.minecraft.world.level.ChunkPos(
-                net.minecraft.core.BlockPos.containing(this.controller.targetPoint())));
+        // Only the bomb's own chunk. Forcing the target and a point 32 blocks ahead as well tripled the forced chunk
+        // count of every salvo, and force loaded chunks are exactly what drags a server's TPS down.
         this.forceChunk(server, new net.minecraft.world.level.ChunkPos(this.blockPosition()));
-        this.forceChunk(server, new net.minecraft.world.level.ChunkPos(
-                net.minecraft.core.BlockPos.containing(this.position().add(this.moveDir.scale(32.0D)))));
     }
 
     private void forceChunk(ServerLevel server, net.minecraft.world.level.ChunkPos chunk) {
-        if (this.forcedChunks.add(chunk)) {
-            BombChunkLoader.force(server, chunk);
+        if (this.forcedChunks.add(chunk) && !BombChunkLoader.force(server, chunk)) {
+            // Refused by the global cap: forget it so the release pass does not decrement somebody else's ticket.
+            this.forcedChunks.remove(chunk);
         }
     }
 

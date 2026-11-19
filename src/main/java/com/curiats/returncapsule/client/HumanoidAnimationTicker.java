@@ -30,7 +30,7 @@ public final class HumanoidAnimationTicker {
             Integer previous = lastSequence.put(humanoid.getId(), sequence);
             if (previous == null) {
 
-                ReturnCapsuleMod.LOGGER.info("[humanoid] animation ticker tracking entity {} (sequence={})",
+                ReturnCapsuleMod.LOGGER.debug("[humanoid] animation ticker tracking entity {} (sequence={})",
                         humanoid.getId(), sequence);
             }
             if (previous == null ? sequence > 0 : sequence != previous) {

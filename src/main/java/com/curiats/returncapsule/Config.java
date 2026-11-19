@@ -90,9 +90,16 @@ public final class Config {
     public static final ForgeConfigSpec.BooleanValue BOOM_HURT_OWNER;
     public static final ForgeConfigSpec.IntValue BOOM_MAX_LIFETIME_TICKS;
     public static final ForgeConfigSpec.IntValue BOOM_SPAWN_HEIGHT;
+    public static final ForgeConfigSpec.BooleanValue BOOM_CHUNK_LOADING;
     public static final ForgeConfigSpec.DoubleValue BOOM_MODEL_SCALE;
     public static final ForgeConfigSpec.DoubleValue BOOM_MODEL_BASE_PITCH;
     public static final ForgeConfigSpec.DoubleValue BOOM_FLARE_SCALE;
+
+    public static final ForgeConfigSpec.BooleanValue VEHICLE_AMMO_FREEZE;
+    public static final ForgeConfigSpec.BooleanValue VEHICLE_AMMO_KEEP_HOMING;
+    public static final ForgeConfigSpec.BooleanValue VEHICLE_AMMO_KEEP_LONG_RANGE;
+    public static final ForgeConfigSpec.IntValue VEHICLE_AMMO_LONG_RANGE_BLOCKS;
+    public static final ForgeConfigSpec.IntValue VEHICLE_AMMO_TTL_TICKS;
 
     public static final ForgeConfigSpec.IntValue KILL_MARKER_RANGE;
     public static final ForgeConfigSpec.IntValue KILL_MARKER_CHARGE_TICKS;
@@ -372,6 +379,11 @@ public final class Config {
         BOOM_SPAWN_HEIGHT = builder
                 .comment("巡航弹发射点相对目标的垂直高度，越高到达越慢；默认 600(Bomb launch height above the target; higher means a longer descent; default 600)")
                 .defineInRange("spawnHeight", 600, 100, 4096);
+        BOOM_CHUNK_LOADING = builder
+                .comment("PERF. 是否为飞行中的巡航弹强制加载它所在的区块(Whether a flying cruise bomb force loads its own chunk)",
+                        "关掉它可以省下大量 TPS，代价是：弹丸飞出玩家模拟距离后会停在未加载的区块里，直到玩家靠近(Same trade off as Superb Warfare's projectile_chunk_loading: turning it off saves a lot of TPS, but a round that leaves the simulated area simply stops until a player comes near)",
+                        "齐射规模大或安装了弹幕类模组时建议关闭(Recommended off for large volleys or bullet heavy modpacks)")
+                .define("chunkLoading", true);
         BOOM_FIRE_CHANCE = builder
                 .defineInRange("boomFireChance", 0.4D, 0.0D, 1.0D);
         BOOM_MODEL_SCALE = builder
@@ -385,8 +397,31 @@ public final class Config {
                 .defineInRange("flareScale", 3.0D, 0.1D, 16.0D);
         builder.pop();
 
-        builder.push("kill_marker");
-        KILL_MARKER_RANGE = builder
+        builder.push("vehicle_ammo");
+        VEHICLE_AMMO_FREEZE = builder
+                .comment("只对我们这边生效的修正：第三方载具模组（永无止境）的弹药飞入未加载区块时是否冻结，而不是替它强制加载区块",
+                        "Third party vehicle mod ammunition freeze instead of force loading chunks when it flies into unloaded terrain",
+                        "永无止界的 EntityUtil.keepChunkLoaded 会为每发弹药每两次 tick 各加两张半径 3（7x7 区块）的区域票据，",
+                        "弹幕一密就是成百上千个区块，这是实测的 TPS 主因",
+                        "The vehicle mod adds two radius 3 (7x7 chunk) region tickets per projectile every other tick, which is what eats TPS")
+                .define("freezeInUnloadedChunks", true);
+        VEHICLE_AMMO_KEEP_HOMING = builder
+                .comment("已锁定目标的导弹保持原行为（继续加载区块），用于 PVP 超视距打击(Missiles with a locked entity keep loading chunks, for beyond visual range PvP)")
+                .define("keepHomingMissilesLoaded", true);
+        VEHICLE_AMMO_KEEP_LONG_RANGE = builder
+                .comment("远程打击弹药保持原行为：目标点在超过 longRangeBlocks 之外、且没有锁定实体（默认包的东风等）(Long range strike munitions keep loading chunks: a preset point farther than longRangeBlocks away and no locked entity, e.g. the default pack's DF)")
+                .define("keepLongRangeStrikesLoaded", true);
+        VEHICLE_AMMO_LONG_RANGE_BLOCKS = builder
+                .comment("判定为远程打击的距离（格）(Distance in blocks that counts as a long range strike)")
+                .defineInRange("longRangeBlocks", 160, 32, 2048);
+        VEHICLE_AMMO_TTL_TICKS = builder
+                .comment("被冻结的弹药存活上限（tick），0 表示永不清理(Ticks a frozen round may sit in the world before it is removed; 0 keeps it forever)",
+                        "冻结的弹药不 tick，所以它自己的寿命计时通常不会走；这一项是兜底，按有效期做低频清理(Frozen rounds do not tick, so their own lifetime rarely expires; this is the backstop and is swept at a low frequency)",
+                        "默认 12000 tick = 10 分钟(Default 12000 ticks = 10 minutes)")
+                .defineInRange("frozenTtlTicks", 12000, 0, 96000);
+        builder.pop();
+
+        builder.push("kill_marker");        KILL_MARKER_RANGE = builder
                 .comment("击杀指示器的准星标记距离，会被服务器模拟距离截断，保证目标在弹体可 tick 的范围内(Crosshair marking range of the kill indicator; clamped to the server simulation distance so the target is inside the ticking area)")
                 .defineInRange("range", 128, 8, 512);
         KILL_MARKER_CHARGE_TICKS = builder
