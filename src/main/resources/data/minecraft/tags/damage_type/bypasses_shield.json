@@ -1,6 +1,7 @@
 {
   "values": [
     "returncapsule:capsule_impact",
-    "returncapsule:boom_impact"
+    "returncapsule:boom_impact",
+    "returncapsule:standard_issue_blade"
   ]
 }

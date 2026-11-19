@@ -16,6 +16,8 @@ public final class TrueDamage {
             ResourceKey.create(Registries.DAMAGE_TYPE, ReturnCapsuleMod.id("capsule_impact"));
     public static final ResourceKey<DamageType> BOOM_IMPACT =
             ResourceKey.create(Registries.DAMAGE_TYPE, ReturnCapsuleMod.id("boom_impact"));
+    public static final ResourceKey<DamageType> STANDARD_ISSUE_BLADE =
+            ResourceKey.create(Registries.DAMAGE_TYPE, ReturnCapsuleMod.id("standard_issue_blade"));
 
     public static DamageSource source(ServerLevel level, Entity direct, @Nullable Entity owner) {
         return source(level, CAPSULE_IMPACT, direct, owner);
@@ -23,6 +25,10 @@ public final class TrueDamage {
 
     public static DamageSource boom(ServerLevel level, Entity direct, @Nullable Entity owner) {
         return source(level, BOOM_IMPACT, direct, owner);
+    }
+
+    public static DamageSource blade(ServerLevel level, Entity direct, @Nullable Entity owner) {
+        return source(level, STANDARD_ISSUE_BLADE, direct, owner);
     }
 
     private static DamageSource source(ServerLevel level, ResourceKey<DamageType> type,

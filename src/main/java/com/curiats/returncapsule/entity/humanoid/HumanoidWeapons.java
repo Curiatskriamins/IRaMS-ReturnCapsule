@@ -25,9 +25,6 @@ import net.minecraftforge.registries.ForgeRegistries;
 
 public final class HumanoidWeapons {
 
-    private static final int BUILTIN_SHARPNESS = 30;
-    private static final int BUILTIN_KNOCKBACK = 2;
-
     private static final double BASE_ATTACK_DAMAGE = 1.0D;
     private static final double BASE_ATTACK_SPEED = 4.0D;
 
@@ -62,15 +59,13 @@ public final class HumanoidWeapons {
     }
 
     public static ItemStack builtinSword() {
-        ItemStack sword = new ItemStack(Items.NETHERITE_SWORD);
-        sword.getOrCreateTag().putBoolean("Unbreakable", true);
-        sword.enchant(Enchantments.SHARPNESS, BUILTIN_SHARPNESS);
-        sword.enchant(Enchantments.KNOCKBACK, BUILTIN_KNOCKBACK);
-        return sword;
+        // The standard issue blade replaced the old netherite sword: same sharpness and knockback profile, plus the
+        // percentage health strip handled by StandardIssueBladeEvents.
+        return com.curiats.returncapsule.item.StandardIssueSwordItem.createStack();
     }
 
     public static boolean isBuiltinSword(ItemStack stack) {
-        return stack.is(Items.NETHERITE_SWORD) && stack.isEnchanted();
+        return stack.is(com.curiats.returncapsule.registry.ModItems.STANDARD_ISSUE_SWORD.get());
     }
 
     public static boolean isShield(ItemStack stack) {

@@ -7,7 +7,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 public final class DamageLock {
 
-    public static final float SHARE = 0.03F;
+    private static final float DEFAULT_SHARE = 0.03F;
 
     private static final float DECAY_PER_SECOND = 0.0F;
 
@@ -42,7 +42,7 @@ public final class DamageLock {
 
     public static float lock(LivingEntity target, long gameTime) {
         long second = gameTime / 20L;
-        float share = target.getMaxHealth() * SHARE;
+        float share = target.getMaxHealth() * share();
         Lock existing = LOCKS.get(target.getId());
         float amount = share;
         if (existing != null) {
@@ -53,6 +53,14 @@ public final class DamageLock {
         amount = Math.min(amount, cap);
         LOCKS.put(target.getId(), new Lock(second, amount, Long.MAX_VALUE));
         return share;
+    }
+
+    public static float share() {
+        try {
+            return com.curiats.returncapsule.Config.HUMANOID_SEAL_SHARE.get().floatValue();
+        } catch (RuntimeException notLoaded) {
+            return DEFAULT_SHARE;
+        }
     }
 
     public static float locked(LivingEntity target, long gameTime) {

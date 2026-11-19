@@ -23,15 +23,21 @@ public final class HumanoidDamageEvents {
         if (victim instanceof NeutralHumanoid || victim instanceof Player || victim.level().isClientSide) {
             return;
         }
-        if (victim.getHealth() <= 0.0F) {
+        if (com.curiats.returncapsule.util.Pets.isPet(victim)) {
+            // Player pets are off limits for the percentage strip and the seal.
             return;
         }
         if (victim.getHealth() <= 0.0F) {
-            DamageLock.forget(victim);
             return;
         }
-        float share = victim.getMaxHealth() * DamageLock.SHARE;
+        // The seal applies to every humanoid hit, melee or gun. The percentage health deduction, however, is replaced by
+        // the standard issue blade's own (higher) percentage when the swing came from that sword, so the two never add
+        // up; guns, which are held instead of the blade, keep the built-in three percent.
         DamageLock.lock(victim, victim.level().getGameTime());
+        if (humanoid.getMainHandItem().is(com.curiats.returncapsule.registry.ModItems.STANDARD_ISSUE_SWORD.get())) {
+            return;
+        }
+        float share = victim.getMaxHealth() * DamageLock.share();
         victim.setHealth(Math.max(0.0F, victim.getHealth() - share));
     }
 }

@@ -101,6 +101,27 @@ public final class Config {
     public static final ForgeConfigSpec.IntValue VEHICLE_AMMO_LONG_RANGE_BLOCKS;
     public static final ForgeConfigSpec.IntValue VEHICLE_AMMO_TTL_TICKS;
 
+    public static final ForgeConfigSpec.BooleanValue EQUIPMENT_SET_ENABLED;
+    public static final ForgeConfigSpec.DoubleValue EQUIPMENT_HIT_CAP_FRACTION;
+    public static final ForgeConfigSpec.DoubleValue EQUIPMENT_LOW_DAMAGE_IMMUNITY;
+    public static final ForgeConfigSpec.DoubleValue EQUIPMENT_DAMAGE_REDUCTION;
+    public static final ForgeConfigSpec.DoubleValue EQUIPMENT_SECOND_CAP_FRACTION;
+    public static final ForgeConfigSpec.BooleanValue EQUIPMENT_EFFECT_IMMUNITY;
+    public static final ForgeConfigSpec.BooleanValue EQUIPMENT_COTH_IMMUNITY;
+    public static final ForgeConfigSpec.ConfigValue<List<? extends String>> EQUIPMENT_BLOCKED_EFFECTS;
+    public static final ForgeConfigSpec.BooleanValue EQUIPMENT_REGEN_ENABLED;
+    public static final ForgeConfigSpec.IntValue EQUIPMENT_REGEN_AMPLIFIER;
+    public static final ForgeConfigSpec.DoubleValue HUMANOID_SEAL_SHARE;
+    public static final ForgeConfigSpec.DoubleValue HUMANOID_HIT_CAP_FRACTION;
+    public static final ForgeConfigSpec.DoubleValue HUMANOID_SECOND_CAP_FRACTION;
+    public static final ForgeConfigSpec.BooleanValue EQUIPMENT_OVERLAY_LAYER;
+    public static final ForgeConfigSpec.BooleanValue EQUIPMENT_BLADE_ENABLED;
+    public static final ForgeConfigSpec.DoubleValue EQUIPMENT_BLADE_PERCENT;
+    public static final ForgeConfigSpec.DoubleValue EQUIPMENT_BLADE_MAX_HEALTH_CAP;
+    public static final ForgeConfigSpec.DoubleValue EQUIPMENT_SUPPORT_HEAL_PERCENT;
+    public static final ForgeConfigSpec.DoubleValue EQUIPMENT_ARMOR_TOUGHNESS;
+    public static final ForgeConfigSpec.DoubleValue EQUIPMENT_BLADE_PLAYER_FLOOR;
+
     public static final ForgeConfigSpec.IntValue KILL_MARKER_RANGE;
     public static final ForgeConfigSpec.IntValue KILL_MARKER_CHARGE_TICKS;
     public static final ForgeConfigSpec.IntValue KILL_MARKER_INTERVAL_TICKS;
@@ -438,6 +459,80 @@ public final class Config {
                 .defineInRange("minSimulationChunks", 8, 1, 32);
         KILL_MARKER_MAX_QUEUED = builder
                 .defineInRange("maxQueued", 50, 1, 256);
+        builder.pop();
+
+        builder.push("equipment");
+        EQUIPMENT_SET_ENABLED = builder
+                .comment("基础人形套装是否生效：整套穿戴时，直接写血的伤害会被转换成一次带攻击者的物理重击(Direct health writes are converted into one physical hit with the attacker recorded while the full base humanoid set is worn)")
+                .define("setEnabled", true);
+        EQUIPMENT_HIT_CAP_FRACTION = builder
+                .comment("每次转换伤害的上限（最大生命值比例），对齐基础人形的 20%(Per hit ceiling on converted damage as a share of max health, matching the base humanoid's twenty percent)")
+                .defineInRange("hitCapFraction", 0.20D, 0.0D, 1.0D);
+        EQUIPMENT_LOW_DAMAGE_IMMUNITY = builder
+                .comment("低于该值（绝对值）的转换伤害直接忽略，对齐基础人形的低伤免疫(Converted hits below this absolute value are ignored, matching the base humanoid's low damage immunity)")
+                .defineInRange("lowDamageImmunity", 1.5D, 0.0D, 20.0D);
+        EQUIPMENT_DAMAGE_REDUCTION = builder
+                .comment("转换伤害的等效减伤比例，对齐基础人形的 50%(Equivalent damage reduction applied to converted hits, matching the base humanoid's fifty percent)")
+                .defineInRange("damageReduction", 0.5D, 0.0D, 0.9D);
+        EQUIPMENT_SECOND_CAP_FRACTION = builder
+                .comment("每秒最多承受的转换伤害（最大生命值比例），对齐基础人形的 25%/s(Cap on converted damage per second as a share of max health, matching the base humanoid's twenty five percent per second)")
+                .defineInRange("secondCapFraction", 0.25D, 0.0D, 2.0D);
+        EQUIPMENT_EFFECT_IMMUNITY = builder
+                .comment("整套穿戴时免疫负面效果，以及伪装成正面效果、实际有害的转换类效果(Wearing the full set immunises debuffs, and conversion style effects that present as beneficial)")
+                .define("effectImmunity", true);
+        EQUIPMENT_COTH_IMMUNITY = builder
+                .comment("整套穿戴时写入寄生虫模组的寄巢之唤免疫标记，从源头阻止生物转换(Writes the parasite mod's Call of the Hive immunity tag while the full set is worn, stopping conversion at its source)")
+                .define("cothImmunity", true);
+        EQUIPMENT_BLOCKED_EFFECTS = builder
+                .comment("无论是否被判定为正面效果都一律免疫的效果命名空间或完整 id，用于伪装成正面 buff 的负面效果(Effect namespaces or full ids always blocked, for debuffs disguised as buffs)",
+                        "默认封锁寄生虫模组：转换生物的效果多在其命名空间下(Defaults to the parasite mod, whose conversion effects live under its namespace)")
+                .defineList("blockedEffects", List.of(
+                        "srparasites:coth",
+                        "srparasites:viral",
+                        "srparasites:conta",
+                        "srparasites:distorted_enlightenment",
+                        "srparasites:the_sign"),
+                entry -> entry instanceof String);
+        EQUIPMENT_REGEN_ENABLED = builder
+                .comment("手持列装剑（主手或副手）且整套穿戴时给予生命恢复(Grants regeneration while holding the standard issue blade in either hand and wearing the full set)")
+                .define("swordRegeneration", true);
+        EQUIPMENT_REGEN_AMPLIFIER = builder
+                .comment("手持列装剑时生命恢复的等级：2 = 生命恢复 III(Regeneration amplifier while holding the blade; 2 = Regeneration III)")
+                .defineInRange("regenerationAmplifier", 2, 0, 4);
+        builder.pop();
+
+        builder.push("humanoid");
+        HUMANOID_SEAL_SHARE = builder
+                .comment("基础人形每次命中封锁的最大生命值比例(Share of max health the base humanoid seals per hit)")
+                .defineInRange("sealShare", 0.03D, 0.0D, 0.5D);
+        HUMANOID_HIT_CAP_FRACTION = builder
+                .comment("基础人形单次承伤上限（最大生命值比例）(Per hit damage ceiling of the base humanoid as a share of max health)")
+                .defineInRange("hitCapFraction", 0.20D, 0.0D, 1.0D);
+        HUMANOID_SECOND_CAP_FRACTION = builder
+                .comment("基础人形每秒承伤上限（最大生命值比例）(Per second damage ceiling of the base humanoid as a share of max health)")
+                .defineInRange("secondCapFraction", 0.25D, 0.0D, 2.0D);
+        builder.pop();
+        EQUIPMENT_OVERLAY_LAYER = builder
+                .comment("是否在套装上叠加第二层贴图（饰条/发光标记），关闭可完全退回单层原版盔甲渲染(Whether to render the second overlay texture pass on the set; disable to fall back to single layer vanilla armour rendering)")
+                .define("overlayLayer", true);
+        EQUIPMENT_BLADE_ENABLED = builder
+                .comment("列装剑是否附加最大生命值百分比伤害(Whether the standard issue blade strips a percentage of max health on hit)")
+                .define("bladePercentDamage", true);
+        EQUIPMENT_BLADE_PERCENT = builder
+                .comment("列装剑每次命中的最大生命值扣除百分比：玩家按百分比真伤结算，其余生物永久扣减最大生命值；一命中一次(Percentage of max health stripped per blade hit; players take percentage true damage, everything else loses max health permanently; once per swing)")
+                .defineInRange("bladePercent", 5.0D, 0.0D, 50.0D);
+        EQUIPMENT_BLADE_MAX_HEALTH_CAP = builder
+                .comment("列装剑对同一目标最多扣除的最大生命值百分比，达到上限后的部分转为真伤(Maximum share of max health the blade may strip from one target; anything past the cap turns into true damage instead)")
+                .defineInRange("bladeMaxHealthCap", 20.0D, 0.0D, 90.0D);
+        EQUIPMENT_SUPPORT_HEAL_PERCENT = builder
+                .comment("潜行攻击自己宠物时，改用玩家最大生命值的这个百分比治疗宠物；按比例而不是固定值，因为整合包里玩家血量可能远超 20(Sneak attacking your own pet heals it instead, for this share of the player's max health; a percentage rather than a flat value, since packs hand players pools far above twenty)")
+                .defineInRange("petSupportHealPercent", 5.0D, 0.0D, 50.0D);
+        EQUIPMENT_ARMOR_TOUGHNESS = builder
+                .comment("列装套每件护甲韧性；四件合计为这个值的四倍，用于对抗高额单次伤害时保持减伤不失效(Per piece armour toughness; a full set is four times this, keeping damage reduction from collapsing against large single hits)")
+                .defineInRange("armorToughness", 10.0D, 0.0D, 40.0D);
+        EQUIPMENT_BLADE_PLAYER_FLOOR = builder
+                .comment("潜行给宠物换血时，玩家最低保留的生命值比例；扣到下限后换血停止(The player never pays health below this share of max health when trading health into a pet)")
+                .defineInRange("bladePlayerHealthFloor", 1.0D, 0.0D, 50.0D);
         builder.pop();
 
         SPEC = builder.build();

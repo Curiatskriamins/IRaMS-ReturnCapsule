@@ -22,6 +22,11 @@ public final class ModTabs {
                         output.accept(ModItems.KILL_MARKER_INDICATOR.get());
                         output.accept(ModItems.CAPSULE.get());
                         output.accept(ModItems.BASE_HUMANOID_SPAWN_EGG.get());
+                        output.accept(ModItems.BASE_HUMANOID_HELMET.get());
+                        output.accept(ModItems.BASE_HUMANOID_CHESTPLATE.get());
+                        output.accept(ModItems.BASE_HUMANOID_LEGGINGS.get());
+                        output.accept(ModItems.BASE_HUMANOID_BOOTS.get());
+                        output.accept(com.curiats.returncapsule.item.StandardIssueSwordItem.createStack());
                     })
                     .build());
 
