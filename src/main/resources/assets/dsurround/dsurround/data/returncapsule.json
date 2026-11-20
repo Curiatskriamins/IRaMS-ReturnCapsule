@@ -1,0 +1,13 @@
+{
+  "items": {
+    "SWORD": [
+      "returncapsule:standard_issue_sword"
+    ],
+    "PLATE": [
+      "returncapsule:base_humanoid_helmet",
+      "returncapsule:base_humanoid_chestplate",
+      "returncapsule:base_humanoid_leggings",
+      "returncapsule:base_humanoid_boots"
+    ]
+  }
+}
