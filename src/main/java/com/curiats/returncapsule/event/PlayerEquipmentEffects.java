@@ -9,6 +9,9 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.effect.MobEffect;
 import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.effect.MobEffects;
+import net.minecraft.world.entity.ai.attributes.AttributeInstance;
+import net.minecraft.world.entity.ai.attributes.AttributeModifier;
+import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.event.entity.living.MobEffectEvent;
 import net.minecraftforge.eventbus.api.Event;
@@ -20,27 +23,15 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
-/**
- * Effect side of the standard issue set.
- *
- * <p>Two rules:</p>
- * <ul>
- * <li>the full set immunises debuffs, and also effects that present themselves as beneficial but are the parasite
- *     mod's conversion vectors. Those are matched by namespace/id from config, so a pack can add its own;</li>
- * <li>holding the blade in either hand while wearing the full set grants regeneration, refreshed once a second and
- *     removed again when the hold ends.</li>
- * </ul>
- *
- * <p>Blocking the conversion effects is also what keeps a player from being converted: the transformation is driven by
- * those effects, so denying them denies the transformation itself.</p>
- */
 @Mod.EventBusSubscriber(modid = ReturnCapsuleMod.MODID, bus = Mod.EventBusSubscriber.Bus.FORGE)
 public final class PlayerEquipmentEffects {
 
     private static final Set<UUID> GRANTED_REGENERATION = ConcurrentHashMap.newKeySet();
 
-    /** The parasite mod's own conversion immunity tag, the one the humanoid entity also carries. */
     private static final String COTH_IMMUNITY = "srpcothimmunity";
+
+    /** Fixed id so the modifier can always be found and removed again. */
+    private static final UUID HEALTH_BONUS_ID = UUID.fromString("d4c1a8b9-5f6e-4b3a-9c7d-2e1f0a9b8c7d");
 
     @SubscribeEvent
     public static void onEffectApplicable(MobEffectEvent.Applicable event) {
@@ -81,14 +72,24 @@ public final class PlayerEquipmentEffects {
         if (event.phase != TickEvent.Phase.END) {
             return;
         }
-        if (!(event.player instanceof ServerPlayer player) || player.tickCount % 20 != 0) {
+        if (!(event.player instanceof ServerPlayer player)) {
             return;
         }
         UUID id = player.getUUID();
         boolean fullSet = PlayerEquipment.wearingFullSet(player);
+        // Equivalent health to a base humanoid: two hundred points with the same five per second regeneration, so the
+        // set does not just reduce damage but actually survives a sustained fight the way the humanoid does.
+        maintainHealthBonus(player, fullSet);
+        if (fullSet && player.getHealth() < player.getMaxHealth()) {
+            float perTick = (float) (Config.EQUIPMENT_HEALTH_REGEN.get() / 20.0D);
+            if (perTick > 0.0F) {
+                player.heal(perTick);
+            }
+        }
+        if (player.tickCount % 20 != 0) {
+            return;
+        }
 
-        // The parasite mod gates its conversion effect on this exact NBT tag (the humanoid sets it in its own
-        // constructor), so the set grants it while worn and removes it again afterwards.
         if (Config.EQUIPMENT_COTH_IMMUNITY.get()) {
             if (fullSet) {
                 player.getPersistentData().putInt(COTH_IMMUNITY, 1);
@@ -117,6 +118,23 @@ public final class PlayerEquipmentEffects {
         if (current != null && current.isAmbient()
                 && current.getAmplifier() == Config.EQUIPMENT_REGEN_AMPLIFIER.get()) {
             player.removeEffect(MobEffects.REGENERATION);
+        }
+    }
+
+    private static void maintainHealthBonus(ServerPlayer player, boolean fullSet) {
+        AttributeInstance attribute = player.getAttribute(Attributes.MAX_HEALTH);
+        if (attribute == null) {
+            return;
+        }
+        boolean present = attribute.getModifier(HEALTH_BONUS_ID) != null;
+        if (fullSet && !present) {
+            attribute.addTransientModifier(new AttributeModifier(HEALTH_BONUS_ID, "returncapsule:equipment",
+                    Config.EQUIPMENT_HEALTH_BONUS.get(), AttributeModifier.Operation.ADDITION));
+        } else if (!fullSet && present) {
+            attribute.removeModifier(HEALTH_BONUS_ID);
+            if (player.getHealth() > player.getMaxHealth()) {
+                player.setHealth(player.getMaxHealth());
+            }
         }
     }
 

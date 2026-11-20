@@ -13,6 +13,8 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 @Mixin(LivingEntity.class)
 public abstract class LivingEntitySetHealthMixin {
+    private static final java.util.concurrent.atomic.AtomicLong TEMP_WRITE_LOG =
+            new java.util.concurrent.atomic.AtomicLong();
     @Inject(method = "setHealth", at = @At("HEAD"), cancellable = true)
     private void returncapsule$cancelPassengerSetHealth(float health, CallbackInfo ci) {
         if ((Object) this instanceof ServerPlayer player
@@ -26,17 +28,32 @@ public abstract class LivingEntitySetHealthMixin {
         if (!((Object) this instanceof ServerPlayer player) || player.level().isClientSide) {
             return;
         }
-        if (PlayerEquipment.isHurting() || !Config.EQUIPMENT_SET_ENABLED.get()
-                || !PlayerEquipment.wearingFullSet(player)) {
-            return;
-        }
+        // Direction first: LivingEntity's constructor raises health to the max before Player has an inventory, so a
+        // heal check must not touch equipment at all.
         float loss = player.getHealth() - health;
         if (loss <= 0.0F) {
             return;
         }
+        // Vanilla's own health write happens inside the hurt call, which stamped this tick. A direct write from a mob
+        // can happen on any tick, so the stamp is the only reliable discriminator - invulnerability time is not, since
+        // direct writes usually land while the player is still invulnerable.
+        if (PlayerEquipment.insideHurt(player) || player.isDeadOrDying() || player.isInvulnerable()) {
+            return;
+        }
+        boolean setWorn = Config.EQUIPMENT_SET_ENABLED.get() && PlayerEquipment.wearingFullSet(player);
+        if (TEMP_WRITE_LOG.incrementAndGet() <= 60) {
+            com.curiats.returncapsule.ReturnCapsuleMod.LOGGER.info("[equipment] direct write loss={} insideHurt={} set={} health={}",
+                    loss, PlayerEquipment.insideHurt(player), setWorn, player.getHealth());
+        }
+        if (!setWorn) {
+            return;
+        }
         ci.cancel();
         if (health <= 0.0F) {
-            PlayerEquipment.execute(player);
+            // A write to zero is a kill attempt, not a free execution: it runs through the same ladder so the ceiling,
+            // the per second budget and last stand all apply, and vanilla death still happens if the reduced hit really
+            // is lethal.
+            PlayerEquipment.convert(player, player.getHealth());
             return;
         }
         PlayerEquipment.convert(player, loss);

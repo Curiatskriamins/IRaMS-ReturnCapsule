@@ -18,13 +18,15 @@ public final class VehicleGunner {
 
     private static final String VEHICLE_CLASS = "org.ywzj.vehicle.entity.vehicle.AbstractVehicle";
     private static final String WEAPON_UNIT_CLASS = "org.ywzj.vehicle.vehicle.part.WeaponUnit";
-    private static final float YAW_TOLERANCE = 3.0F;
+    private static final float YAW_TOLERANCE = 2.0F;
+    private static final float FAIL_OPEN_YAW = 6.0F;
 
     private static final Map<String, Long> SHOT_CLOCK = new ConcurrentHashMap<>();
 
     private static final Map<Integer, Integer> AIM_TICKS = new ConcurrentHashMap<>();
 
-    private static final int AIM_SETTLE = 12;
+    private static final int AIM_SETTLE = 6;
+    private static final int FAIL_OPEN_AFTER = 30;
 
     private static final int FAIL_OPEN_TICKS = 60;
 
@@ -56,6 +58,7 @@ public final class VehicleGunner {
     private static Method getWeaponData;
     private static Method getVelocity;
     private static Method setOwner;
+    private static Method getGravity;
 
     private VehicleGunner() {
     }
@@ -126,9 +129,12 @@ public final class VehicleGunner {
                 continue;
             }
             if (!aligned(owner, aimPoint)) {
-                // No fail open: a turret that never converges (because another operator owns its direction) must not
-                // spray rounds at whatever it happens to be pointing at.
-                continue;
+                // A turret that never converges must not spray rounds at whatever it happens to be pointing at, but
+                // waiting for a perfect two degree solution while the vehicle moves made the gun far too quiet. Once
+                // the target has been tracked for a while and the barrel is close, fire rather than never fire.
+                if (settle < FAIL_OPEN_AFTER || yawError(owner, aimPoint) > FAIL_OPEN_YAW) {
+                    continue;
+                }
             }
             fire(owner, humanoid, getCurrentWeapon, false);
             if (getCurrentSecondaryWeapon != null) {
@@ -152,14 +158,45 @@ public final class VehicleGunner {
             return aim;
         }
         Vec3 motion = target.getDeltaMovement();
-        for (int iteration = 0; iteration < 2; iteration++) {
+        double gravity = weaponGravity(unit);
+        for (int iteration = 0; iteration < 3; iteration++) {
             double flight = origin.distanceTo(aim) / velocity;
             if (flight > 100.0D) {
                 break;
             }
-            aim = target.getEyePosition().add(motion.scale(flight));
+            // Shells and rockets drop, so the lead point also rises by the drop over the flight time. Without this the
+            // rounds landed short at range even when the turret was perfectly on target.
+            double drop = 0.5D * gravity * flight * flight;
+            aim = target.getEyePosition().add(motion.scale(flight)).add(0.0D, drop, 0.0D);
         }
         return aim;
+    }
+
+    private static double weaponGravity(Object unit) {
+        if (getGravity == null || getWeaponData == null || getCurrentWeapon == null) {
+            return 0.0D;
+        }
+        try {
+            Object optional = getCurrentWeapon.invoke(unit);
+            if (!(optional instanceof Optional<?> present) || present.isEmpty()) {
+                return 0.0D;
+            }
+            Object data = getWeaponData.invoke(present.get());
+            Object value = data == null ? null : getGravity.invoke(data);
+            return value instanceof Number number ? Math.max(0.0D, number.doubleValue()) : 0.0D;
+        } catch (ReflectiveOperationException | RuntimeException exception) {
+            return 0.0D;
+        }
+    }
+
+    private static float yawError(Object unit, Vec3 aim) {
+        float yaw = VehicleAim.turretYaw(unit);
+        Vec3 origin = VehicleAim.unitPosition(unit);
+        if (Float.isNaN(yaw) || origin == null) {
+            return Float.MAX_VALUE;
+        }
+        float desired = (float) Math.toDegrees(Math.atan2(-(aim.x - origin.x), aim.z - origin.z));
+        return Math.abs(net.minecraft.util.Mth.wrapDegrees(desired - yaw));
     }
 
     private static double weaponVelocity(Object unit) {
@@ -273,15 +310,11 @@ public final class VehicleGunner {
             String key = System.identityHashCode(unit) + (secondary ? ":s" : ":p");
             int index = getIndex == null ? 0 : ((Number) getIndex.invoke(weapon)).intValue();
             Object context = aimContext.invoke(unit);
-            if (weaponBayClosed(unit, weapon)) {
-                shoot.invoke(unit, index, List.of(context), humanoid);
-                return;
-            }
             if (now - SHOT_CLOCK.getOrDefault(key, 0L) < interval) {
                 return;
             }
-            shoot.invoke(unit, index, List.of(context), humanoid);
             SHOT_CLOCK.put(key, now);
+            shoot.invoke(unit, index, List.of(context), humanoid);
             humanoid.markVehicleShot(now);
         } catch (ReflectiveOperationException | RuntimeException exception) {
         }
@@ -396,9 +429,18 @@ public final class VehicleGunner {
                     if (!found.contains(unit)) {
                         found.add(unit);
                     }
-                } else if (claimable == null && !driving && seatFree(list.get(index))) {
-                    claimable = unit;
-                    claimableSeat = index;
+                } else if (seatFree(list.get(index))) {
+                    if (driving) {
+                        // This vehicle lets the driver work the main gun, which lives on its own seat's part unit.
+                        // The driver never left that seat, so the unit has no owner and stayed silent: adopt it here.
+                        bindOwner(unit, humanoid);
+                        if (!found.contains(unit)) {
+                            found.add(unit);
+                        }
+                    } else if (claimable == null) {
+                        claimable = unit;
+                        claimableSeat = index;
+                    }
                 }
             }
             // Only look for another seat when we are not the driver: abandoning the wheel to man a turret used to
@@ -514,6 +556,12 @@ public final class VehicleGunner {
                         .getMethod("getVelocity");
             } catch (ReflectiveOperationException | RuntimeException ignored) {
                 getVelocity = null;
+            }
+            try {
+                getGravity = Class.forName("org.ywzj.vehicle.custom.weapon.data.BaseVehicleWeaponData")
+                        .getMethod("getGravity");
+            } catch (ReflectiveOperationException | RuntimeException ignored) {
+                getGravity = null;
             }
             return true;
         } catch (ReflectiveOperationException | RuntimeException exception) {

@@ -32,15 +32,6 @@ public final class ClientSetup {
         event.registerBlockEntityRenderer(ModBlockEntities.TRANSPORT_MARKER.get(), TransportMarkerRenderer::new);
     }
 
-    @SubscribeEvent
-    public static void addLayers(EntityRenderersEvent.AddLayers event) {
-        for (String skin : event.getSkins()) {
-            net.minecraft.client.renderer.entity.player.PlayerRenderer renderer = event.getSkin(skin);
-            if (renderer != null) {
-                renderer.addLayer(new com.curiats.returncapsule.client.armor.HumanoidArmorOverlayLayer(renderer));
-            }
-        }
-    }
 
     @SubscribeEvent
     public static void clientSetup(FMLClientSetupEvent event) {

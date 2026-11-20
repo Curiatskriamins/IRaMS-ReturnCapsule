@@ -15,6 +15,7 @@ public final class PlayerEquipmentEvents {
     public static void onLoggedOut(PlayerEvent.PlayerLoggedOutEvent event) {
         if (event.getEntity() instanceof ServerPlayer player) {
             PlayerEquipment.forget(player);
+            PlayerEquipmentDamage.forget(player);
         }
     }
 

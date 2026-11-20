@@ -1,6 +1,11 @@
 package com.curiats.returncapsule.event;
 
 import com.curiats.returncapsule.Config;
+import com.curiats.returncapsule.compat.PlayerEquipment;
+import com.curiats.returncapsule.registry.ModEffects;
+import com.curiats.returncapsule.util.TrueDamage;
+import net.minecraft.world.effect.MobEffectInstance;
+import net.minecraftforge.event.entity.living.LivingDamageEvent;
 import com.curiats.returncapsule.ReturnCapsuleMod;
 import com.curiats.returncapsule.registry.ModItems;
 import com.curiats.returncapsule.util.MaxHealthStrip;
@@ -32,6 +37,64 @@ public final class StandardIssueBladeEvents {
 
     private static boolean applying;
 
+    private static final java.util.Map<java.util.UUID, Long> GUARD_UNTIL = new java.util.concurrent.ConcurrentHashMap<>();
+
+    /**
+     * Once per incoming hit there is a chance to shrug the whole thing off and stay untouchable for a short window.
+     * Runs before the mitigation ladder, so a cancelled hit never even draws from the budget.
+     */
+    /**
+     * Arms the pursuit effect. The damage itself is dealt by the effect's tick, which clears invulnerability frames
+     * before each instance - the same shape as the mimic armory's red mark - so the follow up is felt even while the
+     * target is still inside the twenty tick window granted by the blade hit that armed it.
+     */
+    @SubscribeEvent
+    public static void onPursuitLand(LivingDamageEvent event) {
+        if (!Config.EQUIPMENT_PURSUIT_ENABLED.get()) {
+            return;
+        }
+        if (!(event.getSource().getEntity() instanceof LivingEntity wielder)
+                || !PlayerEquipment.holdingBlade(wielder)) {
+            return;
+        }
+        if (event.getSource().is(TrueDamage.STANDARD_ISSUE_BLADE)) {
+            return;
+        }
+        LivingEntity target = event.getEntity();
+        if (target.level().isClientSide || target.isDeadOrDying()) {
+            return;
+        }
+        if (target.getMaxHealth() <= Config.EQUIPMENT_PURSUIT_MIN_HEALTH.get()) {
+            return;
+        }
+        // Clear the frames the sword hit just granted, so the very first tick of the effect is not eaten and the target
+        // never gets a free window right after being hit.
+        target.invulnerableTime = 0;
+        target.addEffect(new MobEffectInstance(ModEffects.PURSUIT.get(),
+                Config.EQUIPMENT_PURSUIT_WINDOW_TICKS.get(), 0), wielder);
+    }
+    @SubscribeEvent(priority = net.minecraftforge.eventbus.api.EventPriority.HIGHEST)
+    public static void onGuard(net.minecraftforge.event.entity.living.LivingHurtEvent event) {
+        if (!Config.EQUIPMENT_GUARD_ENABLED.get()) {
+            return;
+        }
+        if (!(event.getEntity() instanceof Player player)) {
+            return;
+        }
+        if (!PlayerEquipment.wearingFullSet(player) && !PlayerEquipment.holdingBlade(player)) {
+            return;
+        }
+        long now = player.level().getGameTime();
+        Long until = GUARD_UNTIL.get(player.getUUID());
+        if (until != null && now < until) {
+            event.setCanceled(true);
+            return;
+        }
+        if (player.getRandom().nextFloat() < Config.EQUIPMENT_GUARD_CHANCE.get().floatValue()) {
+            GUARD_UNTIL.put(player.getUUID(), now + Config.EQUIPMENT_GUARD_TICKS.get());
+            event.setCanceled(true);
+        }
+    }
     @SubscribeEvent
     public static void onHurt(LivingHurtEvent event) {
         if (applying || !Config.EQUIPMENT_BLADE_ENABLED.get()) {
@@ -64,11 +127,15 @@ public final class StandardIssueBladeEvents {
                 if (cost <= 0.0F) {
                     return;
                 }
-                com.curiats.returncapsule.compat.PlayerEquipment.setHurting(true);
+                // Direct health write on purpose: this is a payment, not a hit, so it must not run through armour or the
+                // invulnerability window. The conversion hook leaves it alone while the player is invulnerable, so give
+                // the payment that window for the duration of the write.
+                int previousInvulnerability = player.invulnerableTime;
+                player.invulnerableTime = 20;
                 try {
                     player.setHealth(player.getHealth() - cost);
                 } finally {
-                    com.curiats.returncapsule.compat.PlayerEquipment.setHurting(false);
+                    player.invulnerableTime = previousInvulnerability;
                 }
                 target.heal(cost);
             }

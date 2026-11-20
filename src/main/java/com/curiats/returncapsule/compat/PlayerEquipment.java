@@ -53,13 +53,35 @@ public final class PlayerEquipment {
 
     private static final int LAST_STAND_GRACE_TICKS = 60;
 
-    /** True while a real {@code hurt} call runs, so its own health write is not converted again. */
-    private static boolean hurting;
-
     private record Remembered(LivingEntity attacker, long tick) {
     }
 
+    /**
+     * Tick on which a real {@code hurt} call last ran for this player.
+     *
+     * <p>The vanilla damage pipeline writes health itself; that write must pass through untouched, while a write from
+     * a mob that ticks health directly must be converted. Invulnerability time cannot tell them apart (a direct write
+     * usually lands while the player is still invulnerable), so the wrapper around {@code hurt} stamps the tick
+     * instead. Storing a tick rather than a boolean means a stamp left behind by an exception expires by itself at the
+     * next tick instead of silently disabling the set forever.</p>
+     */
+    private static final Map<UUID, Integer> HURT_TICK = new ConcurrentHashMap<>();
+
+    public static void markHurt(ServerPlayer player) {
+        HURT_TICK.put(player.getUUID(), player.tickCount);
+    }
+
+    public static boolean insideHurt(ServerPlayer player) {
+        Integer tick = HURT_TICK.get(player.getUUID());
+        return tick != null && tick == player.tickCount;
+    }
+
     public static boolean wearingFullSet(LivingEntity entity) {
+        // A player still under construction has no inventory yet: LivingEntity's own constructor sets health before
+        // Player assigns it, and the set health hook runs then. Reading equipment at that point throws.
+        if (entity instanceof net.minecraft.world.entity.player.Player player && player.getInventory() == null) {
+            return false;
+        }
         for (EquipmentSlot slot : new EquipmentSlot[]{
                 EquipmentSlot.HEAD, EquipmentSlot.CHEST, EquipmentSlot.LEGS, EquipmentSlot.FEET}) {
             if (!(entity.getItemBySlot(slot).getItem() instanceof HumanoidArmorItem)) {
@@ -75,14 +97,6 @@ public final class PlayerEquipment {
                 || entity.getOffhandItem().is(com.curiats.returncapsule.registry.ModItems.STANDARD_ISSUE_SWORD.get());
     }
 
-    public static void setHurting(boolean value) {
-        hurting = value;
-    }
-
-    public static boolean isHurting() {
-        return hurting;
-    }
-
     public static void remember(ServerPlayer player, DamageSource source) {
         if (source.getEntity() instanceof LivingEntity attacker && attacker != player) {
             ATTACKERS.put(player.getUUID(), new Remembered(attacker, player.level().getGameTime()));
@@ -96,6 +110,7 @@ public final class PlayerEquipment {
         BUDGET_SECOND.remove(id);
         BUDGET_TAKEN.remove(id);
         LAST_STAND_READY.remove(id);
+        HURT_TICK.remove(id);
     }
 
     private static LivingEntity attackerOf(ServerPlayer player) {
@@ -107,60 +122,23 @@ public final class PlayerEquipment {
         return remembered.attacker();
     }
 
-    /** Replays a direct health write through the set's mitigation ladder. */
-    public static void convert(ServerPlayer player, float loss) {
-        float maxHealth = player.getMaxHealth();
-        if (loss < Config.EQUIPMENT_LOW_DAMAGE_IMMUNITY.get().floatValue()) {
-            return;
-        }
-        UUID id = player.getUUID();
-        int tick = player.tickCount;
-        Integer last = LAST_HIT_TICK.get(id);
-        if (last != null && tick - last < GATE_TICKS) {
-            return;
-        }
-        LAST_HIT_TICK.put(id, tick);
-
-        float reduced = loss * (1.0F - Config.EQUIPMENT_DAMAGE_REDUCTION.get().floatValue());
-        reduced = Math.min(reduced, maxHealth * Config.EQUIPMENT_HIT_CAP_FRACTION.get().floatValue());
-
-        long gameTime = player.level().getGameTime();
-        long second = gameTime / 20L;
-        long known = BUDGET_SECOND.getOrDefault(id, Long.MIN_VALUE);
-        float spent = known == second ? BUDGET_TAKEN.getOrDefault(id, 0.0F) : 0.0F;
-        BUDGET_SECOND.put(id, second);
-        float allowance = maxHealth * Config.EQUIPMENT_SECOND_CAP_FRACTION.get().floatValue() - spent;
-        if (allowance <= 0.0F) {
-            return;
-        }
-        reduced = Math.min(reduced, allowance);
-        BUDGET_TAKEN.put(id, spent + reduced);
-
-        if (reduced <= 0.0F) {
-            return;
-        }
-        if (player.getHealth() - reduced <= 0.0F && gameTime >= LAST_STAND_READY.getOrDefault(id, Long.MIN_VALUE)) {
-            LAST_STAND_READY.put(id, gameTime + LAST_STAND_COOLDOWN_TICKS);
-            hurting = true;
-            try {
-                player.setHealth(1.0F);
-            } finally {
-                hurting = false;
-            }
-            player.invulnerableTime = LAST_STAND_GRACE_TICKS;
-            return;
-        }
-        player.hurt(player.damageSources().mobAttack(attackerOf(player)), reduced);
-    }
-
     /**
-     * A write straight to zero is an execution, not a hit. It has to reach the vanilla death path, so it skips the
-     * mitigation ladder entirely - otherwise the ceiling would leave a zero health player who never died.
+     * Replays a direct health write as one physical hit. Mitigation is not applied here: the set's ladder lives in
+     * PlayerEquipmentDamage and runs for every hit, converted or not.
      */
-    public static void execute(ServerPlayer player) {
-        player.hurt(player.damageSources().mobAttack(attackerOf(player)), player.getMaxHealth() * 8.0F);
+    public static void convert(ServerPlayer player, float loss) {
+        if (loss <= 0.0F) {
+            return;
+        }
+        // Mitigate before handing the hit over: a burst of direct writes drains the budget here, and nothing
+        // that takes the hit over afterwards can undo it.
+        float allowed = com.curiats.returncapsule.event.PlayerEquipmentDamage.mitigate(player, loss);
+        if (allowed <= 0.0F) {
+            return;
+        }
+        com.curiats.returncapsule.event.PlayerEquipmentDamage.markConverted(player);
+        player.hurt(player.damageSources().mobAttack(attackerOf(player)), allowed);
     }
-
     private PlayerEquipment() {
     }
 }
