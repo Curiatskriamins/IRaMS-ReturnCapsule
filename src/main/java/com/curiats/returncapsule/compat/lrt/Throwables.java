@@ -37,6 +37,8 @@ public final class Throwables {
     private Throwables() {
     }
 
+    private static final java.util.concurrent.atomic.AtomicBoolean LOGGED = new java.util.concurrent.atomic.AtomicBoolean();
+
     public static boolean isThrowable(ItemStack stack) {
         if (stack.isEmpty()) {
             return false;
@@ -116,6 +118,10 @@ public final class Throwables {
     public static java.util.List<ItemStack> available() {
         java.util.List<ItemStack> stacks = new java.util.ArrayList<>();
         if (!resolve() || getThrowableIndexes == null) {
+            if (LOGGED.compareAndSet(false, true)) {
+                com.curiats.returncapsule.ReturnCapsuleMod.LOGGER.warn(
+                        "[grenade] no throwable catalogue (resolved={}, broken={})", resolved, broken);
+            }
             return stacks;
         }
         try {
@@ -175,6 +181,8 @@ public final class Throwables {
             return true;
         } catch (ReflectiveOperationException | RuntimeException exception) {
             broken = true;
+            com.curiats.returncapsule.ReturnCapsuleMod.LOGGER.warn(
+                    "[grenade] lrtactical throwable api did not resolve: {}", exception.toString());
             return false;
         }
     }

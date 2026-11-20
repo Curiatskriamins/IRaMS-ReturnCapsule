@@ -29,6 +29,17 @@ public final class VehicleDriverCompat {
     /** Heading error above which the vehicle must roll forward to turn instead of pivoting. */
     private static final double TURN_FIRST_DEGREES = 35.0D;
 
+    /** A target closer than this makes the hull back away instead of sitting in its face. */
+    private static final double KITE_RANGE = 22.0D;
+
+    private static final double KITE_DISTANCE = 30.0D;
+
+    /** Ticks a chosen steering side is held, so the wheel does not twitch left-right every tick. */
+    private static final int STEER_HOLD = 6;
+
+    /** Reversing the wheel is only allowed past this heading error, straight-line jitter stays out of it. */
+    private static final double STEER_HYSTERESIS = 20.0D;
+
     /** Enemies are counted around the owner, never around the helicopter, or it would fly off chasing spawns. */
     private static final double ENEMY_RANGE = 64.0D;
 
@@ -112,6 +123,12 @@ public final class VehicleDriverCompat {
 
     /** Whether the last tick asked for forward; only forward throttle that fails to move counts as jammed. */
     private static final java.util.Map<Integer, Boolean> LAST_FORWARD = new java.util.concurrent.ConcurrentHashMap<>();
+
+    private static final java.util.Map<Integer, Integer> STEER_LATCH = new java.util.concurrent.ConcurrentHashMap<>();
+
+    private static final java.util.Map<Integer, Integer> LAST_STEER = new java.util.concurrent.ConcurrentHashMap<>();
+
+    private static final java.util.concurrent.atomic.AtomicLong DRIVE_LOGS = new java.util.concurrent.atomic.AtomicLong();
 
     private static final int RECOVERY_TICKS = 60;
 
@@ -205,17 +222,27 @@ public final class VehicleDriverCompat {
                 aim = flank;
             }
             aim = cornerCorridorShift(vehicle, aim);
+            net.minecraft.world.phys.Vec3 order = VehicleOrders.take(vehicle);
+            if (order != null) {
+                // The gunner found a firing spot; drive there first, weapons keep tracking meanwhile.
+                aim = order;
+            }
             net.minecraft.world.phys.Vec3 replayAim = replayAim(humanoid, vehicle, owner, forwardSpeed(vehicle), target != null);
             if (replayAim != null) {
                 aim = replayAim;
             }
-            if (target == null) {
-                // Route around obstacles instead of only reacting to them: a hull sized grid search can thread the gaps
-                // between street furniture, which ray probes cannot express.
-                net.minecraft.world.phys.Vec3 routed = VehiclePathPlanner.route(vehicle, aim);
-                if (routed != null) {
-                    aim = routed;
+            if (target != null && vehicle.distanceTo(target) < KITE_RANGE) {
+                // Too close: put distance between the hull and the target, then let the cannon work again.
+                net.minecraft.world.phys.Vec3 away = vehicle.position().subtract(target.position());
+                away = new net.minecraft.world.phys.Vec3(away.x, 0.0D, away.z);
+                if (away.lengthSqr() > 1.0E-3D) {
+                    aim = vehicle.position().add(away.normalize().scale(KITE_DISTANCE));
                 }
+            }
+            // A* in combat too: the reactive probes cannot see round a corner, a grid search can.
+            net.minecraft.world.phys.Vec3 routed = VehiclePathPlanner.route(vehicle, aim);
+            if (routed != null) {
+                aim = routed;
             }
             double yawError = yawErrorTo(vehicle, aim);
             double rawDistance = vehicle.position().distanceTo(aim);
@@ -234,9 +261,12 @@ public final class VehicleDriverCompat {
             // Braking distance gate, capped: the raw v^2 figure demanded 20+ blocks at walking pace on a heavy hull and
             // throttled it to a crawl even down an empty street.
             double stopping = Math.min(12.0D, groundSpeed * groundSpeed / 0.05D + vehicle.getBbWidth());
-            boolean mustBrake = aheadClear < stopping + 3.0D;
+            // Traversability, not a ray probe: whether the hull's own box fits ahead is what decides a brake,
+            // and a ray can miss a low kerb or clip a thin post the box would have cleared.
+            boolean mustBrake = frontBlocked(vehicle, Math.min(6.0D, stopping + 1.0D));
             double stopAt = ROLLING.getOrDefault(humanoid.getId(), false) ? keep - 3.0D : keep;
-            boolean forward = !mustBrake && distance > stopAt && Math.abs(yawError) < 70.0D
+            double turnLimit = Math.max(25.0D, 70.0D - groundSpeed * 18.0D);
+            boolean forward = !mustBrake && distance > stopAt && Math.abs(yawError) < turnLimit
                     && Math.min(frontClear, aheadClear) > safeFront && groundAhead;
             boolean backward = mustBrake || (target != null ? distance < STOP_RANGE : distance < 6.0D);
             // Jam = forward was asked for and the hull did not move. Reverse and pivot phases must not count, otherwise
@@ -248,51 +278,46 @@ public final class VehicleDriverCompat {
                 JAM.remove(humanoid.getId());
             }
             int jamTicks = JAM.getOrDefault(humanoid.getId(), 0);
+            if (jamTicks == JAM_TICKS) {
+                // Baritone's executor drops a path that stopped making progress; do the same, otherwise the hull keeps
+                // following a cached route that already proved impossible.
+                VehiclePathPlanner.forget(vehicle.getId());
+            }
             int steerSide = 0;
             int detourTicks = DETOUR_TICKS.getOrDefault(humanoid.getId(), 0);
-            boolean freeAgain = jamTicks < JAM_TICKS && aheadClear >= WALL_PANIC + 4.0D && groundSpeed > 0.15D;
-            if (freeAgain) {
-                detourTicks = 0;
-            }
-            if (!freeAgain && (aheadClear < WALL_PANIC || jamTicks >= JAM_TICKS || detourTicks > 0)) {
-                Double lockedYaw = DETOUR_YAW.get(humanoid.getId());
-                boolean committed = lockedYaw != null
-                        && Math.abs(net.minecraft.util.Mth.wrapDegrees(
-                                vehicle.getYRot() - lockedYaw.floatValue())) < DETOUR_COMMIT_DEGREES;
-                if (jamTicks >= JAM_TICKS * 6) {
-                    // Wedged without rotating: try the other side instead of pushing the same way forever.
-                    DETOUR.put(humanoid.getId(), -DETOUR.getOrDefault(humanoid.getId(), -1));
-                    DETOUR_YAW.put(humanoid.getId(), (double) vehicle.getYRot());
-                    JAM.remove(humanoid.getId());
-                    detourTicks = DETOUR_HOLD;
-                } else if (detourTicks <= 0 && !committed) {
+            boolean needDetour = aheadClear < WALL_PANIC || jamTicks >= JAM_TICKS;
+            if (needDetour) {
+                if (detourTicks <= 0) {
+                    // New episode: choose the side once and keep it. Re-picking every cycle used to flip the steering
+                    // every time the hull turned past the commit angle, which is what kept it pirouetting.
                     double leftRoom = clearanceAlong(vehicle, vehicle.getYRot() - DETOUR_ANGLE);
                     double rightRoom = clearanceAlong(vehicle, vehicle.getYRot() + DETOUR_ANGLE);
                     DETOUR.put(humanoid.getId(), leftRoom >= rightRoom ? -1 : 1);
                     DETOUR_YAW.put(humanoid.getId(), (double) vehicle.getYRot());
                     detourTicks = DETOUR_HOLD;
-                } else if (detourTicks > 0) {
-                    detourTicks--;
                 }
+                detourTicks--;
                 DETOUR_TICKS.put(humanoid.getId(), detourTicks);
                 int side = DETOUR.getOrDefault(humanoid.getId(), -1);
-                int phase = (int) (UNSTICK.merge(humanoid.getId(), 1, Integer::sum) % DETOUR_CYCLE);
-                boolean reversePhase = phase < DETOUR_HALF;
-                if (reversePhase) {
-                    // Backing off frees a hull pressed onto a post, and reverse steering needs the opposite input.
-                    forward = false;
-                    backward = true;
-                } else if (tracked && (!groundAhead || Math.min(frontClear, aheadClear) < safeFront)) {
-                    // A tracked hull can pivot when there is no room to roll forward; a wheeled one cannot.
-                    forward = false;
+                if (tracked) {
+                    // Roll forward as soon as the nose is clear, instead of pivoting without throttle. With no
+                    // throttle the old code never moved, and its "is it moving again" exit could never trigger.
+                    forward = !frontBlocked(vehicle, 2.5D) && Math.abs(yawError) < 45.0D;
                     backward = false;
+                    steerSide = forward ? 0 : side;
                 } else {
-                    forward = true;
-                    backward = false;
+                    int phase = (int) (UNSTICK.merge(humanoid.getId(), 1, Integer::sum) % DETOUR_CYCLE);
+                    boolean reversePhase = phase < DETOUR_HALF;
+                    forward = !reversePhase;
+                    backward = reversePhase;
+                    steerSide = reversePhase ? -side : side;
                 }
-                // Reversing with the wheel turned the same way rotates the hull the other way, so the wheel is flipped
-                // during the reverse half; with the same sign the two halves cancel and the vehicle only wiggles.
-                steerSide = reversePhase ? -side : side;
+                if (detourTicks <= 0) {
+                    DETOUR.remove(humanoid.getId());
+                    DETOUR_TICKS.remove(humanoid.getId());
+                    DETOUR_YAW.remove(humanoid.getId());
+                    UNSTICK.remove(humanoid.getId());
+                }
             } else {
                 DETOUR.remove(humanoid.getId());
                 DETOUR_TICKS.remove(humanoid.getId());
@@ -307,16 +332,19 @@ public final class VehicleDriverCompat {
                 forward = true;
                 backward = false;
             }
+            if (entityAhead(vehicle)) {
+                // Something alive is in front: brake, do not swerve. Swerving at a close enemy is what produced the
+                // endless spin, and driving through friendlies is not acceptable either.
+                forward = false;
+                backward = false;
+                steerSide = 0;
+            }
             boolean complexTerrain = steerSide == 0 && (frontClear < 5.0D || !groundAhead
                     || Math.abs(yawError) > 25.0D || sideTight(vehicle));
             if (complexTerrain) {
                 int throttle = THROTTLE.getOrDefault(humanoid.getId(), 0) + 1;
                 THROTTLE.put(humanoid.getId(), throttle);
-                if (isTracked(vehicle)) {
-                    if (forward && (throttle % 4) >= 2) {
-                        forward = false;
-                    }
-                } else if (forward && (throttle % 4) >= 2) {
+                if (!isTracked(vehicle) && forward && (throttle % 4) >= 2) {
                     forward = false;
                     backward = false;
                     handbrakeField.setBoolean(control, true);
@@ -328,8 +356,13 @@ public final class VehicleDriverCompat {
             if (recovery > 0 && steerSide == 0) {
                 RECOVERY.put(humanoid.getId(), recovery - 1);
                 int phase = (RECOVERY_TICKS - recovery) / RECOVERY_PHASE % 4;
-                forward = phase >= 2;
-                backward = phase < 2;
+                if (tracked) {
+                    forward = false;
+                    backward = false;
+                } else {
+                    forward = phase >= 2;
+                    backward = phase < 2;
+                }
                 boolean steerLeft = phase % 2 == 0;
                 handbrakeField.setBoolean(control, false);
                 forwardField.setBoolean(control, forward);
@@ -368,9 +401,33 @@ public final class VehicleDriverCompat {
             LAST_FORWARD.put(humanoid.getId(), forward);
             boolean moving = forward || backward;
             boolean pivoting = tracked && !moving && (Math.abs(yawError) > 8.0D || steerSide != 0);
-            boolean left = steerSide < 0 || (steerSide == 0 && (moving || pivoting) && yawError < -4.0D);
-            boolean right = steerSide > 0 || (steerSide == 0 && (moving || pivoting) && yawError > 4.0D);
+            // Hold the chosen side for a few ticks (Automobility's steering is a continuous input, this hull only
+            // has a boolean wheel). A reversal needs a clearly larger error, which removes the left-right twitch that
+            // was visible in the drive trace.
+            int desiredSide = steerSide != 0 ? Integer.signum(steerSide)
+                    : (moving || pivoting) && Math.abs(yawError) > 4.0D ? (yawError < 0.0D ? -1 : 1) : 0;
+            int heldSide = LAST_STEER.getOrDefault(humanoid.getId(), 0);
+            int latch = STEER_LATCH.getOrDefault(humanoid.getId(), 0);
+            if (latch > 0 && desiredSide != 0 && desiredSide != heldSide
+                    && Math.abs(yawError) < STEER_HYSTERESIS) {
+                desiredSide = heldSide;
+            }
+            if (desiredSide != 0 && desiredSide != heldSide) {
+                LAST_STEER.put(humanoid.getId(), desiredSide);
+                STEER_LATCH.put(humanoid.getId(), STEER_HOLD);
+            } else if (latch > 0) {
+                STEER_LATCH.put(humanoid.getId(), latch - 1);
+            }
+            boolean left = desiredSide < 0;
+            boolean right = desiredSide > 0;
             boolean handbrake = !moving && !pivoting;
+            if (humanoid.tickCount % 20 == 0 && DRIVE_LOGS.incrementAndGet() <= 600) {
+                com.curiats.returncapsule.ReturnCapsuleMod.LOGGER.info(
+                        "[drive] {} tracked={} yawErr={} dist={} fwd={} back={} steer={} jam={} detour={} blocked={}",
+                        vehicle.getType().toString(), tracked, String.format("%.1f", yawError),
+                        String.format("%.1f", distance), forward, backward, steerSide, jamTicks, detourTicks,
+                        frontBlocked(vehicle, 3.0D));
+            }
             if (moving) {
                 ROLLING.put(humanoid.getId(), true);
             } else {
@@ -403,6 +460,55 @@ public final class VehicleDriverCompat {
             return new double[]{required, min, max};
         }
         return null;
+    }
+
+    /** Climb ability: a tracked hull takes a two block kerb, a wheeled one a single block. */
+    private static double stepHeight(Entity vehicle) {
+        return isTracked(vehicle) ? 2.0D : 1.0D;
+    }
+
+    /**
+     * A box just in front of the hull, the same shape the reference autopilot uses: as wide as the hull, two blocks
+     * down and four up, centred a little over one hull width ahead.
+     */
+    private static boolean entityAhead(Entity vehicle) {
+        net.minecraft.world.phys.Vec3 look = vehicle.getLookAngle();
+        net.minecraft.world.phys.Vec3 forward = new net.minecraft.world.phys.Vec3(look.x, 0.0D, look.z);
+        if (forward.lengthSqr() < 1.0E-6D) {
+            return false;
+        }
+        forward = forward.normalize();
+        double width = 0.8D * vehicle.getBbWidth();
+        net.minecraft.world.phys.AABB box = new net.minecraft.world.phys.AABB(
+                -width, -2.0D, -width, width, 4.0D, width)
+                .move(vehicle.position().add(forward.scale(1.0D + 1.75D * width)));
+        for (net.minecraft.world.entity.LivingEntity other
+                : vehicle.level().getEntitiesOfClass(net.minecraft.world.entity.LivingEntity.class, box)) {
+            if (other == vehicle || other.getVehicle() == vehicle || other.isSpectator()) {
+                continue;
+            }
+            return true;
+        }
+        for (net.minecraft.world.entity.Entity other
+                : vehicle.level().getEntitiesOfClass(net.minecraft.world.entity.Entity.class, box)) {
+            if (other == vehicle || other.getVehicle() == vehicle) {
+                continue;
+            }
+            // Another hull is not a LivingEntity, and driving through one is as bad as driving through a mob.
+            if (other.getClass().getName().toLowerCase(java.util.Locale.ROOT).contains("vehicle")) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** True when the hull's own collision box does not fit a short roll forward. */
+    private static boolean frontBlocked(Entity vehicle, double distance) {
+        double yaw = Math.toRadians(vehicle.getYRot());
+        double dx = -Math.sin(yaw) * distance;
+        double dz = Math.cos(yaw) * distance;
+        net.minecraft.world.phys.AABB box = vehicle.getBoundingBox().move(dx, 0.0D, dz);
+        return VehicleTerrain.boxBlocked(vehicle.level(), box, stepHeight(vehicle));
     }
 
     private static double forwardSpeed(Entity vehicle) {
@@ -486,12 +592,12 @@ public final class VehicleDriverCompat {
         dir = new net.minecraft.world.phys.Vec3(dir.x / length, 0.0D, dir.z / length);
         double px = -dir.z;
         double pz = dir.x;
-        double left = 0.0D;
-        double right = 0.0D;
-        for (net.minecraft.world.phys.Vec3 corner : corners(vehicle)) {
-            left += rayLength(vehicle, corner, new net.minecraft.world.phys.Vec3(px, 0.0D, pz), PROBE_RANGE);
-            right += rayLength(vehicle, corner, new net.minecraft.world.phys.Vec3(-px, 0.0D, -pz), PROBE_RANGE);
-        }
+        net.minecraft.world.phys.AABB box = vehicle.getBoundingBox();
+        double step = stepHeight(vehicle);
+        double right = VehicleTerrain.clearance(vehicle.level(), box,
+                new net.minecraft.world.phys.Vec3(-px, 0.0D, -pz), PROBE_RANGE, step);
+        double left = VehicleTerrain.clearance(vehicle.level(), box,
+                new net.minecraft.world.phys.Vec3(px, 0.0D, pz), PROBE_RANGE, step);
         double shift = Math.max(-2.5D, Math.min(2.5D, (right - left) * 0.25D));
         return aim.add(px * shift, 0.0D, pz * shift);
     }
@@ -764,38 +870,26 @@ public final class VehicleDriverCompat {
         net.minecraft.world.phys.Vec3 forward = new net.minecraft.world.phys.Vec3(look.x, 0.0D, look.z).normalize();
         double px = -forward.z;
         double pz = forward.x;
-        double total = 0.0D;
-        for (net.minecraft.world.phys.Vec3 corner : corners(vehicle)) {
-            total += rayLength(vehicle, corner, new net.minecraft.world.phys.Vec3(px, 0.0D, pz), 8.0D);
-            total += rayLength(vehicle, corner, new net.minecraft.world.phys.Vec3(-px, 0.0D, -pz), 8.0D);
-        }
-        return total < 16.0D;
+        net.minecraft.world.phys.AABB box = vehicle.getBoundingBox();
+        double step = stepHeight(vehicle);
+        double right = VehicleTerrain.clearance(vehicle.level(), box,
+                new net.minecraft.world.phys.Vec3(px, 0.0D, pz), 8.0D, step);
+        double left = VehicleTerrain.clearance(vehicle.level(), box,
+                new net.minecraft.world.phys.Vec3(-px, 0.0D, -pz), 8.0D, step);
+        return left + right < 16.0D;
     }
 
     private static boolean groundAhead(Entity vehicle) {
         net.minecraft.world.phys.Vec3 look = vehicle.getLookAngle();
         net.minecraft.world.phys.Vec3 forward = new net.minecraft.world.phys.Vec3(look.x, 0.0D, look.z).normalize();
-        boolean clear = true;
-        for (net.minecraft.world.phys.Vec3 corner : corners(vehicle)) {
-            for (double distance = 3.0D; distance <= 9.0D; distance += 3.0D) {
-                net.minecraft.world.phys.Vec3 probe = corner.add(forward.scale(distance));
-                net.minecraft.world.phys.Vec3 from = probe.add(0.0D, 2.0D, 0.0D);
-                net.minecraft.world.phys.Vec3 to = probe.add(0.0D, -6.0D, 0.0D);
-                net.minecraft.world.phys.BlockHitResult hit = vehicle.level().clip(new net.minecraft.world.level.ClipContext(
-                        from, to, net.minecraft.world.level.ClipContext.Block.COLLIDER,
-                        net.minecraft.world.level.ClipContext.Fluid.NONE, vehicle));
-                if (hit.getType() == net.minecraft.world.phys.HitResult.Type.MISS) {
-                    clear = false;
-                    break;
-                }
-                double drop = corner.y - hit.getLocation().y;
-                if (drop > 2.0D) {
-                    clear = false;
-                    break;
-                }
+        net.minecraft.world.phys.AABB box = vehicle.getBoundingBox();
+        for (double distance = 3.0D; distance <= 9.0D; distance += 3.0D) {
+            net.minecraft.world.phys.AABB shifted = box.move(forward.x * distance, 0.0D, forward.z * distance);
+            if (!VehicleTerrain.groundUnder(vehicle.level(), shifted, 2.0D)) {
+                return false;
             }
         }
-        return clear;
+        return true;
     }
 
     private static double cornerClearance(Entity vehicle, double yawError) {
@@ -804,22 +898,16 @@ public final class VehicleDriverCompat {
         if (Math.abs(yawError) > 20.0D) {
             return PROBE_RANGE;
         }
-        double best = PROBE_RANGE;
-        for (net.minecraft.world.phys.Vec3 corner : corners(vehicle)) {
-            best = Math.min(best, rayLength(vehicle, corner, forward, PROBE_RANGE));
-        }
-        return best;
+        return VehicleTerrain.clearance(vehicle.level(), vehicle.getBoundingBox(), forward, PROBE_RANGE,
+                stepHeight(vehicle));
     }
 
     private static double clearanceAlong(Entity vehicle, float heading) {
         double radians = Math.toRadians(heading);
         net.minecraft.world.phys.Vec3 forward = new net.minecraft.world.phys.Vec3(
                 -Math.sin(radians), 0.0D, Math.cos(radians));
-        double best = PROBE_RANGE;
-        for (net.minecraft.world.phys.Vec3 corner : corners(vehicle)) {
-            best = Math.min(best, rayLength(vehicle, corner, forward, PROBE_RANGE));
-        }
-        return best;
+        return VehicleTerrain.clearance(vehicle.level(), vehicle.getBoundingBox(), forward, PROBE_RANGE,
+                stepHeight(vehicle));
     }
 
     private static java.util.List<net.minecraft.world.phys.Vec3> corners(Entity vehicle) {

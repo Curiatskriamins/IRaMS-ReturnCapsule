@@ -21,7 +21,19 @@ public final class VehicleGunner {
     private static final float YAW_TOLERANCE = 2.0F;
     private static final float FAIL_OPEN_YAW = 6.0F;
 
+    /** Main cannon targets below this max health are not worth a shell (maggots, swarmers). */
+    private static final double MAIN_CANNON_MIN_HEALTH = 50.0D;
+
+    private static final int MACHINE_GUN_SETTLE = 3;
+
+    private static final int REPOSITION_TICKS = 60;
+
+    private static final Map<Integer, Long> LAST_ORDER = new ConcurrentHashMap<>();
+
     private static final Map<String, Long> SHOT_CLOCK = new ConcurrentHashMap<>();
+
+    private static final java.util.concurrent.atomic.AtomicLong GUN_LOGS =
+            new java.util.concurrent.atomic.AtomicLong();
 
     private static final Map<Integer, Integer> AIM_TICKS = new ConcurrentHashMap<>();
 
@@ -115,17 +127,31 @@ public final class VehicleGunner {
             }
             bindOwner(unit, humanoid);
             Object owner = rootUnit(unit);
-            if (!lineOfFire(vehicle, owner, target)) {
-                continue;
-            }
+            boolean line = lineOfFire(vehicle, owner, target);
             Vec3 aimPoint = leadPoint(owner, target);
+            boolean worthCannon = target.getMaxHealth() >= MAIN_CANNON_MIN_HEALTH;
+            if (!line && worthCannon) {
+                // No line for the cannon: ask the driver for a firing position instead of sitting there.
+                requestReposition(vehicle, target);
+            }
+            if (GUN_LOGS.incrementAndGet() <= 600) {
+                com.curiats.returncapsule.ReturnCapsuleMod.LOGGER.info(
+                        "[gun] target={} dist={} line={} settle={} aligned={} yawErr={}",
+                        target.getName().getString(), String.format("%.1f", vehicle.distanceTo(target)), line,
+                        AIM_TICKS.getOrDefault(System.identityHashCode(unit), 0), aligned(owner, aimPoint),
+                        String.format("%.1f", yawError(owner, aimPoint)));
+            }
             try {
                 aim.invoke(unit, aimPoint);
             } catch (ReflectiveOperationException | RuntimeException exception) {
                 continue;
             }
             int settle = AIM_TICKS.merge(System.identityHashCode(unit), 1, Integer::sum);
-            if (settle < AIM_SETTLE) {
+            // Machine guns fire on anything that moves, line or no line: they are for suppression, not precision.
+            if (getCurrentSecondaryWeapon != null && settle >= MACHINE_GUN_SETTLE) {
+                fire(unit, humanoid, getCurrentSecondaryWeapon, true);
+            }
+            if (!line || !worthCannon || settle < AIM_SETTLE) {
                 continue;
             }
             if (!aligned(owner, aimPoint)) {
@@ -137,9 +163,6 @@ public final class VehicleGunner {
                 }
             }
             fire(owner, humanoid, getCurrentWeapon, false);
-            if (getCurrentSecondaryWeapon != null) {
-                fire(unit, humanoid, getCurrentSecondaryWeapon, true);
-            }
         }
     }
 
@@ -295,6 +318,35 @@ public final class VehicleGunner {
         double distance = closest.distanceTo(point);
         double radius = 3.0D + player.getBbWidth();
         return distance < radius && t > 0.25D && t < 0.85D;
+    }
+
+    /** Asks the driver for a hull position that can actually see the target with the cannon. */
+    private static void requestReposition(Entity vehicle, LivingEntity target) {
+        long now = vehicle.level().getGameTime();
+        Long last = LAST_ORDER.get(vehicle.getId());
+        if (last != null && now - last < REPOSITION_TICKS) {
+            return;
+        }
+        for (int step = 0; step < 8; step++) {
+            double angle = Math.toRadians(step * 45.0D);
+            Vec3 candidate = new Vec3(
+                    vehicle.getX() + Math.cos(angle) * 12.0D,
+                    vehicle.getY(),
+                    vehicle.getZ() + Math.sin(angle) * 12.0D);
+            net.minecraft.world.phys.AABB box = vehicle.getBoundingBox().move(
+                    candidate.x - vehicle.getX(), 0.0D, candidate.z - vehicle.getZ());
+            if (VehicleTerrain.boxBlocked(vehicle.level(), box, 2.0D)) {
+                continue;
+            }
+            Vec3 eye = candidate.add(0.0D, vehicle.getBbHeight() * 0.7D, 0.0D);
+            if (!com.curiats.returncapsule.entity.humanoid.HumanoidSight.canSee(
+                    vehicle.level(), vehicle, eye, target.getEyePosition())) {
+                continue;
+            }
+            VehicleOrders.reposition(vehicle, candidate, REPOSITION_TICKS);
+            LAST_ORDER.put(vehicle.getId(), now);
+            return;
+        }
     }
 
     private static void fire(Object unit, NeutralHumanoid humanoid, Method source, boolean secondary) {

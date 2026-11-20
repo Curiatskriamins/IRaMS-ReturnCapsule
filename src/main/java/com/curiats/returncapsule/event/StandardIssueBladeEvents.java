@@ -50,9 +50,6 @@ public final class StandardIssueBladeEvents {
      */
     @SubscribeEvent
     public static void onPursuitLand(LivingDamageEvent event) {
-        if (!Config.EQUIPMENT_PURSUIT_ENABLED.get()) {
-            return;
-        }
         if (!(event.getSource().getEntity() instanceof LivingEntity wielder)
                 || !PlayerEquipment.holdingBlade(wielder)) {
             return;
@@ -64,14 +61,14 @@ public final class StandardIssueBladeEvents {
         if (target.level().isClientSide || target.isDeadOrDying()) {
             return;
         }
-        if (target.getMaxHealth() <= Config.EQUIPMENT_PURSUIT_MIN_HEALTH.get()) {
+        if (target.getMaxHealth() <= ModEffects.PURSUIT_MIN_HEALTH) {
             return;
         }
         // Clear the frames the sword hit just granted, so the very first tick of the effect is not eaten and the target
         // never gets a free window right after being hit.
         target.invulnerableTime = 0;
         target.addEffect(new MobEffectInstance(ModEffects.PURSUIT.get(),
-                Config.EQUIPMENT_PURSUIT_WINDOW_TICKS.get(), 0), wielder);
+                ModEffects.PURSUIT_DURATION_TICKS, 0), wielder);
     }
     @SubscribeEvent(priority = net.minecraftforge.eventbus.api.EventPriority.HIGHEST)
     public static void onGuard(net.minecraftforge.event.entity.living.LivingHurtEvent event) {

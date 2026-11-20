@@ -120,12 +120,6 @@ public final class Config {
     public static final ForgeConfigSpec.DoubleValue EQUIPMENT_SUPPORT_HEAL_PERCENT;
     public static final ForgeConfigSpec.DoubleValue EQUIPMENT_ARMOR_TOUGHNESS;
     public static final ForgeConfigSpec.DoubleValue EQUIPMENT_BLADE_PLAYER_FLOOR;
-    public static final ForgeConfigSpec.BooleanValue EQUIPMENT_PURSUIT_ENABLED;
-    public static final ForgeConfigSpec.DoubleValue EQUIPMENT_PURSUIT_MIN_HEALTH;
-    public static final ForgeConfigSpec.IntValue EQUIPMENT_PURSUIT_DELAY_TICKS;
-    public static final ForgeConfigSpec.IntValue EQUIPMENT_PURSUIT_WINDOW_TICKS;
-    public static final ForgeConfigSpec.IntValue EQUIPMENT_PURSUIT_INTERVAL_TICKS;
-    public static final ForgeConfigSpec.DoubleValue EQUIPMENT_PURSUIT_TICK_DAMAGE;
     public static final ForgeConfigSpec.DoubleValue EQUIPMENT_HEALTH_BONUS;
     public static final ForgeConfigSpec.DoubleValue EQUIPMENT_HEALTH_REGEN;
     public static final ForgeConfigSpec.BooleanValue EQUIPMENT_GUARD_ENABLED;
@@ -527,24 +521,6 @@ public final class Config {
         EQUIPMENT_BLADE_PLAYER_FLOOR = builder
                 .comment("潜行给宠物换血时，玩家最低保留的生命值比例；扣到下限后换血停止(The player never pays health below this share of max health when trading health into a pet)")
                 .defineInRange("bladePlayerHealthFloor", 1.0D, 0.0D, 50.0D);
-        EQUIPMENT_PURSUIT_ENABLED = builder
-                .comment("列装剑命中后追加一次追击伤害(Whether a blade hit arms one follow up strike)")
-                .define("pursuitEnabled", true);
-        EQUIPMENT_PURSUIT_MIN_HEALTH = builder
-                .comment("追击只对最大生命值高于该值的生物生效(The follow up only applies to targets above this max health)")
-                .defineInRange("pursuitMinHealth", 150.0D, 0.0D, 2000.0D);
-        EQUIPMENT_PURSUIT_DELAY_TICKS = builder
-                .comment("追击伤害延迟多少 tick 落地(Ticks between the hit and the follow up landing)")
-                .defineInRange("pursuitDelayTicks", 7, 1, 100);
-        EQUIPMENT_PURSUIT_WINDOW_TICKS = builder
-                .comment("同一目标多久内只能被追击一次(How often one target may be pursued)")
-                .defineInRange("pursuitWindowTicks", 90, 1, 1200);
-        EQUIPMENT_PURSUIT_INTERVAL_TICKS = builder
-                .comment("追击伤害每隔多少 tick 结算一次(Ticks between two pursuit damage instances)")
-                .defineInRange("pursuitIntervalTicks", 1, 1, 100);
-        EQUIPMENT_PURSUIT_TICK_DAMAGE = builder
-                .comment("追击每 tick 的魔法伤害，保持小值以便绕过 SRP 的单次限伤(Magic damage per pursuit tick, kept small to stay under per hit caps)")
-                .defineInRange("pursuitTickDamage", 3.0D, 0.1D, 500.0D);
         EQUIPMENT_HEALTH_BONUS = builder
                 .comment("整套穿戴时追加的最大生命值，默认 180 使其与基础人形同为 200(Max health added while the full set is worn)")
                 .defineInRange("healthBonus", 180.0D, 0.0D, 2000.0D);
