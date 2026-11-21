@@ -13,28 +13,14 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
-/**
- * Decides whether a third party vehicle mod projectile should be allowed to force load chunks.
- *
- * <p>{@code org.ywzj.vehicle.util.EntityUtil.keepChunkLoaded} adds two {@code POST_TELEPORT} region tickets of radius
- * three (a 7x7 chunk area) per projectile, and every missile, rocket and artillery shell calls it as soon as its next
- * position leaves the entity ticking area. A dozen projectiles therefore drag hundreds of chunks, and the terrain along
- * the flight path has to be generated. Our mixin asks this class first and cancels the ticket for ammunition that does
- * not need it, so the round simply freezes in unloaded terrain until a player comes near.</p>
- *
- * <p>Two kinds of round are exempt by default: a missile that already holds a target entity (the PvP beyond visual
- * range case) and a preset long range strike (the default pack's DF style weapon). Both are configuration.</p>
- */
 public final class VehicleAmmoGate {
 
     private static final String AMMO_PACKAGE = "org.ywzj.vehicle.entity.weapon";
 
     private static final Map<Class<?>, Access> ACCESS = new ConcurrentHashMap<>();
 
-    /** Frozen rounds and the game time after which they should be removed. */
     private static final Map<UUID, Deadline> FROZEN = new ConcurrentHashMap<>();
 
-    /** How long a record survives when the round cannot be reached because its chunk is not loaded. */
     private static final long GRACE_TICKS = 2400L;
 
     private record Deadline(ResourceKey<Level> dimension, long expiresAt) {
@@ -44,7 +30,7 @@ public final class VehicleAmmoGate {
         try {
             return decide(entity);
         } catch (RuntimeException exception) {
-            // Config not baked yet or a reflection surprise: never break the vehicle mod over a performance tweak.
+
             return false;
         }
     }
@@ -55,7 +41,7 @@ public final class VehicleAmmoGate {
         }
         Class<?> type = entity.getClass();
         if (!type.getName().startsWith(AMMO_PACKAGE)) {
-            // Vehicles and UAVs are not ammunition and keep the vehicle mod's behaviour.
+
             return false;
         }
         Access access = ACCESS.computeIfAbsent(type, Access::resolve);
@@ -69,11 +55,6 @@ public final class VehicleAmmoGate {
         return true;
     }
 
-    /**
-     * Records when this round started freezing. A frozen round does not tick, so its own lifetime counter rarely
-     * advances; this deadline is the backstop that {@link #reap} enforces later. Recording is one map insertion per
-     * round, so the length of the deadline has no cost of its own.
-     */
     private static void note(Entity entity) {
         int ttl = Config.VEHICLE_AMMO_TTL_TICKS.get();
         if (ttl <= 0) {
@@ -83,11 +64,6 @@ public final class VehicleAmmoGate {
                 new Deadline(entity.level().dimension(), entity.level().getGameTime() + ttl));
     }
 
-    /**
-     * Low frequency sweep: called every couple of hundred ticks, never per tick. Rounds whose chunk is loaded are
-     * discarded straight away; rounds that are still in unloaded terrain keep their record for a grace period, because
-     * they cannot be removed without loading the chunk they froze in.
-     */
     public static void reap(MinecraftServer server) {
         if (FROZEN.isEmpty()) {
             return;
@@ -104,7 +80,7 @@ public final class VehicleAmmoGate {
                 entity.discard();
                 FROZEN.remove(entry.getKey());
             } else if (now > deadline.expiresAt() + GRACE_TICKS) {
-                // Cannot reach it without loading its chunk; forget it rather than grow this map forever.
+
                 FROZEN.remove(entry.getKey());
             }
         }
@@ -114,10 +90,6 @@ public final class VehicleAmmoGate {
         FROZEN.clear();
     }
 
-    /**
-     * Per class view on the vehicle mod's ammunition fields. Everything is reflective so the vehicle mod stays an
-     * optional dependency.
-     */
     private record Access(Field targetEntity, Field presetTarget) {
 
         static Access resolve(Class<?> type) {
@@ -131,7 +103,7 @@ public final class VehicleAmmoGate {
                     field.setAccessible(true);
                     return field;
                 } catch (NoSuchFieldException ignored) {
-                    // keep walking up
+
                 } catch (RuntimeException exception) {
                     return null;
                 }

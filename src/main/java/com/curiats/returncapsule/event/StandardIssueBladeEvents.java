@@ -104,6 +104,11 @@ public final class StandardIssueBladeEvents {
         if (!(event.getSource().getEntity() instanceof LivingEntity wielder)) {
             return;
         }
+        if (!(wielder instanceof Player)) {
+            // Only a player's blade strips max health. A base humanoid carrying the same blade only seals healing
+            // through its own mechanic; it must never shrink anyone's pool.
+            return;
+        }
         if (!wielder.getMainHandItem().is(ModItems.STANDARD_ISSUE_SWORD.get())) {
             return;
         }
@@ -152,12 +157,10 @@ public final class StandardIssueBladeEvents {
                 target.hurt(TrueDamage.blade(level, wielder, wielder), strip);
                 return;
             }
-            // Everything else loses max health until the cap, then converts to true damage.
-            MaxHealthStrip.Result result = MaxHealthStrip.apply(target, percent,
+            // Everything else loses max health until the cap. Past the cap nothing else happens: the excess is not
+            // turned into true damage, the blade simply stops stripping that target.
+            MaxHealthStrip.apply(target, percent,
                     (float) (Config.EQUIPMENT_BLADE_MAX_HEALTH_CAP.get() / 100.0D));
-            if (result.excess() > 0.0F) {
-                target.hurt(TrueDamage.blade(level, wielder, wielder), result.excess());
-            }
         } finally {
             applying = false;
         }

@@ -242,7 +242,6 @@ public class NeutralHumanoid extends PathfinderMob implements RangedAttackMob {
 
     private ItemStack rangedWeapon = ItemStack.EMPTY;
 
-    private final java.util.List<ItemStack> throwables = new java.util.ArrayList<>();
 
     private ItemStack longRangedWeapon = ItemStack.EMPTY;
     private ItemStack meleeWeapon = ItemStack.EMPTY;
@@ -306,10 +305,6 @@ public class NeutralHumanoid extends PathfinderMob implements RangedAttackMob {
         return data;
     }
 
-    public java.util.List<ItemStack> getThrowables() {
-        return this.throwables;
-    }
-
     public boolean isIndoors() {
         if (this.level().canSeeSky(this.blockPosition())) {
             return false;
@@ -326,21 +321,6 @@ public class NeutralHumanoid extends PathfinderMob implements RangedAttackMob {
             }
         }
         return blocked >= 3;
-    }
-
-    private void refillThrowables() {
-        if (!this.throwables.isEmpty()) {
-            return;
-        }
-        java.util.List<ItemStack> pool = com.curiats.returncapsule.compat.lrt.Throwables.available();
-        if (pool.isEmpty()) {
-            return;
-        }
-        for (int i = 0; i < 3; i++) {
-            ItemStack candidate = pool.get(this.random.nextInt(pool.size())).copy();
-            candidate.setCount(Math.min(3, candidate.getMaxStackSize()));
-            this.throwables.add(candidate);
-        }
     }
 
     public void refreshLoadout() {
@@ -380,7 +360,7 @@ public class NeutralHumanoid extends PathfinderMob implements RangedAttackMob {
         this.applyStance();
         this.logLoadout();
 
-        this.refillThrowables();}
+    }
 
     private void auditOffhand() {
         String now = describe(this.getOffhandItem());
@@ -781,6 +761,7 @@ public class NeutralHumanoid extends PathfinderMob implements RangedAttackMob {
         this.tickReturnToPlayer();
         com.curiats.returncapsule.compat.vehicle.VehicleRider.tick(this);
         com.curiats.returncapsule.compat.vehicle.VehicleGunner.tick(this);
+        com.curiats.returncapsule.entity.humanoid.HumanoidSkills.tick(this);
         com.curiats.returncapsule.compat.vehicle.VehicleDriverCompat.tick(this);
         if (!this.level().isClientSide && this.entityData.get(DATA_GRACE) > 0) {
             this.entityData.set(DATA_GRACE, this.entityData.get(DATA_GRACE) - 1);
@@ -1788,6 +1769,23 @@ public class NeutralHumanoid extends PathfinderMob implements RangedAttackMob {
         return this.bypassProtections;
     }
 
+    /**
+     * Removes this humanoid because it was stored, not because something tried to silently delete it.
+     *
+     * <p>The discard guard exists to stop stray systems despawning a live humanoid; storage is the one caller that is
+     * meant to remove it, so it lifts the guard for exactly this removal.</p>
+     */
+    public boolean removeForStorage() {
+        boolean previous = this.bypassProtections;
+        this.bypassProtections = true;
+        try {
+            this.discard();
+            return this.isRemoved();
+        } finally {
+            this.bypassProtections = previous;
+        }
+    }
+
     private static boolean isCreativeSource(DamageSource source) {
         return source.getEntity() instanceof Player player && player.isCreative()
         || source.getDirectEntity() instanceof Player shooter && shooter.isCreative();
@@ -1931,7 +1929,8 @@ public class NeutralHumanoid extends PathfinderMob implements RangedAttackMob {
         ReturnCapsuleMod.LOGGER.debug("[humanoid] died from {} (state: downed={}, health={})",
                 source.getMsgId(), this.isDowned(), this.getHealth());
 
-        com.curiats.returncapsule.util.DamageLock.clearAll();
+        // Its seals end with it: whatever this humanoid blocked may now heal back.
+        com.curiats.returncapsule.util.DamageLock.release(this.getUUID());
         super.die(source);
         if (this.level().isClientSide) {
             return;
@@ -1946,7 +1945,7 @@ public class NeutralHumanoid extends PathfinderMob implements RangedAttackMob {
             nearby.hurt(this.damageSources().magic(), nearby.getMaxHealth() * DEATH_BLAST_FRACTION);
             if (!(nearby instanceof Player) && !isFriendlyCreature(nearby)) {
                 com.curiats.returncapsule.util.DamageLock.lockFraction(nearby, this.level().getGameTime(),
-                DEATH_BLAST_FRACTION, DEATH_BLAST_LOCK_TICKS);
+                DEATH_BLAST_FRACTION, DEATH_BLAST_LOCK_TICKS, this.getUUID());
             }
         }
 
@@ -2018,6 +2017,8 @@ public class NeutralHumanoid extends PathfinderMob implements RangedAttackMob {
         if (damage <= 0.0D) {
             return false;
         }
+        // The percentage true damage comes from StandardIssueBladeEvents: the humanoid holds the standard issue
+        // blade, so its hits already strip max health and convert the overflow. Nothing extra belongs here.
         boolean hit = target.hurt(this.damageSources().mobAttack(this), (float) damage);
         if (hit) {
             this.doEnchantDamageEffects(this, target);

@@ -14,10 +14,20 @@ public abstract class LivingEntityHealLockMixin {
         if (!((Object) this instanceof LivingEntity living) || living.level().isClientSide) {
             return;
         }
-        if (DamageLock.locked(living, living.level().getGameTime()) <= 0.0F) {
+        float locked = DamageLock.locked(living, living.level().getGameTime());
+        if (locked <= 0.0F) {
             return;
         }
-        ci.cancel();
+        // Healing is allowed up to the ceiling the seal leaves, not blocked outright.
+        float ceiling = Math.max(0.0F, living.getMaxHealth() - locked);
+        if (living.getHealth() >= ceiling) {
+            ci.cancel();
+            return;
+        }
+        if (living.getHealth() + amount > ceiling) {
+            living.setHealth(ceiling);
+            ci.cancel();
+        }
     }
 
     @Inject(method = "setHealth", at = @At("HEAD"), cancellable = true, require = 0)

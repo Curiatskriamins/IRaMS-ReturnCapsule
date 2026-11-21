@@ -10,7 +10,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 public final class HumanoidGrenadier {
 
-    private static final int COOLDOWN_TICKS = 100;
+    private static final int COOLDOWN_TICKS = 30 * 20;
 
     private static final int CALM_THRESHOLD = 40;
     private static final double MIN_RANGE = 5.0D;
@@ -18,6 +18,11 @@ public final class HumanoidGrenadier {
     private static final Map<Integer, Integer> COOLDOWN = new ConcurrentHashMap<>();
 
     private static final Map<Integer, Vec3> PENDING = new ConcurrentHashMap<>();
+
+    /** Grenade chosen for the current engagement, re-rolled after every throw. */
+    private static final Map<Integer, ItemStack> CHOSEN = new ConcurrentHashMap<>();
+
+    private static final Map<Integer, Integer> CHOSEN_TARGET = new ConcurrentHashMap<>();
 
     private static final Map<Integer, Double> JUMP_START = new ConcurrentHashMap<>();
 
@@ -42,7 +47,7 @@ public final class HumanoidGrenadier {
         if (distance < MIN_RANGE || distance > MAX_RANGE) {
             return false;
         }
-        ItemStack stack = pickThrowable(humanoid, target);
+        ItemStack stack = chosen(humanoid, target);
         if (stack.isEmpty()) {
             return false;
         }
@@ -80,19 +85,39 @@ public final class HumanoidGrenadier {
         return false;
     }
 
+    /** Throws one carried throwable at an exact point; used by the swarm burst skill. */
+    public static boolean throwAtPoint(NeutralHumanoid humanoid, Vec3 point) {
+        if (humanoid.level().isClientSide || humanoid.isPassenger() || humanoid.isDowned()) {
+            return false;
+        }
+        if (!HumanoidToggles.isEnabled(HumanoidToggles.Slot.RANGED)) {
+            return false;
+        }
+        ItemStack stack = randomGrenade(humanoid);
+        if (stack.isEmpty()) {
+            return false;
+        }
+        Throwables.ThrowableInfo info = Throwables.describe(stack);
+        if (info == null) {
+            return false;
+        }
+        float[] angles = solveAngles(humanoid.getEyePosition(), point, info);
+        if (angles == null) {
+            return false;
+        }
+        return Throwables.throwAt(humanoid.level(), humanoid, stack, angles[0], angles[1]);
+    }
+
     private static boolean release(NeutralHumanoid humanoid, ItemStack stack, Vec3 impact,
-            Throwables.ThrowableInfo info) {
-        float[] angles = solveAngles(humanoid.getEyePosition(), impact, info);
+            Throwables.ThrowableInfo info) {        float[] angles = solveAngles(humanoid.getEyePosition(), impact, info);
         if (angles == null) {
             return false;
         }
         if (!Throwables.throwAt(humanoid.level(), humanoid, stack, angles[0], angles[1])) {
             return false;
         }
-        stack.shrink(1);
-        if (stack.isEmpty()) {
-            humanoid.getThrowables().remove(stack);
-        }
+        CHOSEN.remove(humanoid.getId());
+        CHOSEN_TARGET.remove(humanoid.getId());
         COOLDOWN.put(humanoid.getId(), COOLDOWN_TICKS);
         return true;
     }
@@ -225,35 +250,63 @@ public final class HumanoidGrenadier {
         return new float[]{bestPitch, yaw};
     }
 
-    private static ItemStack pickThrowable(NeutralHumanoid humanoid, LivingEntity target) {
-        ItemStack best = ItemStack.EMPTY;
-        double bestScore = Double.NEGATIVE_INFINITY;
-        double targetSpeed = target.getDeltaMovement().horizontalDistance();
-        double health = target.getHealth();
-        for (ItemStack candidate : humanoid.getThrowables()) {
-            Throwables.ThrowableInfo info = Throwables.describe(candidate);
-            if (info == null) {
-                continue;
-            }
-            if (!usable(info, targetSpeed)) {
-                continue;
-            }
-            double score = info.damage() + info.radius();
-            if (targetSpeed > 0.15D && info.contact()) {
-                score += 40.0D;
-            }
-            if (health < 20.0D && info.radius() > 4.0F) {
-                score -= 10.0D;
-            }
-            if (score > bestScore) {
-                bestScore = score;
-                best = candidate;
-            }
+    /** The grenade for this engagement: Molotov against slow targets, otherwise a random usable one. */
+    private static ItemStack chosen(NeutralHumanoid humanoid, LivingEntity target) {
+        ItemStack stack = CHOSEN.get(humanoid.getId());
+        Integer targetId = CHOSEN_TARGET.get(humanoid.getId());
+        if (stack != null && !stack.isEmpty() && targetId != null && targetId == target.getId()) {
+            return stack;
         }
-        return best;
+        stack = chooseGrenade(humanoid, target);
+        if (!stack.isEmpty()) {
+            CHOSEN.put(humanoid.getId(), stack);
+            CHOSEN_TARGET.put(humanoid.getId(), target.getId());
+        }
+        return stack;
     }
 
-    private static boolean usable(Throwables.ThrowableInfo info, double targetSpeed) {
+    private static ItemStack chooseGrenade(NeutralHumanoid humanoid, LivingEntity target) {
+        java.util.List<ItemStack> pool = Throwables.available();
+        java.util.List<ItemStack> usable = new java.util.ArrayList<>();
+        ItemStack molotov = ItemStack.EMPTY;
+        boolean slow = target.getDeltaMovement().horizontalDistance() <= 0.15D;
+        for (ItemStack candidate : pool) {
+            Throwables.ThrowableInfo info = Throwables.describe(candidate);
+            if (info == null || !usable(info)) {
+                continue;
+            }
+            usable.add(candidate);
+            String path = info.id().getPath().toLowerCase(java.util.Locale.ROOT);
+            if (molotov.isEmpty() && (path.contains("molotov") || path.contains("incendiary")
+                    || path.contains("fire"))) {
+                molotov = candidate;
+            }
+        }
+        if (usable.isEmpty()) {
+            return ItemStack.EMPTY;
+        }
+        if (slow && !molotov.isEmpty()) {
+            return molotov;
+        }
+        return usable.get(humanoid.getRandom().nextInt(usable.size())).copy();
+    }
+
+    /** A random usable grenade, for the swarm burst which does not keep a per engagement choice. */
+    public static ItemStack randomGrenade(NeutralHumanoid humanoid) {
+        java.util.List<ItemStack> usable = new java.util.ArrayList<>();
+        for (ItemStack candidate : Throwables.available()) {
+            Throwables.ThrowableInfo info = Throwables.describe(candidate);
+            if (info != null && usable(info)) {
+                usable.add(candidate);
+            }
+        }
+        if (usable.isEmpty()) {
+            return ItemStack.EMPTY;
+        }
+        return usable.get(humanoid.getRandom().nextInt(usable.size())).copy();
+    }
+
+    private static boolean usable(Throwables.ThrowableInfo info) {
         String path = info.id().getPath().toLowerCase(java.util.Locale.ROOT);
         if (path.contains("smoke") || path.contains("flash") || path.contains("stun")
                 || path.contains("tear") || path.contains("gas")) {
@@ -265,9 +318,6 @@ public final class HumanoidGrenadier {
         }
         if (info.destroysBlocks() || info.remote()) {
             return false;
-        }
-        if (path.contains("molotov") || path.contains("incendiary")) {
-            return targetSpeed < 0.08D;
         }
         return info.explosive() && info.damage() > 0.0D;
     }

@@ -510,7 +510,7 @@ public final class Config {
                 .comment("列装剑每次命中的最大生命值扣除百分比：玩家按百分比真伤结算，其余生物永久扣减最大生命值；一命中一次(Percentage of max health stripped per blade hit; players take percentage true damage, everything else loses max health permanently; once per swing)")
                 .defineInRange("bladePercent", 5.0D, 0.0D, 50.0D);
         EQUIPMENT_BLADE_MAX_HEALTH_CAP = builder
-                .comment("列装剑对同一目标最多扣除的最大生命值百分比，达到上限后的部分转为真伤(Maximum share of max health the blade may strip from one target; anything past the cap turns into true damage instead)")
+                .comment("列装剑对同一目标最多扣除的最大生命值百分比，达到上限后不再扣除，也不会转为真伤(Maximum share of max health the blade may strip from one target; past the cap it stops entirely, with no true damage conversion)")
                 .defineInRange("bladeMaxHealthCap", 20.0D, 0.0D, 90.0D);
         EQUIPMENT_SUPPORT_HEAL_PERCENT = builder
                 .comment("潜行攻击自己宠物时，改用玩家最大生命值的这个百分比治疗宠物；按比例而不是固定值，因为整合包里玩家血量可能远超 20(Sneak attacking your own pet heals it instead, for this share of the player's max health; a percentage rather than a flat value, since packs hand players pools far above twenty)")

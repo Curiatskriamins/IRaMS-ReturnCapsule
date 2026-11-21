@@ -128,7 +128,10 @@ public final class PlayerEquipmentEffects {
         }
         boolean present = attribute.getModifier(HEALTH_BONUS_ID) != null;
         if (fullSet && !present) {
-            attribute.addTransientModifier(new AttributeModifier(HEALTH_BONUS_ID, "returncapsule:equipment",
+            // Permanent, not transient: a transient modifier is not written to player data, so every login started
+            // from the unbuffed max health and then climbed back up as the tick re-added it - which read as the set
+            // "healing again" on every visit to the save.
+            attribute.addPermanentModifier(new AttributeModifier(HEALTH_BONUS_ID, "returncapsule:equipment",
                     Config.EQUIPMENT_HEALTH_BONUS.get(), AttributeModifier.Operation.ADDITION));
         } else if (!fullSet && present) {
             attribute.removeModifier(HEALTH_BONUS_ID);

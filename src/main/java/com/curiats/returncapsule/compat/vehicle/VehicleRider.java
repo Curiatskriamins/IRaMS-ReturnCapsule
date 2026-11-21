@@ -99,7 +99,7 @@ public final class VehicleRider {
             return;
         }
         if (superclassNamed(vehicle, "RotaryWing") && vehicle.onGround()) {
-            // A parked helicopter is still flyable by the player: do not take the stick just to sit in it.
+
             return;
         }
         int seat = seatIndexOf(vehicle, humanoid);

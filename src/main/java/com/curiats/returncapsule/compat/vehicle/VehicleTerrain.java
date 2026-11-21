@@ -1,50 +1,55 @@
 package com.curiats.returncapsule.compat.vehicle;
 
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
+import net.minecraft.util.Mth;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
+import net.minecraft.world.phys.shapes.VoxelShape;
 
 /**
- * Terrain queries by reading blocks, not by casting rays.
+ * Terrain queries for a vehicle hull, written to be cheap enough to run every tick.
  *
- * <p>A ray only proves that one line is clear; a hull is a box, so a single ray down the middle happily reports room
- * where a corner is already inside a post. Walking the hull's box over the block grid answers the actual question -
- * can this box be here - and costs a handful of block lookups.</p>
+ * <p>Everything works on whole blocks. A block row whose top is at or below the hull's climb ceiling can be driven
+ * over, so those rows are skipped before any block state is read; open ground therefore costs a handful of lookups
+ * instead of one per block under the hull. Ground checks use the chunk heightmap rather than scanning downwards.</p>
  */
 public final class VehicleTerrain {
 
-    private static final double STEP = 0.5D;
+    private static final double STEP = 1.0D;
 
     private VehicleTerrain() {
     }
 
-    /**
-     * True when a block inside {@code box} stands too tall to climb.
-     *
-     * <p>A collision shape whose top is at or below hull foot plus {@code stepHeight} is a step, not a wall: the hull
-     * rolls up onto it. That is what lets a tracked hull take a two block kerb while a wall still stops it.</p>
-     */
     public static boolean boxBlocked(Level level, AABB box, double stepHeight) {
         double climbCeiling = box.minY + Math.max(0.0D, stepHeight);
-        BlockPos min = BlockPos.containing(box.minX + 0.01D, box.minY + 0.01D, box.minZ + 0.01D);
-        BlockPos max = BlockPos.containing(box.maxX - 0.01D, box.maxY - 0.01D, box.maxZ - 0.01D);
-        for (BlockPos pos : BlockPos.betweenClosed(min, max)) {
-            BlockState state = level.getBlockState(pos);
-            net.minecraft.world.phys.shapes.VoxelShape shape = state.getCollisionShape(level, pos);
-            if (shape.isEmpty()) {
-                continue;
-            }
-            double top = shape.max(net.minecraft.core.Direction.Axis.Y) + pos.getY();
-            if (top > climbCeiling) {
-                return true;
+        int minX = Mth.floor(box.minX + 0.01D);
+        int maxX = Mth.floor(box.maxX - 0.01D);
+        int minZ = Mth.floor(box.minZ + 0.01D);
+        int maxZ = Mth.floor(box.maxZ - 0.01D);
+        int minY = Mth.floor(box.minY + 0.01D);
+        int maxY = Mth.floor(box.maxY - 0.01D);
+        // Every block in row y has its top at most y + 1, so rows below floor(climbCeiling) can never block.
+        int startY = Math.max(minY, Mth.floor(climbCeiling));
+        BlockPos.MutableBlockPos pos = new BlockPos.MutableBlockPos();
+        for (int y = startY; y <= maxY; y++) {
+            for (int x = minX; x <= maxX; x++) {
+                for (int z = minZ; z <= maxZ; z++) {
+                    pos.set(x, y, z);
+                    BlockState state = level.getBlockState(pos);
+                    VoxelShape shape = state.getCollisionShape(level, pos);
+                    if (!shape.isEmpty() && shape.max(Direction.Axis.Y) + y > climbCeiling) {
+                        return true;
+                    }
+                }
             }
         }
         return false;
     }
 
-    /** How far the box can slide along {@code direction} before terrain blocks it, capped at {@code max}. */
     public static double clearance(Level level, AABB box, Vec3 direction, double max, double stepHeight) {
         Vec3 flat = new Vec3(direction.x, 0.0D, direction.z);
         if (flat.lengthSqr() < 1.0E-6D) {
@@ -60,44 +65,30 @@ public final class VehicleTerrain {
         return max;
     }
 
-    /**
-     * True when the footprint has something to roll on.
-     *
-     * <p>Deliberately lenient: any block that is not fully passable counts as ground, and one supporting point under
-     * the hull is enough. Requiring all four corners used to declare slightly uneven flat ground impassable, which
-     * sent the driver into the obstacle detour over nothing.</p>
-     */
     public static boolean groundUnder(Level level, AABB box, double maxDrop) {
         double centreX = (box.minX + box.maxX) * 0.5D;
         double centreZ = (box.minZ + box.maxZ) * 0.5D;
-        if (groundDrop(level, centreX, box.minY, centreZ, maxDrop) >= 0.0D) {
+        if (hasGround(level, centreX, box.minY, centreZ, maxDrop)) {
             return true;
         }
-        double[][] samples = {
-                {box.minX + 0.3D, box.minZ + 0.3D},
-                {box.maxX - 0.3D, box.minZ + 0.3D},
-                {box.minX + 0.3D, box.maxZ - 0.3D},
-                {box.maxX - 0.3D, box.maxZ - 0.3D}
-        };
-        for (double[] sample : samples) {
-            if (groundDrop(level, sample[0], box.minY, sample[1], maxDrop) >= 0.0D) {
-                return true;
-            }
-        }
-        return false;
+        return hasGround(level, box.minX + 0.3D, box.minY, box.minZ + 0.3D, maxDrop)
+                || hasGround(level, box.maxX - 0.3D, box.minY, box.minZ + 0.3D, maxDrop)
+                || hasGround(level, box.minX + 0.3D, box.minY, box.maxZ - 0.3D, maxDrop)
+                || hasGround(level, box.maxX - 0.3D, box.minY, box.maxZ - 0.3D, maxDrop);
     }
 
-    /** Distance down to the first block with a collision shape, or -1 when there is none within {@code maxDrop}. */
+    /** One heightmap lookup instead of a downward block scan. */
+    private static boolean hasGround(Level level, double x, double y, double z, double maxDrop) {
+        BlockPos surface = level.getHeightmapPos(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES,
+                BlockPos.containing(x, y, z));
+        double groundTop = surface.getY();
+        return groundTop <= y + 1.0D && groundTop >= y - maxDrop - 1.0D;
+    }
+
     public static double groundDrop(Level level, double x, double y, double z, double maxDrop) {
-        BlockPos origin = BlockPos.containing(x, y, z);
-        int limit = (int) Math.ceil(maxDrop) + 1;
-        for (int dy = 0; dy <= limit; dy++) {
-            BlockPos pos = origin.below(dy);
-            BlockState state = level.getBlockState(pos);
-            if (!state.getCollisionShape(level, pos).isEmpty()) {
-                return y - (pos.getY() + 1.0D);
-            }
-        }
-        return -1.0D;
+        BlockPos surface = level.getHeightmapPos(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES,
+                BlockPos.containing(x, y, z));
+        double drop = y - surface.getY();
+        return drop > maxDrop ? -1.0D : Math.max(0.0D, drop);
     }
 }

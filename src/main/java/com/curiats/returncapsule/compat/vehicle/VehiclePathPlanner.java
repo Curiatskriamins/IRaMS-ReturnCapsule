@@ -13,43 +13,27 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
-/**
- * A small grid A* sized for a ground vehicle hull.
- *
- * <p>The search mirrors the shape of Baritone's pathfinder, scaled down to a hull: the grid is bounded, so the
- * bookkeeping lives in flat arrays indexed by cell (no {@code HashMap<Long, Double>} and no boxing), the open set is a
- * binary heap over cell indices with a parallel cost array, and a cell is expanded at most once. With a 97 x 97 grid a
- * four hundred node search allocates nothing at all, which matters when a platoon of hulls all ask for a route on the
- * same tick.</p>
- *
- * <p>Nodes are passable only where the hull's bounding box fits, using the same step height as the driver so the two
- * never disagree about a kerb. Diagonal moves may not cut corners, and the resulting grid path is string pulled so the
- * hull does not zigzag between cells.</p>
- */
 public final class VehiclePathPlanner {
 
     private static final double STEP = 2.0D;
-
-    private static final int MAX_NODES = 512;
-
+    private static final int MAX_NODES = 128;
+    private static final int MAX_SMOOTH_CELLS = 24;
     private static final int MAX_CELLS = 48;
-
     private static final int SPAN = MAX_CELLS * 2 + 1;
-
     private static final int AREA = SPAN * SPAN;
+    private static final long REPATH_TICKS = 100L;
+    /** Searches are drip fed: one token every this many ticks, so a convoy cannot stack searches back to back. */
+    private static final int SEARCH_INTERVAL_TICKS = 4;
 
-    private static final double MAX_STEP_UP = 2.0D;
+    private static final int SEARCH_TOKENS_MAX = 2;
 
-    private static final long REPATH_TICKS = 40L;
+    private static long tokenTick = Long.MIN_VALUE;
 
-    /** Global cap on searches per game tick, so a convoy cannot spend the whole tick inside A*. */
-    private static final int SEARCHES_PER_TICK = 2;
-
-    private static final double GOAL_SLACK = 3.0D;
-
+    private static int tokens;
+    private static final double GOAL_SLACK = 8.0D;
     private static final double LOOKAHEAD = 7.0D;
+    private static final double OFF_PATH = 8.0D;
 
-    // ---- scratch grid, reused between searches (the server thread runs one at a time) -------------------------
     private static final float[] G_SCORE = new float[AREA];
     private static final float[] CELL_Y = new float[AREA];
     private static final int[] PARENT = new int[AREA];
@@ -60,44 +44,54 @@ public final class VehiclePathPlanner {
     private static final int[] HEAP_POSITION = new int[AREA];
 
     private static int heapSize;
-
     private static long budgetTick = Long.MIN_VALUE;
-
     private static int budgetUsed;
+    private static int originX;
+    private static int originZ;
 
     private static final Map<Integer, Cached> CACHE = new ConcurrentHashMap<>();
 
     private VehiclePathPlanner() {
     }
 
-    /**
-     * Returns the waypoint the hull should steer at right now, or {@code null} when no route could be planned (the
-     * caller then falls back to its reactive behaviour).
-     */
     public static Vec3 route(Entity vehicle, Vec3 goal) {
         if (vehicle.level().isClientSide()) {
             return null;
         }
         long now = vehicle.level().getGameTime();
-        Cached cached = CACHE.get(vehicle.getId());
-        // Stagger the refresh by entity id so a convoy does not all go stale on the same tick.
-        long period = REPATH_TICKS + Math.floorMod(vehicle.getId(), 20);
+        int id = vehicle.getId();
+        if (now % 2048L == 0L) {
+            CACHE.entrySet().removeIf(entry -> now - entry.getValue().stamp() > 6000L);
+        }
+        Cached cached = CACHE.get(id);
+        long period = REPATH_TICKS + Math.floorMod(id, 20);
+        if (cached != null && cached.points().isEmpty() && now - cached.stamp() <= period) {
+            return null;
+        }
         boolean stale = cached == null
                 || now - cached.stamp() > period
                 || cached.goal().distanceToSqr(goal) > GOAL_SLACK * GOAL_SLACK
                 || cached.offPath(vehicle.position());
         if (stale) {
-            if (budgetTick != now) {
-                budgetTick = now;
-                budgetUsed = 0;
+            if (tokenTick == Long.MIN_VALUE) {
+                tokenTick = now;
+                tokens = SEARCH_TOKENS_MAX;
             }
-            if (budgetUsed >= SEARCHES_PER_TICK) {
-                return cached == null ? null : cached.waypoint(vehicle.position());
+            while (tokenTick <= now) {
+                tokenTick += SEARCH_INTERVAL_TICKS;
+                tokens = Math.min(SEARCH_TOKENS_MAX, tokens + 1);
             }
-            budgetUsed++;
-            List<Vec3> points = plan(vehicle.level(), vehicle, goal);
-            cached = new Cached(points, goal, now);
-            CACHE.put(vehicle.getId(), cached);
+            if (tokens > 0) {
+                tokens--;
+                    List<Vec3> points = plan(vehicle.level(), vehicle, goal);
+                cached = new Cached(points, goal, now);
+                CACHE.put(id, cached);
+            } else if (cached == null) {
+                return null;
+            }
+        }
+        if (cached == null) {
+            return null;
         }
         return cached.waypoint(vehicle.position());
     }
@@ -105,10 +99,6 @@ public final class VehiclePathPlanner {
     public static void forget(int entityId) {
         CACHE.remove(entityId);
     }
-
-    // ------------------------------------------------------------------------------------------------------------
-    // search
-    // ------------------------------------------------------------------------------------------------------------
 
     private static List<Vec3> plan(Level level, Entity vehicle, Vec3 goal) {
         Vec3 start = vehicle.position();
@@ -119,14 +109,20 @@ public final class VehiclePathPlanner {
         if (Math.abs(goalGx - startGx) + Math.abs(goalGz - startGz) > MAX_CELLS) {
             return List.of();
         }
+        if (start.distanceToSqr(goal) < 9.0D) {
+            return List.of();
+        }
+        originX = startGx;
+        originZ = startGz;
         Arrays.fill(STATE, (byte) 0);
         Arrays.fill(HEIGHT_KNOWN, (byte) 0);
         Arrays.fill(G_SCORE, Float.POSITIVE_INFINITY);
+        Arrays.fill(CELL_Y, Float.NaN);
         Arrays.fill(HEAP_POSITION, -1);
         heapSize = 0;
 
         double stepUp = isTracked(vehicle) ? 2.0D : 1.0D;
-        int startCell = cell(startGx - startGx, startGz - startGz);
+        int startCell = cell(0, 0);
         CELL_Y[startCell] = (float) start.y;
         HEIGHT_KNOWN[startCell] = 1;
         G_SCORE[startCell] = 0.0F;
@@ -174,14 +170,23 @@ public final class VehiclePathPlanner {
                     if (STATE[nextCell] == 2) {
                         continue;
                     }
-                    Double nextY = heightAt(level, vehicle, nextX - startGx, nextZ - startGz, stepUp);
-                    if (nextY == null || Math.abs(nextY - nodeY) > MAX_STEP_UP) {
+                    int localNextX = nextX - startGx;
+                    int localNextZ = nextZ - startGz;
+                    Double nextY = heightAt(level, vehicle, localNextX, localNextZ, stepUp);
+                    if (nextY == null || Math.abs(nextY - nodeY) > stepUp) {
                         continue;
                     }
                     if (dx != 0 && dz != 0) {
-                        // No corner cutting: both orthogonal cells have to fit the hull too.
-                        Double sideA = heightAt(level, vehicle, nextX - startGx, nextZ - dz - startGz, stepUp);
-                        Double sideB = heightAt(level, vehicle, nextX - dx - startGx, nextZ - startGz, stepUp);
+                        int sideAX = nextX - startGx;
+                        int sideAZ = nextZ - dz - startGz;
+                        int sideBX = nextX - dx - startGx;
+                        int sideBZ = nextZ - startGz;
+                        if (Math.abs(sideAX) > MAX_CELLS || Math.abs(sideAZ) > MAX_CELLS
+                                || Math.abs(sideBX) > MAX_CELLS || Math.abs(sideBZ) > MAX_CELLS) {
+                            continue;
+                        }
+                        Double sideA = heightAt(level, vehicle, sideAX, sideAZ, stepUp);
+                        Double sideB = heightAt(level, vehicle, sideBX, sideBZ, stepUp);
                         if (sideA == null || sideB == null) {
                             continue;
                         }
@@ -194,7 +199,8 @@ public final class VehiclePathPlanner {
                     G_SCORE[nextCell] = tentative;
                     CELL_Y[nextCell] = nextY.floatValue();
                     PARENT[nextCell] = cell;
-                    double f = tentative + heuristic(nextX - startGx, nextZ - startGz, goalGx - startGx, goalGz - startGz);
+                    double f = tentative + heuristic(localNextX, localNextZ,
+                            goalGx - startGx, goalGz - startGz);
                     if (STATE[nextCell] == 1) {
                         decrease(nextCell, f);
                     } else {
@@ -210,11 +216,14 @@ public final class VehiclePathPlanner {
         for (int cursor = end; cursor != -1; cursor = PARENT[cursor]) {
             cells.add(0, new int[]{cursor % SPAN - MAX_CELLS, cursor / SPAN - MAX_CELLS});
         }
-        cells = smooth(cells);
+        if (cells.size() <= 1) {
+            return List.of();
+        }
+        cells = smooth(level, vehicle, cells, startGx, startGz, stepUp);
         List<Vec3> points = new ArrayList<>(cells.size());
         for (int[] cell : cells) {
-            int cellIndex = cell(cell[0], cell[1]);
-            points.add(new Vec3((startGx + cell[0]) * STEP, CELL_Y[cellIndex], (startGz + cell[1]) * STEP));
+            int index = cell(cell[0], cell[1]);
+            points.add(new Vec3((startGx + cell[0]) * STEP, CELL_Y[index], (startGz + cell[1]) * STEP));
         }
         while (points.size() > 1 && points.get(0).distanceTo(start) < STEP) {
             points.remove(0);
@@ -222,11 +231,8 @@ public final class VehiclePathPlanner {
         return points;
     }
 
-    /**
-     * String pulling: keep only the corners the hull can actually see across, so the follow up does not zigzag cell
-     * to cell. Cells are compared on the same validity data the search filled in.
-     */
-    private static List<int[]> smooth(List<int[]> cells) {
+    private static List<int[]> smooth(Level level, Entity vehicle, List<int[]> cells,
+            int startGx, int startGz, double stepUp) {
         if (cells.size() <= 2) {
             return cells;
         }
@@ -234,8 +240,9 @@ public final class VehiclePathPlanner {
         int index = 0;
         out.add(cells.get(0));
         while (index < cells.size() - 1) {
-            int best = cells.size() - 1;
-            while (best > index + 1 && !clearLine(cells, index, best)) {
+            int best = Math.min(cells.size() - 1, index + MAX_SMOOTH_CELLS);
+            while (best > index + 1 && !segmentClear(level, vehicle, cells.get(index), cells.get(best),
+                    startGx, startGz, stepUp)) {
                 best--;
             }
             out.add(cells.get(best));
@@ -244,61 +251,50 @@ public final class VehiclePathPlanner {
         return out;
     }
 
-    private static boolean clearLine(List<int[]> cells, int fromIndex, int toIndex) {
-        int[] from = cells.get(fromIndex);
-        int[] to = cells.get(toIndex);
-        int dx = Math.abs(to[0] - from[0]);
-        int dz = Math.abs(to[1] - from[1]);
-        int sx = Integer.signum(to[0] - from[0]);
-        int sz = Integer.signum(to[1] - from[1]);
-        int error = dx - dz;
-        int x = from[0];
-        int z = from[1];
-        float previousY = CELL_Y[cell(x, z)];
-        while (x != to[0] || z != to[1]) {
-            int doubled = 2 * error;
-            if (doubled > -dz) {
-                error -= dz;
-                x += sx;
-            }
-            if (doubled < dx) {
-                error += dx;
-                z += sz;
-            }
-            int index = cell(x, z);
-            if (HEIGHT_KNOWN[index] == 0 || CELL_Y[index] < 0.0F) {
+    private static boolean segmentClear(Level level, Entity vehicle, int[] from, int[] to,
+            int startGx, int startGz, double stepUp) {
+        double ax = (startGx + from[0]) * STEP;
+        double az = (startGz + from[1]) * STEP;
+        double bx = (startGx + to[0]) * STEP;
+        double bz = (startGz + to[1]) * STEP;
+        double dx = bx - ax;
+        double dz = bz - az;
+        double length = Math.sqrt(dx * dx + dz * dz);
+        int samples = Math.max(1, (int) Math.ceil(length));
+        AABB base = vehicle.getBoundingBox().deflate(0.05D);
+        for (int sample = 1; sample <= samples; sample++) {
+            double t = (double) sample / samples;
+            double x = ax + dx * t;
+            double z = az + dz * t;
+            AABB moved = base.move(x - vehicle.getX(), 0.0D, z - vehicle.getZ());
+            if (VehicleTerrain.boxBlocked(level, moved, stepUp)) {
                 return false;
             }
-            float y = CELL_Y[index];
-            if (Math.abs(y - previousY) > MAX_STEP_UP) {
-                return false;
-            }
-            previousY = y;
         }
         return true;
     }
 
     private static Double heightAt(Level level, Entity vehicle, int localX, int localZ, double stepUp) {
+        if (Math.abs(localX) > MAX_CELLS || Math.abs(localZ) > MAX_CELLS) {
+            return null;
+        }
         int index = cell(localX, localZ);
         if (HEIGHT_KNOWN[index] != 0) {
-            return CELL_Y[index] >= 0.0F ? Double.valueOf(CELL_Y[index]) : null;
+            return Float.isNaN(CELL_Y[index]) ? null : Double.valueOf(CELL_Y[index]);
         }
         HEIGHT_KNOWN[index] = 1;
         Double height = probe(level, vehicle, localX, localZ, stepUp);
-        CELL_Y[index] = height == null ? -1.0F : height.floatValue();
+        CELL_Y[index] = height == null ? Float.NaN : height.floatValue();
         return height;
     }
 
-    /**
-     * @return the hull's resting Y at that column, or {@code null} when the hull does not fit there
-     */
     private static Double probe(Level level, Entity vehicle, int localX, int localZ, double stepUp) {
-        double x = localX * STEP;
-        double z = localZ * STEP;
+        double x = (originX + localX) * STEP;
+        double z = (originZ + localZ) * STEP;
         BlockPos surface = level.getHeightmapPos(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES,
-                new BlockPos((int) Math.floor(x), 0, (int) Math.floor(z)));
+                BlockPos.containing(x, 0.0D, z));
         int y = surface.getY();
-        BlockPos ground = new BlockPos((int) Math.floor(x), y - 1, (int) Math.floor(z));
+        BlockPos ground = BlockPos.containing(x, y - 1, z);
         if (level.getBlockState(ground).getCollisionShape(level, ground).isEmpty()
                 || !level.getBlockState(ground).getFluidState().isEmpty()) {
             return null;
@@ -306,9 +302,18 @@ public final class VehiclePathPlanner {
         if (!level.getFluidState(surface).isEmpty() || !level.getFluidState(surface.above()).isEmpty()) {
             return null;
         }
-        AABB box = vehicle.getBoundingBox().move(x - vehicle.getX(), y - vehicle.getY(), z - vehicle.getZ());
-        box = box.deflate(0.05D);
-        return VehicleTerrain.boxBlocked(level, box, stepUp) ? null : (double) y;
+        if (y < level.getMinBuildHeight() + 1 || y > level.getMaxBuildHeight() - 4) {
+            return null;
+        }
+        // Two blocks of headroom instead of a full hull box scan per node: the planner only walks on the surface, and
+        // the per node box scan was the single biggest cost of one search.
+        BlockPos head1 = surface;
+        BlockPos head2 = surface.above();
+        if (!level.getBlockState(head1).getCollisionShape(level, head1).isEmpty()
+                || !level.getBlockState(head2).getCollisionShape(level, head2).isEmpty()) {
+            return null;
+        }
+        return (double) y;
     }
 
     private static double heuristic(int localX, int localZ, int goalLocalX, int goalLocalZ) {
@@ -415,7 +420,7 @@ public final class VehiclePathPlanner {
             for (Vec3 point : this.points) {
                 best = Math.min(best, point.distanceToSqr(position));
             }
-            return best > 100.0D;
+            return best > OFF_PATH * OFF_PATH;
         }
 
         private Vec3 waypoint(Vec3 position) {
@@ -431,13 +436,20 @@ public final class VehiclePathPlanner {
                     nearest = i;
                 }
             }
-            double remaining = LOOKAHEAD;
             int index = nearest;
+            while (index + 1 < this.points.size() && this.points.get(index).distanceToSqr(position) < 4.0D) {
+                index++;
+            }
+            double remaining = LOOKAHEAD;
             while (index + 1 < this.points.size() && remaining > 0.0D) {
                 remaining -= this.points.get(index).distanceTo(this.points.get(index + 1));
                 index++;
             }
-            return this.points.get(index);
+            Vec3 chosen = this.points.get(index);
+            if (chosen.distanceToSqr(position) < 4.0D) {
+                return null;
+            }
+            return chosen;
         }
     }
 }

@@ -21,7 +21,6 @@ public final class VehicleGunner {
     private static final float YAW_TOLERANCE = 2.0F;
     private static final float FAIL_OPEN_YAW = 6.0F;
 
-    /** Main cannon targets below this max health are not worth a shell (maggots, swarmers). */
     private static final double MAIN_CANNON_MIN_HEALTH = 50.0D;
 
     private static final int MACHINE_GUN_SETTLE = 3;
@@ -75,6 +74,45 @@ public final class VehicleGunner {
     private VehicleGunner() {
     }
 
+    public static boolean claimDriverSeat(Entity vehicle, NeutralHumanoid humanoid) {
+        if (!resolve() || changeSeat == null) {
+            return false;
+        }
+        try {
+            changeSeat.invoke(vehicle, humanoid, 0);
+            return true;
+        } catch (ReflectiveOperationException | RuntimeException exception) {
+            return false;
+        }
+    }
+
+    public static boolean armed(Entity vehicle) {
+        if (!resolve()) {
+            return false;
+        }
+        for (Object unit : VehicleAim.seatUnits(vehicle)) {
+            if (carriesWeapon(unit, getCurrentWeapon)) {
+                return true;
+            }
+            if (getCurrentSecondaryWeapon != null && carriesWeapon(unit, getCurrentSecondaryWeapon)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean carriesWeapon(Object unit, Method accessor) {
+        if (accessor == null) {
+            return false;
+        }
+        try {
+            Object value = accessor.invoke(unit);
+            return value instanceof Optional<?> optional && optional.isPresent();
+        } catch (ReflectiveOperationException | RuntimeException exception) {
+            return false;
+        }
+    }
+
     private static Object rootUnit(Object unit) {
         if (getRootParentWeaponUnit == null) {
             return unit;
@@ -97,7 +135,8 @@ public final class VehicleGunner {
     }
 
     public static void tick(NeutralHumanoid humanoid) {
-        if (humanoid.level().isClientSide || humanoid.isDowned()) {
+        if (humanoid.level().isClientSide || humanoid.isDowned()
+                || !humanoid.isAlive() || humanoid.isRemoved()) {
             return;
         }
         Entity vehicle = humanoid.getVehicle();
@@ -121,8 +160,7 @@ public final class VehicleGunner {
         }
         for (Object unit : units) {
             if (!controlledBy(unit, humanoid)) {
-                // The turret belongs to somebody else (for example the player driving), and its direction follows that
-                // operator's controls. Aiming it would fight them and firing it blind is worse than staying silent.
+
                 continue;
             }
             bindOwner(unit, humanoid);
@@ -131,7 +169,7 @@ public final class VehicleGunner {
             Vec3 aimPoint = leadPoint(owner, target);
             boolean worthCannon = target.getMaxHealth() >= MAIN_CANNON_MIN_HEALTH;
             if (!line && worthCannon) {
-                // No line for the cannon: ask the driver for a firing position instead of sitting there.
+
                 requestReposition(vehicle, target);
             }
             if (GUN_LOGS.incrementAndGet() <= 600) {
@@ -147,7 +185,7 @@ public final class VehicleGunner {
                 continue;
             }
             int settle = AIM_TICKS.merge(System.identityHashCode(unit), 1, Integer::sum);
-            // Machine guns fire on anything that moves, line or no line: they are for suppression, not precision.
+
             if (getCurrentSecondaryWeapon != null && settle >= MACHINE_GUN_SETTLE) {
                 fire(unit, humanoid, getCurrentSecondaryWeapon, true);
             }
@@ -155,9 +193,7 @@ public final class VehicleGunner {
                 continue;
             }
             if (!aligned(owner, aimPoint)) {
-                // A turret that never converges must not spray rounds at whatever it happens to be pointing at, but
-                // waiting for a perfect two degree solution while the vehicle moves made the gun far too quiet. Once
-                // the target has been tracked for a while and the barrel is close, fire rather than never fire.
+
                 if (settle < FAIL_OPEN_AFTER || yawError(owner, aimPoint) > FAIL_OPEN_YAW) {
                     continue;
                 }
@@ -166,13 +202,6 @@ public final class VehicleGunner {
         }
     }
 
-    /**
-     * Aim lead: the turret points where the target will be when the round gets there.
-     *
-     * <p>Vehicle rounds carry a per tick {@code velocity} (10 by default, i.e. 200 m/s), so even a walking target
-     * needs a lead of a few ticks at range. Aiming at the current eye position made cannon shells and especially
-     * preset-guidance missiles land behind the target, which read as "the missiles miss".</p>
-     */
     private static Vec3 leadPoint(Object unit, LivingEntity target) {
         Vec3 aim = target.getEyePosition();
         Vec3 origin = VehicleAim.unitPosition(unit);
@@ -187,8 +216,7 @@ public final class VehicleGunner {
             if (flight > 100.0D) {
                 break;
             }
-            // Shells and rockets drop, so the lead point also rises by the drop over the flight time. Without this the
-            // rounds landed short at range even when the turret was perfectly on target.
+
             double drop = 0.5D * gravity * flight * flight;
             aim = target.getEyePosition().add(motion.scale(flight)).add(0.0D, drop, 0.0D);
         }
@@ -251,10 +279,6 @@ public final class VehicleGunner {
         }
     }
 
-    /**
-     * Vehicle weapons used to fire at any target in range, including through city walls; the turret now needs an
-     * unobstructed line from the weapon mount before it aims or shoots.
-     */
     private static boolean lineOfFire(Entity vehicle, Object unit, LivingEntity target) {
         Vec3 from = VehicleAim.unitPosition(unit);
         if (from == null) {
@@ -320,7 +344,6 @@ public final class VehicleGunner {
         return distance < radius && t > 0.25D && t < 0.85D;
     }
 
-    /** Asks the driver for a hull position that can actually see the target with the cannon. */
     private static void requestReposition(Entity vehicle, LivingEntity target) {
         long now = vehicle.level().getGameTime();
         Long last = LAST_ORDER.get(vehicle.getId());
@@ -423,12 +446,31 @@ public final class VehicleGunner {
         if (vehicle == null || units.isEmpty()) {
             return;
         }
+        // Only recenter while the hull is actually rolling: snapping the turret forward every tick while turning or
+        // standing still looks broken, and it fights whatever the gunner is doing.
+        if (vehicle.getDeltaMovement().horizontalDistanceSqr() < 0.02D) {
+            return;
+        }
         float yaw = (float) Math.toRadians(vehicle.getYRot());
         Vec3 front = vehicle.position()
                 .add(-Math.sin(yaw) * 24.0D, 0.0D, Math.cos(yaw) * 24.0D)
                 .add(0.0D, vehicle.getBbHeight() * 0.5D, 0.0D);
         for (Object unit : units) {
             try {
+                float current = VehicleAim.turretYaw(unit);
+                if (!Float.isNaN(current)) {
+                    // Ease towards the front a few degrees per tick instead of teleporting the barrel.
+                    Vec3 origin = VehicleAim.unitPosition(unit);
+                    if (origin != null) {
+                        float desired = (float) Math.toDegrees(Math.atan2(-(front.x - origin.x), front.z - origin.z));
+                        float delta = net.minecraft.util.Mth.wrapDegrees(desired - current);
+                        float step = net.minecraft.util.Mth.clamp(delta, -3.0F, 3.0F);
+                        float eased = current + step;
+                        double radians = Math.toRadians(eased);
+                        front = new Vec3(origin.x - Math.sin(radians) * 24.0D, front.y,
+                                origin.z + Math.cos(radians) * 24.0D);
+                    }
+                }
                 aim.invoke(unit, front);
             } catch (ReflectiveOperationException | RuntimeException exception) {
                 return;
@@ -460,8 +502,7 @@ public final class VehicleGunner {
                 return found;
             }
             boolean driving = isDriving(humanoid, list);
-            // The seat we are sitting in comes first: the driver can shoot too, and on many vehicles the driver
-            // seat's part unit is the weapon the pilot actually controls.
+
             if (getOwnOperatorUnit != null) {
                 Object own = getOwnOperatorUnit.invoke(vehicle, humanoid);
                 if (own != null && weaponUnitClass.isInstance(own)) {
@@ -483,8 +524,7 @@ public final class VehicleGunner {
                     }
                 } else if (seatFree(list.get(index))) {
                     if (driving) {
-                        // This vehicle lets the driver work the main gun, which lives on its own seat's part unit.
-                        // The driver never left that seat, so the unit has no owner and stayed silent: adopt it here.
+
                         bindOwner(unit, humanoid);
                         if (!found.contains(unit)) {
                             found.add(unit);
@@ -495,8 +535,7 @@ public final class VehicleGunner {
                     }
                 }
             }
-            // Only look for another seat when we are not the driver: abandoning the wheel to man a turret used to
-            // leave the vehicle stopped and the driver seat empty.
+
             if (found.isEmpty() && claimable != null) {
                 changeSeat.invoke(vehicle, humanoid, claimableSeat);
                 found.add(claimable);
@@ -514,12 +553,6 @@ public final class VehicleGunner {
         return found;
     }
 
-    /**
-     * A weapon unit only stabilises and rotates toward {@code aim(...)} while it has an owner ({@code PartUnit.owner},
-     * which the mod sets when a player takes the seat). An AI boarder never goes through that path, so its turret stayed
-     * inert and never aligned - the gunner looked like it refused to use its own seat weapon. Claiming an unowned unit
-     * fixes both the aim and the ownership check.
-     */
     private static void bindOwner(Object unit, NeutralHumanoid humanoid) {
         if (setOwner == null) {
             return;
@@ -530,7 +563,7 @@ public final class VehicleGunner {
                 setOwner.invoke(unit, humanoid);
             }
         } catch (ReflectiveOperationException | RuntimeException ignored) {
-            // the unit keeps its current owner
+
         }
     }
 

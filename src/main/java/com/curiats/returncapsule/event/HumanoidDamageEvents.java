@@ -30,14 +30,8 @@ public final class HumanoidDamageEvents {
         if (victim.getHealth() <= 0.0F) {
             return;
         }
-        // The seal applies to every humanoid hit, melee or gun. The percentage health deduction, however, is replaced by
-        // the standard issue blade's own (higher) percentage when the swing came from that sword, so the two never add
-        // up; guns, which are held instead of the blade, keep the built-in three percent.
-        DamageLock.lock(victim, victim.level().getGameTime());
-        if (humanoid.getMainHandItem().is(com.curiats.returncapsule.registry.ModItems.STANDARD_ISSUE_SWORD.get())) {
-            return;
-        }
-        float share = victim.getMaxHealth() * DamageLock.share();
-        victim.setHealth(Math.max(0.0F, victim.getHealth() - share));
+        // The seal applies to every humanoid hit, melee or gun. A base humanoid never removes health or max health:
+        // the target simply cannot heal back above maxHealth - sealed until this humanoid dies.
+        DamageLock.lock(victim, victim.level().getGameTime(), humanoid.getUUID());
     }
 }

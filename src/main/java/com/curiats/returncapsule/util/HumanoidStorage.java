@@ -45,16 +45,19 @@ public final class HumanoidStorage {
 
     public static boolean store(ServerPlayer player, NeutralHumanoid humanoid) {
         CompoundTag data = player.getPersistentData();
-        if (data.getInt(COUNT) >= MAX_STORED) {
+        if (data.getInt(COUNT) >= MAX_STORED || humanoid.isRemoved() || humanoid.isPassenger()) {
             return false;
         }
         ListTag guns = data.getList(GUNS, Tag.TAG_COMPOUND);
         takeGun(guns, humanoid.getItemInHand(InteractionHand.MAIN_HAND));
         takeGun(guns, humanoid.getItemInHand(InteractionHand.OFF_HAND));
+        // The discard guard refuses a plain discard() for a live humanoid, so this goes through the storage specific
+        // removal instead; the count only moves when the entity really left the world.
+        if (!humanoid.removeForStorage()) {
+            return false;
+        }
         data.put(GUNS, guns);
         data.putInt(COUNT, data.getInt(COUNT) + 1);
-        // No per entity data is written: the humanoid simply ceases to exist and only its weapon survived above.
-        humanoid.discard();
         if (humanoid.level() instanceof ServerLevel level) {
             level.playSound(null, humanoid.blockPosition(), SoundEvents.ENDERMAN_TELEPORT, SoundSource.PLAYERS, 0.8F, 1.2F);
         }
@@ -92,6 +95,10 @@ public final class HumanoidStorage {
         humanoid.moveTo(position.x, position.y, position.z, level.random.nextFloat() * 360.0F, 0.0F);
         humanoid.setHealth(humanoid.getMaxHealth());
         humanoid.setPersistenceRequired();
+        // Every base humanoid carries the standard issue blade; create() does not run finalizeSpawn, so a released one
+        // would come back empty handed without this.
+        humanoid.setItemInHand(InteractionHand.MAIN_HAND,
+                com.curiats.returncapsule.item.StandardIssueSwordItem.createStack());
         CompoundTag data = player.getPersistentData();
         ListTag guns = data.getList(GUNS, Tag.TAG_COMPOUND);
         if (!guns.isEmpty()) {
@@ -99,10 +106,8 @@ public final class HumanoidStorage {
             ItemStack weapon = ItemStack.of(guns.getCompound(index));
             guns.remove(index);
             data.put(GUNS, guns);
-            // The slot is rolled again instead of being inherited: a stored gun is just "a gun the player owns", and
-            // the released humanoid decides afresh whether to carry it in the main or the off hand.
-            InteractionHand slot = level.random.nextBoolean() ? InteractionHand.MAIN_HAND : InteractionHand.OFF_HAND;
-            humanoid.setItemInHand(slot, weapon);
+            // The blade keeps the main hand; a stored gun comes back in the off hand.
+            humanoid.setItemInHand(InteractionHand.OFF_HAND, weapon);
         }
         data.putInt(COUNT, Math.max(0, data.getInt(COUNT) - 1));
         data.putLong(RELEASE_READY, gameTime + RELEASE_COOLDOWN_TICKS);
