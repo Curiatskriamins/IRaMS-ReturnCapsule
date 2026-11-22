@@ -206,6 +206,7 @@ public final class GeoModelLoader {
         private final List<GeoFace> staticFaces = new ArrayList<>();
         private final List<GeoFace> lidFaces = new ArrayList<>();
         private final Vector3f lidShift = new Vector3f();
+        private final java.util.List<Float> markers = new java.util.ArrayList<>();
         private final Vector4f point = new Vector4f();
         private final Vector3f normal = new Vector3f();
         private float minX = Float.MAX_VALUE;
@@ -243,6 +244,18 @@ public final class GeoModelLoader {
                         .rotateY(cube.rotY)
                         .rotateX(cube.rotX)
                         .translate(-cube.pivotX, -cube.pivotY, -cube.pivotZ);
+                if (cube.locator) {
+                    // A one unit cube is a Blockbench locator, not geometry: keep its centre and draw nothing.
+                    Vector4f centre = new Vector4f(
+                            cube.x + cube.width * 0.5F,
+                            cube.y + cube.height * 0.5F,
+                            cube.z + cube.depth * 0.5F, 1.0F);
+                    cubeMatrix.transform(centre);
+                    this.markers.add(centre.x);
+                    this.markers.add(centre.y);
+                    this.markers.add(centre.z);
+                    // Fall through: these cubes are decorative too, they are only locators as well.
+                }
                 Matrix3f normalMatrix = new Matrix3f(cubeMatrix);
                 for (RawFace face : cube.faces) {
                     this.addFace(face, cubeMatrix, normalMatrix, lid);
@@ -280,6 +293,14 @@ public final class GeoModelLoader {
             this.maxZ = Math.max(this.maxZ, z);
         }
 
+        private static float[] toArray(java.util.List<Float> values) {
+            float[] out = new float[values.size()];
+            for (int i = 0; i < out.length; i++) {
+                out[i] = values.get(i);
+            }
+            return out;
+        }
+
         GeoModel finish(int rootCount, ResourceLocation geo) {
             if (!this.hasBounds) {
                 LOGGER.warn("Capsule geometry {} contains no faces", geo);
@@ -292,7 +313,7 @@ public final class GeoModelLoader {
                     this.minY,
                     (this.minZ + this.maxZ) * 0.5F,
                     this.lidShift.x, this.lidShift.y, this.lidShift.z,
-                    this.glow);
+                    toArray(this.markers), this.glow);
             LOGGER.info("Loaded capsule geometry {}: {} root bone(s), {} face(s), height {} units",
                     geo, rootCount, model.faceCount(), this.maxY - this.minY);
             return model;
@@ -337,6 +358,7 @@ public final class GeoModelLoader {
         final float rotX;
         final float rotY;
         final float rotZ;
+        final boolean locator;
         final List<RawFace> faces = new ArrayList<>();
 
         RawCube(float x, float y, float z, float width, float height, float depth,
@@ -354,6 +376,9 @@ public final class GeoModelLoader {
             this.rotX = rotX;
             this.rotY = rotY;
             this.rotZ = rotZ;
+            this.locator = Math.abs(width - 1.0F) < 1.0E-4F
+                    && Math.abs(height - 1.0F) < 1.0E-4F
+                    && Math.abs(depth - 1.0F) < 1.0E-4F;
         }
     }
 

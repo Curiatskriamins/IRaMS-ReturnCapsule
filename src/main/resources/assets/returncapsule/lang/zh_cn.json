@@ -15,7 +15,7 @@
   "death.attack.capsule_impact": "%1$s 被物资返回舱砸死了",
   "death.attack.capsule_impact.player": "%1$s 被 %2$s 的物资返回舱砸死了",
   "effect.returncapsule.pursuit": "列装追击",
-  "effect.returncapsule.shock": "震悚",
+  "effect.returncapsule.shock": "震撼",
   "entity.returncapsule.base_humanoid": "基础人形",
   "entity.returncapsule.boom": "巡航弹",
   "entity.returncapsule.supply_capsule": "物资返回舱",

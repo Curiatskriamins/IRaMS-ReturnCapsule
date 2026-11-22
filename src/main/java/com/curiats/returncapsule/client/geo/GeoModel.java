@@ -11,13 +11,14 @@ public final class GeoModel {
     private final float lidOffsetX;
     private final float lidOffsetY;
     private final float lidOffsetZ;
+    private final float[] markerPoints;
     private final boolean glow;
     private final int faceCount;
 
     GeoModel(GeoFace[] staticFaces, GeoFace[] lidFaces,
              float centerX, float centerY, float centerZ,
              float lidOffsetX, float lidOffsetY, float lidOffsetZ,
-             boolean glow) {
+             float[] markerPoints, boolean glow) {
         this.staticFaces = staticFaces;
         this.lidFaces = lidFaces;
         this.centerX = centerX;
@@ -26,12 +27,13 @@ public final class GeoModel {
         this.lidOffsetX = lidOffsetX;
         this.lidOffsetY = lidOffsetY;
         this.lidOffsetZ = lidOffsetZ;
+        this.markerPoints = markerPoints;
         this.glow = glow;
         this.faceCount = staticFaces.length + lidFaces.length;
     }
 
     static GeoModel empty(boolean glow) {
-        return new GeoModel(NO_FACES, NO_FACES, 0.0F, 0.0F, 0.0F, 0.0F, 0.0F, 0.0F, glow);
+        return new GeoModel(NO_FACES, NO_FACES, 0.0F, 0.0F, 0.0F, 0.0F, 0.0F, 0.0F, new float[0], glow);
     }
 
     public boolean isEmpty() {
@@ -76,5 +78,10 @@ public final class GeoModel {
 
     public float lidOffsetZ() {
         return this.lidOffsetZ;
+    }
+
+    /** Locator cubes (1x1x1) as x, y, z triples in model space; used for the retro rocket nozzles. */
+    public float[] markerPoints() {
+        return this.markerPoints;
     }
 }

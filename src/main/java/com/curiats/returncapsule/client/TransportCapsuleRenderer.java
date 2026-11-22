@@ -19,7 +19,7 @@ public class TransportCapsuleRenderer extends EntityRenderer<TransportCapsuleEnt
 
     @Override
     public ResourceLocation getTextureLocation(TransportCapsuleEntity entity) {
-        return CapsuleGeoModel.TEXTURE;
+        return MannedCapsuleGeoModel.TEXTURE;
     }
 
     @Override
@@ -27,7 +27,9 @@ public class TransportCapsuleRenderer extends EntityRenderer<TransportCapsuleEnt
                        MultiBufferSource buffer, int packedLight) {
         pose.pushPose();
         pose.mulPose(Axis.YP.rotationDegrees(180.0F - entityYaw + Config.MODEL_YAW_OFFSET.get().floatValue()));
-        CapsuleGeoModel.get().render(pose, buffer, packedLight, OverlayTexture.NO_OVERLAY, 0.0F);
+        // The manned capsule uses its own geometry, rendered at twice the size; the pose stack offset stays the
+        // same so the entity origin is still the hull's base.
+        MannedCapsuleGeoModel.get().render(pose, buffer, packedLight, OverlayTexture.NO_OVERLAY);
         pose.popPose();
     }
 

@@ -62,7 +62,7 @@ public final class KillMarkerRenderer {
 
     @SubscribeEvent
     public static void onRenderLevel(RenderLevelStageEvent event) {
-        if (event.getStage() != RenderLevelStageEvent.Stage.AFTER_LEVEL) {
+        if (event.getStage() != RenderLevelStageEvent.Stage.AFTER_ENTITIES) {
             return;
         }
         Minecraft minecraft = Minecraft.getInstance();
@@ -91,8 +91,9 @@ public final class KillMarkerRenderer {
             float distance = (float) anchor.subtract(cameraPos).length();
             float half = Mth.clamp(distance * (float) Math.tan(ANGLE), MIN, MAX) * 0.5F;
             pose.pushPose();
+            // The entity stage pose stack is already rotated into view space, so the marker is placed by the camera
+            // translation alone; a quad in the XY plane then faces the screen.
             pose.translate(anchor.x - cameraPos.x, anchor.y - cameraPos.y, anchor.z - cameraPos.z);
-            pose.mulPose(camera.rotation());
             Matrix4f matrix = pose.last().pose();
             Billboard.emit(consumer, matrix, half);
             pose.popPose();

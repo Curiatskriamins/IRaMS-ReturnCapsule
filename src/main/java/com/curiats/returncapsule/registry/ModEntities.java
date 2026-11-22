@@ -31,7 +31,9 @@ public final class ModEntities {
     public static final RegistryObject<EntityType<TransportCapsuleEntity>> TRANSPORT_CAPSULE =
             ENTITIES.register("transport_capsule", () -> EntityType.Builder
                     .<TransportCapsuleEntity>of(TransportCapsuleEntity::new, MobCategory.MISC)
-                    .sized(2.45F, 2.45F)
+                    // The manned model is 2.19 blocks wide at author scale and rendered at twice that, so the box
+                    // matches its footprint the same way the supply capsule's box matches its own model width.
+                    .sized(4.4F, 4.4F)
                     .clientTrackingRange(2000)
                     .updateInterval(1)
                     .build(ReturnCapsuleMod.id("transport_capsule").toString()));

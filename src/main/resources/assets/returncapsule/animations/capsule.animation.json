@@ -10,8 +10,7 @@
 							"vector": [0, 0, 0]
 						},
 						"0.75": {
-							"vector": [2, 14, -4],
-							"easing": "easeInSine"
+							"vector": [2, 14, -4]
 						},
 						"2.125": {
 							"pre": {
@@ -35,8 +34,7 @@
 							"vector": [2, 14, -4]
 						},
 						"0.5": {
-							"vector": [0, 0, 0],
-							"easing": "easeInSine"
+							"vector": [0, 0, 0]
 						},
 						"1.0": {
 							"pre": {

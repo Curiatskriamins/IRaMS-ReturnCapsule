@@ -186,6 +186,9 @@ public class NeutralHumanoid extends PathfinderMob implements RangedAttackMob {
 
     private boolean bypassProtections;
 
+    /** Melee only while the tick counter is below this; set when the held gun cannot actually fire. */
+    private int meleeOnlyUntil;
+
     private boolean applyingHit;
 
     private boolean convertedHit;
@@ -258,6 +261,31 @@ public class NeutralHumanoid extends PathfinderMob implements RangedAttackMob {
     private BlockPos home;
 
     private boolean followEnabled = true;
+
+    /** The player who summoned this humanoid; it follows nobody else. */
+    @javax.annotation.Nullable
+    private java.util.UUID ownerUUID;
+
+    @javax.annotation.Nullable
+    public java.util.UUID getOwnerUUID() {
+        return this.ownerUUID;
+    }
+
+    public void setOwnerUUID(@javax.annotation.Nullable java.util.UUID owner) {
+        this.ownerUUID = owner;
+    }
+
+    public boolean isOwnedBy(net.minecraft.world.entity.player.Player player) {
+        return this.ownerUUID != null && player != null && this.ownerUUID.equals(player.getUUID());
+    }
+
+    @javax.annotation.Nullable
+    private net.minecraft.world.entity.player.Player ownerPlayer() {
+        if (this.ownerUUID == null || !(this.level() instanceof net.minecraft.server.level.ServerLevel server)) {
+            return null;
+        }
+        return server.getPlayerByUUID(this.ownerUUID);
+    }
 
     private int shieldBreakTicks;
 
@@ -473,7 +501,10 @@ public class NeutralHumanoid extends PathfinderMob implements RangedAttackMob {
     private static final double GROUP_REGROUP_DISTANCE = 24.0D;
 
     private double distanceToNearestPlayerSqr() {
-        Player player = this.level().getNearestPlayer(this, 256.0D);
+        Player player = this.ownerPlayer();
+        if (player == null) {
+            player = this.ownerUUID != null ? null : this.level().getNearestPlayer(this, 256.0D);
+        }
         return player == null ? Double.MAX_VALUE : this.distanceToSqr(player);
     }
 
@@ -538,7 +569,7 @@ public class NeutralHumanoid extends PathfinderMob implements RangedAttackMob {
     }
 
     public boolean shouldHoldGun(double distance, double hysteresis) {
-        if (this.isPassenger()) {
+        if (this.isPassenger() || gunSuppressed()) {
             return false;
         }
         if (this.rangedWeapon.isEmpty() || !HumanoidToggles.isEnabled(HumanoidToggles.Slot.RANGED)) {
@@ -612,9 +643,21 @@ public class NeutralHumanoid extends PathfinderMob implements RangedAttackMob {
         aim.track(target);
         double distance = Math.sqrt(this.distanceToSqr(target));
         aim.resolveExpired(this.level().getGameTime(), distance);
-        this.performRangedAttack(target, 1.0F);
+        boolean fired = TaczShooter.fire(this, target);
+        if (!fired) {
+            return false;
+        }
         aim.onShot(target);
         return true;
+    }
+
+    /** Keeps the gun holstered until this tick, so a humanoid whose gun cannot shoot closes in with the blade. */
+    public void suppressGunUntil(int tick) {
+        this.meleeOnlyUntil = Math.max(this.meleeOnlyUntil, tick);
+    }
+
+    public boolean gunSuppressed() {
+        return this.tickCount < this.meleeOnlyUntil;
     }
 
     private boolean friendlyOnLine(LivingEntity target) {
@@ -1612,8 +1655,9 @@ public class NeutralHumanoid extends PathfinderMob implements RangedAttackMob {
         if (this.level().isClientSide) {
             return;
         }
-        net.minecraft.world.entity.player.Player player = this.level().getNearestPlayer(this, 256.0D);
-        if (player == null || this.distanceToSqr(player) < LEASH_DISTANCE * LEASH_DISTANCE) {
+        net.minecraft.world.entity.player.Player player = this.ownerPlayer();
+        if (player == null || player.level() != this.level()
+                || this.distanceToSqr(player) < LEASH_DISTANCE * LEASH_DISTANCE) {
             this.farFromPlayerTicks = 0;
             return;
         }
@@ -2150,6 +2194,9 @@ public class NeutralHumanoid extends PathfinderMob implements RangedAttackMob {
 
     @Override
     public void addAdditionalSaveData(CompoundTag tag) {
+        if (this.ownerUUID != null) {
+            tag.putUUID("returncapsule_owner", this.ownerUUID);
+        }
         super.addAdditionalSaveData(tag);
         if (!this.rangedWeapon.isEmpty()) {
             tag.put(TAG_RANGED, this.rangedWeapon.save(new CompoundTag()));
@@ -2165,6 +2212,9 @@ public class NeutralHumanoid extends PathfinderMob implements RangedAttackMob {
 
     @Override
     public void readAdditionalSaveData(CompoundTag tag) {
+        if (tag.hasUUID("returncapsule_owner")) {
+            this.ownerUUID = tag.getUUID("returncapsule_owner");
+        }
         super.readAdditionalSaveData(tag);
         this.rangedWeapon = tag.contains(TAG_RANGED)
         ? ItemStack.of(tag.getCompound(TAG_RANGED))

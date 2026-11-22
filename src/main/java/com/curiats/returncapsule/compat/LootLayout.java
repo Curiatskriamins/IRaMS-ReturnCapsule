@@ -27,22 +27,17 @@ public final class LootLayout {
             stacks.set(j, value);
         }
         int size = container.getContainerSize();
-        int step = Math.max(1, size / stacks.size());
-        int cursor = 0;
+        // Pack from the first slot upwards like a vanilla chest. Spreading the stacks over all 324 slots left a hole
+        // between almost every item, which read as an almost empty capsule even at a sixty percent fill target.
+        int slot = 0;
         for (ItemStack stack : stacks) {
-            int slot = Math.min(size - 1, cursor * step + (step > 1 ? random.nextInt(step) : 0));
             while (slot < size && !container.getItem(slot).isEmpty()) {
                 slot++;
-            }
-            if (slot >= size) {
-                for (slot = 0; slot < size && !container.getItem(slot).isEmpty(); slot++) {
-                }
             }
             if (slot >= size) {
                 return;
             }
             container.setItem(slot, stack);
-            cursor++;
         }
         container.setChanged();
     }

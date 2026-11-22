@@ -60,11 +60,19 @@ final class CapsuleAnimator {
                 : this.owner.getLevel().getGameTime() - this.startTick;
         float smoothElapsed = elapsed + partialTick;
         return switch (this.state) {
-            case OPENING -> Mth.clamp(smoothElapsed / (float) Config.LID_OPEN_TICKS.get(), 0.0F, 1.0F);
+            case OPENING -> easeInSine(Mth.clamp(smoothElapsed / (float) Config.LID_OPEN_TICKS.get(), 0.0F, 1.0F));
             case OPEN -> 1.0F;
-            case CLOSING -> 1.0F - Mth.clamp(smoothElapsed / (float) Config.LID_CLOSE_TICKS.get(), 0.0F, 1.0F);
+            case CLOSING -> 1.0F - easeInSine(Mth.clamp(smoothElapsed / (float) Config.LID_CLOSE_TICKS.get(), 0.0F, 1.0F));
             case CLOSED -> 0.0F;
         };
+    }
+
+    /**
+     * The ease the lid animation was authored with in Blockbench ({@code easeInSine}), evaluated here because the
+     * animation file is not played at runtime: the lid is moved from this progress value directly.
+     */
+    private static float easeInSine(float t) {
+        return 1.0F - Mth.cos(t * (float) Math.PI * 0.5F);
     }
 
     void sync() {

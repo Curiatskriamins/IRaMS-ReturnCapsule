@@ -28,6 +28,14 @@ public class HumanoidCombatGoal extends Goal {
 
     private static final int AIM_SWITCH_TICKS = 20;
 
+    /** Consecutive shots that never left the barrel before the humanoid gives up on the gun. */
+    private static final int GUN_FAILURE_LIMIT = 20;
+
+    private static final int GUN_FAILURE_SUPPRESS_TICKS = 200;
+
+    /** Only this close does a failed gun turn into a charge. */
+    private static final double MELEE_FALLBACK_RANGE = 24.0D;
+
     private static final int STEP_BACK_TICKS = 8;
 
     private static final float STEP_BACK_SPEED = 0.6F;
@@ -70,6 +78,8 @@ public class HumanoidCombatGoal extends Goal {
     private boolean flanking;
 
     private int aimTicks;
+
+    private int gunFailures;
 
     private AimMode aimMode = AimMode.HEAD;
 
@@ -200,7 +210,7 @@ public class HumanoidCombatGoal extends Goal {
             this.mob.chooseGunFor(distance);
             this.holdRange(target, distance);
             HumanoidGrenadier.tryThrow(this.mob, target, false);
-            if (!HumanoidSight.canSee(this.mob.level(), this.mob, target)) {
+            if (!clearLineToTarget(target)) {
                 this.attackCooldown = 5;
                 return;
             }
@@ -255,6 +265,20 @@ public class HumanoidCombatGoal extends Goal {
         this.targetId = -1;
         this.mob.setTarget(null);
         return true;
+    }
+
+    /** True when nothing solid sits between the muzzle and the target itself. */
+    private boolean clearLineToTarget(LivingEntity target) {
+        net.minecraft.world.phys.Vec3 muzzle = this.mob.getEyePosition();
+        net.minecraft.world.phys.Vec3 point = this.mob.precisionWeapon()
+                ? new net.minecraft.world.phys.Vec3(target.getX(), target.getEyeY(), target.getZ())
+                : target.getBoundingBox().getCenter();
+        if (HumanoidSight.canSee(this.mob.level(), this.mob, muzzle, point)) {
+            return true;
+        }
+        // Clustered enemies are shot at the cluster point; only fall back to it when the body itself is screened.
+        return this.mob.cluster() != null && this.mob.cluster().contains(target)
+                && HumanoidSight.canSee(this.mob.level(), this.mob, muzzle, this.mob.aimPointFor(target));
     }
 
     private boolean openGroundFallback(LivingEntity target) {
@@ -446,11 +470,7 @@ public class HumanoidCombatGoal extends Goal {
 
     private void attack(LivingEntity target, double distance) {
         if (this.mob.isRangedStance()) {
-            boolean clear = this.mob.cluster() != null && this.mob.cluster().contains(target)
-                    ? HumanoidSight.canSee(this.mob.level(), this.mob, this.mob.getEyePosition(),
-                            this.mob.aimPointFor(target))
-                    : HumanoidSight.canSee(this.mob.level(), this.mob, target);
-            if (!clear) {
+            if (!clearLineToTarget(target)) {
                 return;
             }
             boolean precision = this.mob.precisionWeapon();
@@ -474,7 +494,16 @@ public class HumanoidCombatGoal extends Goal {
             }
             this.aimTicks = 0;
             this.attackCooldown = 0;
-            this.mob.fireGun(target);
+            if (this.mob.fireGun(target)) {
+                this.gunFailures = 0;
+            } else if (++this.gunFailures >= GUN_FAILURE_LIMIT) {
+                // The gun never shoots (not a service gun, empty, never ready). Only fall back to the blade when the
+                // target is close enough to reach: charging a target three hundred blocks away is not a fix.
+                this.gunFailures = 0;
+                if (distance <= MELEE_FALLBACK_RANGE) {
+                    this.mob.suppressGunUntil(this.mob.tickCount + GUN_FAILURE_SUPPRESS_TICKS);
+                }
+            }
             return;
         }
         if (distance > HumanoidCombatRules.MELEE_REACH) {

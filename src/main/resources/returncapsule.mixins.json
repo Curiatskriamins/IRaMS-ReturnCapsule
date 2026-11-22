@@ -9,7 +9,8 @@
         "EntityDiscardGuardMixin",
         "LivingEntityHealLockMixin",
         "HumanoidAggroGuardMixin",
-        "PlayerHurtMixin"
+        "PlayerHurtMixin",
+        "MobPickupGuardMixin"
     ],
     "injectors": {
         "defaultRequire": 1

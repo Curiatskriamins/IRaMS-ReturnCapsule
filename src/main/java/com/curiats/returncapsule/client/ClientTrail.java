@@ -8,6 +8,9 @@ import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.core.particles.DustParticleOptions;
 import net.minecraft.core.particles.ParticleOptions;
 import net.minecraft.core.particles.ParticleTypes;
+import net.minecraft.util.Mth;
+import net.minecraft.world.level.levelgen.Heightmap;
+import net.minecraft.world.phys.Vec3;
 import net.minecraft.util.RandomSource;
 import org.joml.Vector3f;
 
@@ -57,6 +60,40 @@ public final class ClientTrail {
         emit(level, random, ParticleTypes.CLOUD, 15, cx, cy, cz, 2.5D, 3.0D, 2.5D, 0.0D, 0.0D);
         if (entity.tickCount % 3 == 0) {
             emit(level, random, ParticleTypes.EXPLOSION, 6, cx, cy, cz, 1.5D, 1.8D, 1.5D, 0.0D, 0.0D);
+        }
+        landingBurn(level, random, entity);
+    }
+
+    /** Retro rocket flames in the last three blocks, and the dust cloud at touchdown. */
+    private static void landingBurn(ClientLevel level, RandomSource random, FallingCapsuleEntity entity) {
+        int groundY = level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES,
+                Mth.floor(entity.getX()), Mth.floor(entity.getZ()));
+        double currentY = entity.getY();
+        double gap = currentY - groundY;
+        if (gap > 3.5D || gap < -2.0D) {
+            return;
+        }
+        // Terminal velocity is close to four blocks per tick, so the last three blocks happen inside one tick: sample
+        // the movement segment instead of emitting once per tick, otherwise the jet is a few disconnected puffs.
+        double fromY = Math.max(entity.yOld, groundY + 3.0D);
+        double step = 0.3D;
+        if (fromY < currentY - 0.01D) {
+            MannedCapsuleGeoModel.forEachThruster(entity, point -> {
+                double localY = point.y - currentY;
+                for (double y = fromY; y <= currentY + 1.0E-4D; y += step) {
+                    emit(level, random, ParticleTypes.FLAME, 2, point.x, y + localY, point.z,
+                            0.14D, 0.06D, 0.14D, 0.0D, -1.4D);
+                }
+            });
+        } else {
+            MannedCapsuleGeoModel.forEachThruster(entity, point -> emit(level, random, ParticleTypes.FLAME, 3,
+                    point.x, point.y, point.z, 0.14D, 0.08D, 0.14D, 0.0D, -1.2D));
+        }
+        if (gap <= 1.0D) {
+            // Touchdown: campfire smoke spreading out under the hull.
+            double gy = groundY + 0.15D;
+            emit(level, random, ParticleTypes.CAMPFIRE_COSY_SMOKE, 90, entity.getX(), gy, entity.getZ(),
+                    4.6D, 0.6D, 4.6D, 0.0D, 0.05D);
         }
     }
 

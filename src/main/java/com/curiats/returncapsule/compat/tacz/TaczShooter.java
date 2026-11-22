@@ -50,25 +50,26 @@ public final class TaczShooter {
         }
     }
 
-    public static void fire(NeutralHumanoid mob, LivingEntity target) {
+    /** @return true when a round actually left the barrel */
+    public static boolean fire(NeutralHumanoid mob, LivingEntity target) {
         if (!resolve()) {
-            return;
+            return false;
         }
         ItemStack gun = mob.getMainHandItem();
         if (!TaczRifles.isServiceGun(gun)) {
             reportOutcome("NOT_A_SERVICE_GUN", target);
-            return;
+            return false;
         }
         try {
             Object operator = operator(mob);
             if (!mob.isGunDrawn()) {
                 draw.invoke(operator, (Supplier<ItemStack>) () -> mob.getMainHandItem());
                 mob.setGunDrawn(true);
-                return;
+                return false;
             }
 
             if (!ready(operator)) {
-                return;
+                return false;
             }
             TaczRifles.prepareForMob(gun);
 
@@ -79,9 +80,12 @@ public final class TaczShooter {
             reportOutcome(outcome, target);
             if (!"SUCCESS".equals(outcome)) {
                 recover(outcome, mob, gun);
+                return false;
             }
+            return true;
         } catch (ReflectiveOperationException | RuntimeException exception) {
             warnOnce(exception);
+            return false;
         }
     }
 
@@ -133,7 +137,7 @@ public final class TaczShooter {
         if (!reportedOutcomes.add(outcome)) {
             return;
         }
-        ReturnCapsuleMod.LOGGER.debug("[humanoid] TaCZ refused a shot: {} (target {})", outcome, target.getName().getString());
+        ReturnCapsuleMod.LOGGER.info("[gun] TaCZ refused a shot: {} (target {})", outcome, target.getName().getString());
     }
 
     private static Object operator(NeutralHumanoid mob) throws ReflectiveOperationException {

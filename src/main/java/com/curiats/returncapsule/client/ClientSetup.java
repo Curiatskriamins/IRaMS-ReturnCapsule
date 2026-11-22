@@ -57,6 +57,7 @@ public final class ClientSetup {
             @Override
             protected void apply(Void unused, ResourceManager resourceManager, ProfilerFiller profiler) {
                 CapsuleGeoModel.reload();
+                MannedCapsuleGeoModel.reload();
                 BoomGeoModel.reload();
             }
         });

@@ -62,6 +62,12 @@ public final class HumanoidSkills {
 
     private static final Map<Integer, Integer> CRUISE_COOLDOWN = new ConcurrentHashMap<>();
 
+    /** Targets that already have a cruise bomb on the way, so a group does not all hit the same body. */
+    private static final Map<java.util.UUID, Long> INCOMING = new ConcurrentHashMap<>();
+
+    /** How long a target stays reserved; long enough to cover the descent from the launch height. */
+    private static final int STRIKE_RESERVE_TICKS = 300;
+
     private static final Map<Integer, List<Vec3>> BURST = new ConcurrentHashMap<>();
 
     private static final Map<Integer, Integer> BURST_FUSE = new ConcurrentHashMap<>();
@@ -211,6 +217,8 @@ public final class HumanoidSkills {
     private static LivingEntity findCruiseMark(ServerLevel level, NeutralHumanoid humanoid) {
         LivingEntity best = null;
         double bestDistance = CRUISE_RANGE * CRUISE_RANGE;
+        long now = level.getGameTime();
+        INCOMING.entrySet().removeIf(entry -> entry.getValue() <= now);
         for (LivingEntity other : level.getEntitiesOfClass(LivingEntity.class,
                 humanoid.getBoundingBox().inflate(CRUISE_RANGE))) {
             if (other == humanoid || !(other instanceof Enemy) || !other.isAlive()) {
@@ -220,6 +228,10 @@ public final class HumanoidSkills {
                 continue;
             }
             if (!level.canSeeSky(other.blockPosition())) {
+                continue;
+            }
+            if (INCOMING.getOrDefault(other.getUUID(), 0L) > now) {
+                // Someone already has a bomb on this one; leave the cooldown for a free target.
                 continue;
             }
             double distance = other.distanceToSqr(humanoid);
@@ -233,8 +245,11 @@ public final class HumanoidSkills {
 
     private static boolean launch(ServerLevel level, NeutralHumanoid humanoid, LivingEntity mark) {
         try {
+            // Keep the launch close to the humanoid: passing the strike range as the "player distance" pushed the
+            // launch point hundreds of blocks away, outside client tracking, so the bomb and its marker never showed.
+            double approach = Math.min(32.0D, Math.max(8.0D, humanoid.distanceTo(mark)));
             SuperBigCup controller = SuperBigCup.create(level, mark.getBoundingBox().getCenter(), mark.getUUID(),
-                    SuperBigCup.nextIncidence(), CRUISE_RANGE, humanoid.position(), null, level.random);
+                    SuperBigCup.nextIncidence(), approach, humanoid.position(), null, level.random);
             level.getChunkAt(BlockPos.containing(controller.launchPoint()));
             BoomEntity bomb = new BoomEntity(level, controller, null);
             if (!level.addFreshEntity(bomb)) {
@@ -242,6 +257,7 @@ public final class HumanoidSkills {
             }
             bomb.release();
             mark.addEffect(new MobEffectInstance(MobEffects.GLOWING, 200, 0, false, false));
+            INCOMING.put(mark.getUUID(), level.getGameTime() + STRIKE_RESERVE_TICKS);
             level.playSound(null, humanoid.blockPosition(), ModSounds.MISSILE_LOCK.get(), SoundSource.PLAYERS, 1.4F, 1.0F);
             ReturnCapsuleMod.LOGGER.info("[skill] cruise strike {} -> {} ({})",
                     humanoid.getName().getString(), mark.getName().getString(), mark.getMaxHealth());

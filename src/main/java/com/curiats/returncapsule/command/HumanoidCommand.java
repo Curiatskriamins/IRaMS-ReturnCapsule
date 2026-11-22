@@ -10,6 +10,7 @@ import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.context.CommandContext;
 import com.mojang.brigadier.suggestion.SuggestionProvider;
 import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.commands.Commands;
 import net.minecraft.commands.SharedSuggestionProvider;
 import net.minecraft.network.chat.Component;
@@ -42,6 +43,9 @@ public final class HumanoidCommand {
                 .then(Commands.literal("info").executes(HumanoidCommand::info))
                 .then(Commands.literal("debug").executes(HumanoidCommand::debugNearest))
                 .then(Commands.literal("reset").executes(HumanoidCommand::reset))
+                .then(Commands.literal("loadout")
+                        .then(Commands.literal("grant").executes(HumanoidCommand::grantLoadout))
+                        .then(Commands.literal("status").executes(HumanoidCommand::loadoutStatus)))
                 .then(Commands.literal("target")
                         .then(Commands.argument("distance", DoubleArgumentType.doubleArg(4.0D, 512.0D))
                                 .executes(context -> spawnTarget(context, "minecraft:zombie"))
@@ -55,6 +59,34 @@ public final class HumanoidCommand {
                                 .suggests(SLOT_SUGGESTIONS)
                                 .then(Commands.argument("enabled", IntegerArgumentType.integer(0, 1))
                                         .executes(HumanoidCommand::apply)))));
+    }
+
+
+    private static int grantLoadout(CommandContext<CommandSourceStack> context) {
+        ServerPlayer player = context.getSource().getPlayer();
+        if (player == null) {
+            context.getSource().sendFailure(Component.literal("[returncapsule] player only"));
+            return 0;
+        }
+        if (com.curiats.returncapsule.util.BoundLoadout.grant(player) == null) {
+            context.getSource().sendFailure(Component.literal("[returncapsule] loadout already granted"));
+            return 0;
+        }
+        context.getSource().sendSuccess(() -> Component.literal("[returncapsule] loadout granted"), false);
+        return 1;
+    }
+
+    private static int loadoutStatus(CommandContext<CommandSourceStack> context) {
+        ServerPlayer player = context.getSource().getPlayer();
+        if (player == null) {
+            context.getSource().sendFailure(Component.literal("[returncapsule] player only"));
+            return 0;
+        }
+        boolean granted = com.curiats.returncapsule.util.BoundLoadout.granted(player);
+        boolean opened = com.curiats.returncapsule.util.BoundLoadout.opened(player);
+        context.getSource().sendSuccess(() -> Component.literal(
+                "[returncapsule] loadout granted=" + granted + " opened=" + opened), false);
+        return granted ? 1 : 0;
     }
 
     private static int debugNearest(CommandContext<CommandSourceStack> context) {
