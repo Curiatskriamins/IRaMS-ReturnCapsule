@@ -6,6 +6,7 @@ import com.curiats.returncapsule.client.geo.GeoModel;
 import com.curiats.returncapsule.client.geo.GeoModelLoader;
 import com.curiats.returncapsule.client.geo.GeoRenderer;
 import com.mojang.blaze3d.vertex.PoseStack;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.RenderType;
 import net.minecraft.resources.ResourceLocation;
@@ -26,6 +27,10 @@ public final class MannedCapsuleGeoModel {
 
     public static final ResourceLocation TEXTURE = ReturnCapsuleMod.id("textures/entity/manned_capsule.png");
 
+    public static final ResourceLocation GLOW_TEXTURE = ReturnCapsuleMod.id("textures/entity/manned_capsule_glow.png");
+
+    private static final RenderType GLOW_LAYER = RenderType.entityTranslucent(GLOW_TEXTURE);
+
     /** The manned capsule is modelled at half the intended in world size. */
     private static final float SCALE = 2.0F;
 
@@ -45,7 +50,9 @@ public final class MannedCapsuleGeoModel {
             synchronized (MannedCapsuleGeoModel.class) {
                 local = instance;
                 if (local == null) {
-                    local = new MannedCapsuleGeoModel(GeoModelLoader.load(GEO, false));
+                    boolean hasGlow = Minecraft.getInstance().getResourceManager()
+                            .getResource(GLOW_TEXTURE).isPresent();
+                    local = new MannedCapsuleGeoModel(GeoModelLoader.load(GEO, hasGlow));
                     instance = local;
                 }
             }
@@ -64,8 +71,12 @@ public final class MannedCapsuleGeoModel {
         }
         pose.pushPose();
         pose.scale(SCALE, SCALE, SCALE);
-        GeoRenderer.render(this.model, pose, buffer.getBuffer(RenderType.entityCutoutNoCull(TEXTURE)),
+        GeoRenderer.render(this.model, pose, buffer.getBuffer(RenderType.entityTranslucent(TEXTURE)),
                 packedLight, overlay, 0.0F);
+        if (this.model.hasGlow()) {
+            GeoRenderer.render(this.model, pose, buffer.getBuffer(GLOW_LAYER),
+                    net.minecraft.client.renderer.LightTexture.FULL_BRIGHT, overlay, 0.0F);
+        }
         pose.popPose();
     }
 

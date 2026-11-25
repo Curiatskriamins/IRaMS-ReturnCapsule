@@ -27,7 +27,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * <p>Horizontal 64 blocks, vertical 16 (8 up and 8 down, exclusive upper bound). One anchor is enough to project the
  * field; a full anchor also slows hostile projectiles.</p>
  *
- * <p>Draft change: the slow is applied once against the motion the projectile had when it entered the field instead of
+ * <p>the slow is applied once against the motion the projectile had when it entered the field instead of
  * multiplying its current motion every pass, and projectiles that leave every field get their motion restored. The
  * damage compensation only runs while the projectile is still flagged as slowed and never for explosion AOE.</p>
  */

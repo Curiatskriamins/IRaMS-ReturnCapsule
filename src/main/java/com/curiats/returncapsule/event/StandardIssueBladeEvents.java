@@ -48,9 +48,27 @@ public final class StandardIssueBladeEvents {
      * before each instance - the same shape as the mimic armory's red mark - so the follow up is felt even while the
      * target is still inside the twenty tick window granted by the blade hit that armed it.
      */
+    private static final java.util.Map<java.util.UUID, Integer> PURSUIT_HITS = new java.util.concurrent.ConcurrentHashMap<>();
+
+    private static final java.util.Map<java.util.UUID, Float> PURSUIT_START_HEALTH = new java.util.concurrent.ConcurrentHashMap<>();
+
+    private static final java.util.Map<java.util.UUID, Long> PURSUIT_LAST_HIT = new java.util.concurrent.ConcurrentHashMap<>();
+
+    private static final int PURSUIT_WINDOW_TICKS = 100;
+
+    private static final int PURSUIT_MIN_HITS = 5;
+
+    private static final float PURSUIT_EFFECTIVE_DAMAGE = 10.0F;
+
+    private static final int REGEN_BAN_TICKS = 1200;
+
+    /**
+     * Five fully charged hits that barely move the health bar (a target that regenerates faster than the blade cuts)
+     * arm the pursuit; the follow up then also blocks all healing for a minute, so the damage actually sticks.
+     */
     @SubscribeEvent
     public static void onPursuitLand(LivingDamageEvent event) {
-        if (!(event.getSource().getEntity() instanceof LivingEntity wielder)
+        if (!(event.getSource().getEntity() instanceof net.minecraft.world.entity.player.Player wielder)
                 || !PlayerEquipment.holdingBlade(wielder)) {
             return;
         }
@@ -61,15 +79,95 @@ public final class StandardIssueBladeEvents {
         if (target.level().isClientSide || target.isDeadOrDying()) {
             return;
         }
-        if (target.getMaxHealth() <= ModEffects.PURSUIT_MIN_HEALTH) {
+        if (wielder.getAttackStrengthScale(0.5F) < 0.9F) {
+            // Uncharged clicks do not count, so an auto clicker cannot farm the counter.
             return;
         }
-        // Clear the frames the sword hit just granted, so the very first tick of the effect is not eaten and the target
-        // never gets a free window right after being hit.
+        long now = target.level().getGameTime();
+        java.util.UUID id = target.getUUID();
+        Long last = PURSUIT_LAST_HIT.get(id);
+        if (last == null || now - last > PURSUIT_WINDOW_TICKS) {
+            PURSUIT_HITS.put(id, 0);
+            PURSUIT_START_HEALTH.put(id, target.getHealth());
+        }
+        PURSUIT_LAST_HIT.put(id, now);
+        int hits = PURSUIT_HITS.merge(id, 1, Integer::sum);
+        if (hits < PURSUIT_MIN_HITS) {
+            return;
+        }
+        float startHealth = PURSUIT_START_HEALTH.getOrDefault(id, target.getHealth());
+        float effective = startHealth - target.getHealth();
+        PURSUIT_HITS.remove(id);
+        PURSUIT_START_HEALTH.remove(id);
+        if (effective >= PURSUIT_EFFECTIVE_DAMAGE) {
+            return;
+        }
         target.invulnerableTime = 0;
         target.addEffect(new MobEffectInstance(ModEffects.PURSUIT.get(),
                 ModEffects.PURSUIT_DURATION_TICKS, 0), wielder);
+        applyMaxHealthPenalty(target, now);
     }
+
+    private static final java.util.UUID PENALTY_ID =
+            java.util.UUID.fromString("b7d1e2f3-4a56-4c78-9b90-1c2d3e4f5a60");
+
+    /** 180 points of pursuit damage are taken out of the health bar instead of trying to ban regeneration. */
+    private static final double PENALTY_AMOUNT = -180.0D;
+
+    private static final java.util.Map<java.util.UUID, Long> PENALTY_UNTIL = new java.util.concurrent.ConcurrentHashMap<>();
+
+    private static void applyMaxHealthPenalty(LivingEntity target, long now) {
+        if (target.getMaxHealth() < 150.0F) {
+            return;
+        }
+        var attribute = target.getAttribute(net.minecraft.world.entity.ai.attributes.Attributes.MAX_HEALTH);
+        if (attribute == null) {
+            return;
+        }
+        if (attribute.getModifier(PENALTY_ID) == null) {
+            attribute.addTransientModifier(new net.minecraft.world.entity.ai.attributes.AttributeModifier(
+                    PENALTY_ID, "returncapsule:blade_penalty", PENALTY_AMOUNT,
+                    net.minecraft.world.entity.ai.attributes.AttributeModifier.Operation.ADDITION));
+        }
+        PENALTY_UNTIL.put(target.getUUID(), now + REGEN_BAN_TICKS);
+        target.setHealth(Math.min(target.getHealth(), target.getMaxHealth()));
+    }
+
+    @SubscribeEvent
+    public static void onDeath(net.minecraftforge.event.entity.living.LivingDeathEvent event) {
+        java.util.UUID id = event.getEntity().getUUID();
+        PURSUIT_HITS.remove(id);
+        PURSUIT_START_HEALTH.remove(id);
+        PURSUIT_LAST_HIT.remove(id);
+        PENALTY_UNTIL.remove(id);
+    }
+
+    @SubscribeEvent
+    public static void onLogout(net.minecraftforge.event.entity.player.PlayerEvent.PlayerLoggedOutEvent event) {
+        java.util.UUID id = event.getEntity().getUUID();
+        PURSUIT_HITS.remove(id);
+        PURSUIT_START_HEALTH.remove(id);
+        PURSUIT_LAST_HIT.remove(id);
+        PENALTY_UNTIL.remove(id);
+    }
+
+    @SubscribeEvent
+    public static void onLivingTick(net.minecraftforge.event.entity.living.LivingEvent.LivingTickEvent event) {
+        LivingEntity entity = event.getEntity();
+        if (entity.level().isClientSide) {
+            return;
+        }
+        Long until = PENALTY_UNTIL.get(entity.getUUID());
+        if (until == null || entity.level().getGameTime() < until) {
+            return;
+        }
+        PENALTY_UNTIL.remove(entity.getUUID());
+        var attribute = entity.getAttribute(net.minecraft.world.entity.ai.attributes.Attributes.MAX_HEALTH);
+        if (attribute != null) {
+            attribute.removeModifier(PENALTY_ID);
+        }
+    }
+
     @SubscribeEvent(priority = net.minecraftforge.eventbus.api.EventPriority.HIGHEST)
     public static void onGuard(net.minecraftforge.event.entity.living.LivingHurtEvent event) {
         if (!Config.EQUIPMENT_GUARD_ENABLED.get()) {

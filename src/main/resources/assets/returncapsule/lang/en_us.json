@@ -58,5 +58,12 @@
   "message.returncapsule.designator_spawn": "Could not summon the capsule",
   "message.returncapsule.designator_no_marker": "No marker set yet",
   "message.returncapsule.designator_portal": "No nether portal nearby",
-  "message.returncapsule.designator_star": "Needs a nether star"
+  "message.returncapsule.designator_star": "Needs a nether star",
+  "message.returncapsule.designator_marked": "Landing point marked. Sneak-use to summon the capsule.",
+  "message.returncapsule.designator_marked_shift": "Already marked. Sneak-use to summon the capsule.",
+  "tooltip.returncapsule.anchor_guard_on": "Displacement guard: on",
+  "tooltip.returncapsule.anchor_guard_off": "Displacement guard: off",
+  "entity.returncapsule.manned_capsule": "Manned Return Capsule",
+  "message.returncapsule.designator_summons_used": "All %d summons are used; only the marker return is left",
+  "message.returncapsule.designator_owned_full": "Humanoid limit reached (%d)"
 }

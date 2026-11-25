@@ -12,7 +12,9 @@
         "PlayerHurtMixin",
         "MobPickupGuardMixin",
         "LivingEntityHealthGuardMixin",
-        "ThunderConversionMixin"
+        "ThunderConversionMixin",
+        "ForcedMoveGuardMixin",
+        "ServerLevelTickContextMixin"
     ],
     "injectors": {
         "defaultRequire": 1

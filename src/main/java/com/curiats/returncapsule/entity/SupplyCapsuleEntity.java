@@ -89,14 +89,14 @@ public class SupplyCapsuleEntity extends AbstractCapsuleEntity {
     @Override
     protected void impactEffects(ServerLevel server, BlockPos landing) {
         super.impactEffects(server, landing);
-        // Draft change: the impact particles stay before the shock, like the original implementation.
+        // the impact particles stay before the shock, like the original implementation.
         this.spawnImpactParticles(server,
                 landing.getX() + 0.5D, landing.getY() + 1.0D, landing.getZ() + 0.5D);
     }
 
     @Override
     protected void afterShock(ServerLevel server, BlockPos landing) {
-        // Draft change: the cloud, the scattered drops and the clear step run after the shock again, so the shock
+        // the cloud, the scattered drops and the clear step run after the shock again, so the shock
         // occlusion test sees the same blocks the original implementation saw.
         double x = landing.getX() + 0.5D;
         double y = landing.getY() + 1.0D;

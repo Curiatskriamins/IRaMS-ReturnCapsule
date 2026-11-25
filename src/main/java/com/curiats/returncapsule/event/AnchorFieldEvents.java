@@ -28,7 +28,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * Effects of the standard storage anchor while it is carried: no conversions nearby, pets are not debuffed, and a full
  * anchor slows hostile projectiles without reducing their damage.
  *
- * <p>Draft change: slowed projectiles are released once nothing keeps them slowed, and pet immunity is refreshed and
+ * <p>slowed projectiles are released once nothing keeps them slowed, and pet immunity is refreshed and
  * removed together with the field it came from instead of staying on the pet forever.</p>
  */
 @Mod.EventBusSubscriber(modid = ReturnCapsuleMod.MODID, bus = Mod.EventBusSubscriber.Bus.FORGE)

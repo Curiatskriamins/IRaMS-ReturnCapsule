@@ -28,7 +28,7 @@ public final class ModEffects {
     public static final float PURSUIT_TICK_DAMAGE = 3.0F;
 
     /** How long one swing keeps chasing, in ticks. */
-    public static final int PURSUIT_DURATION_TICKS = 90;
+    public static final int PURSUIT_DURATION_TICKS = 60;
 
     /** Only targets above this max health are pursued. */
     public static final double PURSUIT_MIN_HEALTH = 150.0D;

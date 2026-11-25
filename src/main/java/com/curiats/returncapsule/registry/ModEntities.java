@@ -23,7 +23,7 @@ public final class ModEntities {
     public static final RegistryObject<EntityType<SupplyCapsuleEntity>> SUPPLY_CAPSULE =
             ENTITIES.register("supply_capsule", () -> EntityType.Builder
                     .<SupplyCapsuleEntity>of(SupplyCapsuleEntity::new, MobCategory.MISC)
-                    .sized(2.45F, 2.45F)
+                    .sized(3.185F, 3.185F)
                     .clientTrackingRange(2000)
                     .updateInterval(1)
                     .build(ReturnCapsuleMod.id("supply_capsule").toString()));

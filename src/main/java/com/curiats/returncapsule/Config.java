@@ -115,6 +115,10 @@ public final class Config {
     public static final ForgeConfigSpec.DoubleValue EQUIPMENT_DAMAGE_REDUCTION;
     public static final ForgeConfigSpec.DoubleValue EQUIPMENT_SECOND_CAP_FRACTION;
     public static final ForgeConfigSpec.BooleanValue EQUIPMENT_EFFECT_IMMUNITY;
+    public static final ForgeConfigSpec.BooleanValue ANCHOR_GUARD_ENABLED;
+    public static final ForgeConfigSpec.ConfigValue<List<? extends String>> ANCHOR_GUARD_WHITELIST;
+    public static final ForgeConfigSpec.ConfigValue<List<? extends String>> ANCHOR_GUARD_BOSSES;
+    public static final ForgeConfigSpec.BooleanValue ANCHOR_GUARD_REFLECT;
     public static final ForgeConfigSpec.BooleanValue EQUIPMENT_COTH_IMMUNITY;
     public static final ForgeConfigSpec.ConfigValue<List<? extends String>> EQUIPMENT_BLOCKED_EFFECTS;
     public static final ForgeConfigSpec.BooleanValue EQUIPMENT_REGEN_ENABLED;
@@ -501,8 +505,8 @@ public final class Config {
                 .comment("基础人形套装是否生效：整套穿戴时，直接写血的伤害会被转换成一次带攻击者的物理重击(Direct health writes are converted into one physical hit with the attacker recorded while the full base humanoid set is worn)")
                 .define("setEnabled", true);
         EQUIPMENT_HIT_CAP_FRACTION = builder
-                .comment("每次转换伤害的上限（最大生命值比例），对齐基础人形的 20%(Per hit ceiling on converted damage as a share of max health, matching the base humanoid's twenty percent)")
-                .defineInRange("hitCapFraction", 0.20D, 0.0D, 1.0D);
+                .comment("每次转换伤害的上限（最大生命值比例），对齐基础人形的 20%(Per hit ceiling on converted damage as a share of max health, default five percent)")
+                .defineInRange("hitCapFraction", 0.05D, 0.0D, 1.0D);
         EQUIPMENT_LOW_DAMAGE_IMMUNITY = builder
                 .comment("低于该值（绝对值）的转换伤害直接忽略，对齐基础人形的低伤免疫(Converted hits below this absolute value are ignored, matching the base humanoid's low damage immunity)")
                 .defineInRange("lowDamageImmunity", 1.5D, 0.0D, 20.0D);
@@ -511,8 +515,24 @@ public final class Config {
                 .defineInRange("damageReduction", 0.5D, 0.0D, 0.9D);
         EQUIPMENT_SECOND_CAP_FRACTION = builder
                 .comment("每秒最多承受的转换伤害（最大生命值比例），对齐基础人形的 25%/s(Cap on converted damage per second as a share of max health, matching the base humanoid's twenty five percent per second)")
-                .defineInRange("secondCapFraction", 0.25D, 0.0D, 2.0D);
-        EQUIPMENT_EFFECT_IMMUNITY = builder
+                .defineInRange("secondCapFraction", 0.10D, 0.0D, 2.0D);
+        ANCHOR_GUARD_ENABLED = builder
+            .comment("标准存储锚点是否提供强制位移反制(Whether the storage anchor blocks forced displacement)")
+            .define("anchorGuardEnabled", true);
+    ANCHOR_GUARD_WHITELIST = builder
+            .comment("允许的位移物品，使用后短时间内不会被反制(Self displacement items that bypass the guard)")
+            .defineListAllowEmpty("anchorGuardWhitelist",
+                    List.of("minecraft:ender_pearl", "minecraft:chorus_fruit"),
+                    entry -> entry instanceof String);
+    ANCHOR_GUARD_BOSSES = builder
+            .comment("Boss only has its displacement blocked; no drain, shock or freeze")
+            .defineListAllowEmpty("anchorGuardBosses",
+                    List.of("minecraft:wither", "minecraft:ender_dragon", "minecraft:warden"),
+                    entry -> entry instanceof String);
+    ANCHOR_GUARD_REFLECT = builder
+            .comment("Reflect damage that broke through the guard, same source, no hurt animation")
+            .define("anchorGuardReflect", true);
+    EQUIPMENT_EFFECT_IMMUNITY = builder
                 .comment("整套穿戴时免疫负面效果，以及伪装成正面效果、实际有害的转换类效果(Wearing the full set immunises debuffs, and conversion style effects that present as beneficial)")
                 .define("effectImmunity", true);
         EQUIPMENT_COTH_IMMUNITY = builder
@@ -603,6 +623,32 @@ public final class Config {
 
     public static boolean mannedFallRealistic() {
         return MANNED_FALL_REALISTIC.get();
+    }
+
+    public static boolean anchorGuardEnabled() {
+        return ANCHOR_GUARD_ENABLED.get();
+    }
+
+    public static boolean anchorGuardBoss(String entityId) {
+        for (String entry : ANCHOR_GUARD_BOSSES.get()) {
+            if (entry != null && entry.equals(entityId)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public static boolean anchorGuardReflect() {
+        return ANCHOR_GUARD_REFLECT.get();
+    }
+
+    public static boolean anchorGuardWhitelisted(String itemId) {
+        for (String entry : ANCHOR_GUARD_WHITELIST.get()) {
+            if (entry != null && entry.equals(itemId)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     public static double mannedCruiseSpeed() {

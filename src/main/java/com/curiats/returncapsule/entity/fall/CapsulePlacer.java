@@ -63,7 +63,7 @@ public final class CapsulePlacer {
         return true;
     }
 
-    /** Draft change: a failed manned placement must not fall back to a supply capsule item. */
+    /** a failed manned placement must not fall back to a supply capsule item. */
     private static void dropFallback(ServerLevel level, BlockPos pos, CapsuleKind kind) {
         ItemStack drop = kind == CapsuleKind.MANNED
                 ? new ItemStack(ModItems.MANNED_CAPSULE.get())

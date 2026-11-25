@@ -108,7 +108,7 @@ public final class CapsuleStructure {
     }
 
     /**
-     * Draft change: the main block is decoded from the part index instead of scanning the neighbourhood. A part's PART
+     * the main block is decoded from the part index instead of scanning the neighbourhood. A part's PART
      * value already stores its exact offset (3x3 layout for 0..17, 5x5x3 for 18..92), so this is unambiguous even when
      * two capsules stand next to each other, and it accepts the manned main block.
      */

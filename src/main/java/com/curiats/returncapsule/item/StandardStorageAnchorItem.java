@@ -10,6 +10,8 @@ import net.minecraft.world.InteractionResultHolder;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.Item;
+import net.minecraft.world.item.TooltipFlag;
+import java.util.List;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.BlockHitResult;
@@ -26,8 +28,29 @@ public class StandardStorageAnchorItem extends Item {
 
     private static final double RELEASE_RANGE = 6.0D;
 
+    private static final String TAG_GUARD = "DisplacementGuard";
+
+    public static boolean guardEnabled(ItemStack stack) {
+        if (!stack.hasTag() || !stack.getTag().contains(TAG_GUARD)) {
+            return true;
+        }
+        return stack.getTag().getBoolean(TAG_GUARD);
+    }
+
+    public static void toggleGuard(ItemStack stack) {
+        boolean next = !guardEnabled(stack);
+        stack.getOrCreateTag().putBoolean(TAG_GUARD, next);
+    }
+
     public StandardStorageAnchorItem(Properties properties) {
         super(properties);
+    }
+
+    @Override
+    public void appendHoverText(ItemStack stack, Level level, List<Component> tooltip, TooltipFlag flag) {
+        tooltip.add(Component.translatable(guardEnabled(stack)
+                ? "tooltip.returncapsule.anchor_guard_on"
+                : "tooltip.returncapsule.anchor_guard_off"));
     }
 
     @Override

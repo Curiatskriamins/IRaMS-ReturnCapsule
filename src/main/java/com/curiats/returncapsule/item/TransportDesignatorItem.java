@@ -98,13 +98,10 @@ public class TransportDesignatorItem extends Item {
             return rideFromPlatform(level, stack, player, platform);
         }
         if (player.isShiftKeyDown()) {
-            // Sneaking on ordinary ground is the deliberate way to summon a manned capsule.
-            return awayFromPlatform(level, stack, player);
-        }
-        if (getMarkerPos(stack) != null) {
+            // Sneaking is the "go home" gesture; a plain click on ordinary ground summons a manned capsule.
             return returnToMarker(level, stack, player);
         }
-        return fail(player, "message.returncapsule.designator_no_marker");
+        return awayFromPlatform(level, stack, player);
     }
 
     /** A complete 5x5 obsidian pad rides the player down to its centre, no portal required. */
@@ -130,7 +127,13 @@ public class TransportDesignatorItem extends Item {
             tag.putLong(TAG_MARKER_POS, landing.asLong());
             tag.putUUID(TAG_MARKER_TOKEN, token);
             tag.remove(TAG_CONFIRM_UNTIL);
+            player.displayClientMessage(net.minecraft.network.chat.Component.translatable(
+                    "message.returncapsule.designator_marked"), true);
             return InteractionResult.CONSUME;
+        }
+        if (!player.isShiftKeyDown()) {
+            // A second plain click must not launch by accident: the pad stays marked until the player sneaks.
+            return fail(player, "message.returncapsule.designator_marked_shift");
         }
         int max = Config.designatorMaxCharge();
         if (!player.isCreative() && migrateCharge(stack) < max) {
@@ -170,7 +173,15 @@ public class TransportDesignatorItem extends Item {
         int owned = com.curiats.returncapsule.event.HumanoidOwnerEvents.ownedCount(
                 player.serverLevel(), player.getUUID())
                 + com.curiats.returncapsule.util.AnchorStorage.storedTotal(player);
-        if (summons >= MAX_MANNED_SUMMONS || owned >= MAX_OWNED_HUMANOIDS) {
+        boolean creative = player.isCreative();
+        if (!creative && summons >= MAX_MANNED_SUMMONS) {
+            player.displayClientMessage(net.minecraft.network.chat.Component.translatable(
+                    "message.returncapsule.designator_summons_used", MAX_MANNED_SUMMONS), true);
+            return returnToMarker(level, stack, player);
+        }
+        if (!creative && owned >= MAX_OWNED_HUMANOIDS) {
+            player.displayClientMessage(net.minecraft.network.chat.Component.translatable(
+                    "message.returncapsule.designator_owned_full", MAX_OWNED_HUMANOIDS), true);
             return returnToMarker(level, stack, player);
         }
         if (!player.isCreative() && migrateCharge(stack) < Config.designatorMaxCharge()) {
@@ -188,7 +199,9 @@ public class TransportDesignatorItem extends Item {
             NetherStars.consumeOne(player);
         }
         setCharge(stack, 1);
-        player.getPersistentData().putInt(TAG_MANNED_SUMMONS, summons + 1);
+        if (!creative) {
+            player.getPersistentData().putInt(TAG_MANNED_SUMMONS, summons + 1);
+        }
         player.getCooldowns().addCooldown(stack.getItem(), Config.DESIGNATOR_COOLDOWN_TICKS.get());
         return InteractionResult.CONSUME;
     }

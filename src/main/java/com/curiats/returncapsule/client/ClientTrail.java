@@ -10,14 +10,10 @@ import net.minecraft.core.particles.ParticleOptions;
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.util.Mth;
 import net.minecraft.world.level.levelgen.Heightmap;
-import net.minecraft.world.phys.Vec3;
 import net.minecraft.util.RandomSource;
 import org.joml.Vector3f;
 
 public final class ClientTrail {
-    private static final DustParticleOptions TRANSPORT_DUST =
-            new DustParticleOptions(new Vector3f(1.0F, 0.05F, 0.05F), 1.4F);
-
     public static void onFallingTick(FallingCapsuleEntity entity) {
         if (!(entity.level() instanceof ClientLevel level)) {
             return;

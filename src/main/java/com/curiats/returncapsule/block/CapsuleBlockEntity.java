@@ -73,7 +73,7 @@ public class CapsuleBlockEntity extends RandomizableContainerBlockEntity {
         this.items = NonNullList.withSize(this.slots, ItemStack.EMPTY);
         this.animator = new CapsuleAnimator(this);
         this.loot = new CapsuleLoot(this);
-        // Draft change: the manned model is 5 wide, 3 tall, so the tiny supply render box would cull it.
+        // the manned model is 5 wide, 3 tall, so the tiny supply render box would cull it.
         this.renderBox = manned
                 ? new AABB(pos.offset(-2, 0, -2), pos.offset(3, 4, 3))
                 : new AABB(pos.offset(-1, 0, -1), pos.offset(2, 3, 2));
@@ -121,7 +121,7 @@ public class CapsuleBlockEntity extends RandomizableContainerBlockEntity {
         this.animator.tick(server);
         if (--this.repairCooldown <= 0) {
             this.repairCooldown = SHELL_REPAIR_INTERVAL;
-            // Draft change: repair the footprint this block actually has instead of always the 3x3 supply one.
+            // repair the footprint this block actually has instead of always the 3x3 supply one.
             CapsuleKind kind = this.manned() ? CapsuleKind.MANNED : CapsuleKind.SUPPLY;
             if (!CapsuleStructure.isIntact(server, this.worldPosition, kind)) {
                 CapsuleStructure.placeParts(server, this.worldPosition, kind);

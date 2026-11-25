@@ -46,7 +46,7 @@ public class CapsulePartBlock extends Block {
     }
 
     /**
-     * Decodes the offset from the main block for a part index. Draft change: shared by {@link CapsuleStructure} so the
+     * Decodes the offset from the main block for a part index. shared by {@link CapsuleStructure} so the
      * main block can be found exactly instead of scanning the neighbourhood.
      *
      * @return {@code {dx, dy, dz}} relative to the main block

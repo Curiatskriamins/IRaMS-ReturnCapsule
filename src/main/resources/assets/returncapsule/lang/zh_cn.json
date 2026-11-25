@@ -58,5 +58,12 @@
   "message.returncapsule.designator_spawn": "无法召唤返回舱",
   "message.returncapsule.designator_no_marker": "还没有设置标记点",
   "message.returncapsule.designator_portal": "附近没有下界传送门",
-  "message.returncapsule.designator_star": "需要下界之星"
+  "message.returncapsule.designator_star": "需要下界之星",
+  "message.returncapsule.designator_marked": "已标记降落点，潜行右键召回返回舱",
+  "message.returncapsule.designator_marked_shift": "已标记，潜行右键才会召回返回舱",
+  "tooltip.returncapsule.anchor_guard_on": "位移反制：开",
+  "tooltip.returncapsule.anchor_guard_off": "位移反制：关",
+  "entity.returncapsule.manned_capsule": "载人返回舱",
+  "message.returncapsule.designator_summons_used": "召唤次数已用完（%d 次），只能回到标记点",
+  "message.returncapsule.designator_owned_full": "持有的基础人形已达上限（%d）"
 }

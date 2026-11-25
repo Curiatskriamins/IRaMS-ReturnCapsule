@@ -27,6 +27,7 @@ public class CapsuleRenderer extends EntityRenderer<SupplyCapsuleEntity> {
                        MultiBufferSource buffer, int packedLight) {
         pose.pushPose();
         pose.mulPose(Axis.YP.rotationDegrees(180.0F - entityYaw + Config.MODEL_YAW_OFFSET.get().floatValue()));
+        pose.scale(1.3F, 1.3F, 1.3F);
         CapsuleGeoModel.get().render(pose, buffer, packedLight, OverlayTexture.NO_OVERLAY, 0.0F);
         pose.popPose();
     }

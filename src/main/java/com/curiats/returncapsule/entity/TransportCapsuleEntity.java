@@ -2,7 +2,6 @@ package com.curiats.returncapsule.entity;
 
 import com.curiats.returncapsule.Config;
 import com.curiats.returncapsule.entity.humanoid.NeutralHumanoid;
-import com.curiats.returncapsule.util.BoundLoadout;
 import com.curiats.returncapsule.entity.fall.CapsuleKind;
 import com.curiats.returncapsule.entity.fall.CapsuleLanding;
 import com.curiats.returncapsule.entity.fall.CapsuleParticles;
@@ -18,7 +17,6 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.InteractionHand;
-import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.MenuProvider;
 import net.minecraft.world.entity.Entity;
@@ -35,7 +33,6 @@ import javax.annotation.Nullable;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
-import java.util.UUID;
 
 @SuppressWarnings({"this-escape",
         "deprecation"})
@@ -415,7 +412,12 @@ public class TransportCapsuleEntity extends AbstractCapsuleEntity implements Men
 
     @Override
     public Component getDisplayName() {
-        return Component.translatable(this.tier.transportKey());
+        return Component.translatable("entity.returncapsule.manned_capsule");
+    }
+
+    @Override
+    public Component getName() {
+        return this.getDisplayName();
     }
 
     @Override

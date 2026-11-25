@@ -54,13 +54,13 @@ public final class CapsuleLanding {
     }
 
     private static void spreadFire(ServerLevel level, BlockPos landing) {
-        // Draft change: the original supply/transport implementations used y + 1.0 as the fire centre; atCenterOf is
+        // the original supply/transport implementations used y + 1.0 as the fire centre; atCenterOf is
         // half a block lower and changes which block faces catch fire.
         CapsuleFire.spread(level, new Vec3(landing.getX() + 0.5D, landing.getY() + 1.0D, landing.getZ() + 0.5D),
                 Config.LANDING_FIRE_RADIUS.get(), Config.LANDING_FIRE_CHANCE.get());
     }
 
-    /** Draft change: lets the caller detect a failed placement instead of always reporting success. */
+    /** lets the caller detect a failed placement instead of always reporting success. */
     private static boolean mainPlaced(ServerLevel level, BlockPos landing, CapsuleKind kind) {
         Block expected = kind == CapsuleKind.MANNED ? ModBlocks.MANNED_CAPSULE.get() : ModBlocks.CAPSULE.get();
         return level.getBlockState(landing).is(expected);

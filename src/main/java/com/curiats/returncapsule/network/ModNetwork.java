@@ -22,10 +22,17 @@ public final class ModNetwork {
                 RagdollEndMessage::encode, RagdollEndMessage::decode, RagdollEndMessage::handle);
         CHANNEL.registerMessage(id++, RagdollStartMessage.class,
                 RagdollStartMessage::encode, RagdollStartMessage::decode, RagdollStartMessage::handle);
+        CHANNEL.registerMessage(id++, ToggleAnchorGuardMessage.class,
+                ToggleAnchorGuardMessage::encode, ToggleAnchorGuardMessage::decode,
+                ToggleAnchorGuardMessage::handle);
     }
 
     public static void openTransportMenu(int entityId) {
         CHANNEL.sendToServer(new OpenTransportMenuMessage(entityId));
+    }
+
+    public static void toggleAnchorGuard(int slot) {
+        CHANNEL.sendToServer(new ToggleAnchorGuardMessage(slot));
     }
 
     public static void sendRagdollStart(int entityId) {
@@ -34,6 +41,35 @@ public final class ModNetwork {
 
     public static void sendRagdollEnd(int entityId, Vec3 position) {
         CHANNEL.sendToServer(new RagdollEndMessage(entityId, position.x, position.y, position.z));
+    }
+
+    public record ToggleAnchorGuardMessage(int slot) {
+        public static void encode(ToggleAnchorGuardMessage message, FriendlyByteBuf buffer) {
+            buffer.writeVarInt(message.slot);
+        }
+
+        public static ToggleAnchorGuardMessage decode(FriendlyByteBuf buffer) {
+            return new ToggleAnchorGuardMessage(buffer.readVarInt());
+        }
+
+        public static void handle(ToggleAnchorGuardMessage message,
+                                  java.util.function.Supplier<net.minecraftforge.network.NetworkEvent.Context> supplier) {
+            net.minecraftforge.network.NetworkEvent.Context context = supplier.get();
+            context.enqueueWork(() -> {
+                ServerPlayer player = context.getSender();
+                if (player == null || message.slot < 0 || message.slot >= player.containerMenu.slots.size()) {
+                    return;
+                }
+                net.minecraft.world.item.ItemStack stack = player.containerMenu.getSlot(message.slot).getItem();
+                if (!(stack.getItem() instanceof com.curiats.returncapsule.item.StandardStorageAnchorItem)) {
+                    return;
+                }
+                com.curiats.returncapsule.item.StandardStorageAnchorItem.toggleGuard(stack);
+                player.containerMenu.getSlot(message.slot).setChanged();
+                player.containerMenu.broadcastChanges();
+            });
+            context.setPacketHandled(true);
+        }
     }
 
     public record OpenTransportMenuMessage(int entityId) {

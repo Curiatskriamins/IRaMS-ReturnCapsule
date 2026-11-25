@@ -4,7 +4,6 @@ import com.curiats.returncapsule.Config;
 import com.curiats.returncapsule.entity.TransportCapsuleEntity;
 import net.minecraft.util.Mth;
 
-/** Entry attitude: the hull flies nose down into the airstream and levels out for touchdown. */
 public final class TransportAttitude {
 
     private static final double ENTRY_PITCH = 20.0D;

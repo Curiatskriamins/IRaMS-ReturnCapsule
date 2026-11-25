@@ -27,7 +27,7 @@ import java.util.UUID;
  * kind says so, lets the subclass place its cargo and run its own after-land hook. Subclasses override the hooks, never
  * the order of the sequence.</p>
  *
- * <p>Draft change: the template keeps the original order of the two pre-refactor implementations — impact effects, then
+ * <p>the template keeps the original order of the two pre-refactor implementations — impact effects, then
  * the shock, then the world edits, then the cargo. {@code beforeShock} exists for the transport capsule, which used to
  * eject its passengers before the shock, and {@code afterShock} for the supply capsule, which used to clear and scatter
  * after the shock. The shock origin is back at {@code y + 1.0}, which is what both old implementations used.</p>
