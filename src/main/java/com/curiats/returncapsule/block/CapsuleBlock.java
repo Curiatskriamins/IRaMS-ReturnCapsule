@@ -25,6 +25,7 @@ import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.StateDefinition;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
+import net.minecraft.world.level.block.state.properties.BooleanProperty;
 import net.minecraft.world.level.block.state.properties.DirectionProperty;
 import net.minecraft.world.level.pathfinder.PathComputationType;
 import net.minecraft.world.phys.BlockHitResult;
@@ -44,6 +45,11 @@ public class CapsuleBlock extends BaseEntityBlock {
     public CapsuleBlock(Properties properties) {
         super(properties);
         this.registerDefaultState(this.stateDefinition.any().setValue(FACING, Direction.NORTH));
+    }
+
+    /** Each capsule block decides its own footprint instead of a block state flag. */
+    protected com.curiats.returncapsule.entity.fall.CapsuleKind defaultKind() {
+        return com.curiats.returncapsule.entity.fall.CapsuleKind.SUPPLY;
     }
 
     @Override
@@ -70,14 +76,16 @@ public class CapsuleBlock extends BaseEntityBlock {
     public void onPlace(BlockState state, Level level, BlockPos pos, BlockState oldState, boolean isMoving) {
         super.onPlace(state, level, pos, oldState, isMoving);
         if (level instanceof ServerLevel server) {
-            CapsuleStructure.placeParts(server, pos);
+            com.curiats.returncapsule.ReturnCapsuleMod.LOGGER.info(
+                    "[capsule] placed {} at {} kind={}", state.getBlock(), pos, defaultKind());
+            CapsuleStructure.placeParts(server, pos, defaultKind());
         }
     }
 
     @Override
     public void onRemove(BlockState state, Level level, BlockPos pos, BlockState newState, boolean isMoving) {
         if (!level.isClientSide && state.getBlock() != newState.getBlock()) {
-            CapsuleStructure.removeParts(level, pos);
+            CapsuleStructure.removeParts(level, pos, defaultKind());
         }
         super.onRemove(state, level, pos, newState, isMoving);
     }

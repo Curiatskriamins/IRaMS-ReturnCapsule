@@ -8,7 +8,12 @@ import net.minecraft.world.item.context.UseOnContext;
 
 public class CapsuleBlockItem extends BlockItem {
     public CapsuleBlockItem(Properties properties) {
-        super(ModBlocks.CAPSULE.get(), properties);
+        this(ModBlocks.CAPSULE, properties);
+    }
+
+    public CapsuleBlockItem(java.util.function.Supplier<? extends net.minecraft.world.level.block.Block> block,
+                            Properties properties) {
+        super(block.get(), properties);
     }
 
     @Override

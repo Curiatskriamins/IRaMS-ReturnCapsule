@@ -35,7 +35,11 @@ public class CapsuleBlockRenderer implements BlockEntityRenderer<CapsuleBlockEnt
         } else {
             LID_LOGS.set(0);
         }
-        CapsuleGeoModel.get().render(pose, buffer, packedLight, overlay, lidProgress);
+        if (blockEntity.manned()) {
+            MannedCapsuleGeoModel.get().render(pose, buffer, packedLight, overlay);
+        } else {
+            CapsuleGeoModel.get().render(pose, buffer, packedLight, overlay, lidProgress);
+        }
         pose.popPose();
     }
 

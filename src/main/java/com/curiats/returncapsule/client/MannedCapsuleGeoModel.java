@@ -79,13 +79,20 @@ public final class MannedCapsuleGeoModel {
         double yaw = Math.toRadians(180.0D - entity.getYRot() + Config.MODEL_YAW_OFFSET.get().floatValue());
         double cos = Math.cos(yaw);
         double sin = Math.sin(yaw);
+        double pitch = Math.toRadians(entity instanceof com.curiats.returncapsule.entity.TransportCapsuleEntity capsule
+                ? TransportAttitude.pitchDegrees(capsule) : 0.0F);
+        double cosP = Math.cos(pitch);
+        double sinP = Math.sin(pitch);
         for (int index = 0; index + 2 < points.length; index += 3) {
             double x = SCALE * (points[index] - local.model.centerX()) * MODEL_SCALE;
             double y = SCALE * (points[index + 1] - local.model.centerY()) * MODEL_SCALE;
             double z = SCALE * (points[index + 2] - local.model.centerZ()) * MODEL_SCALE;
-            double worldX = x * cos + z * sin;
-            double worldZ = -x * sin + z * cos;
-            consumer.accept(entity.position().add(worldX, y, worldZ));
+            // Pitch about X first, then the yaw used by the renderer.
+            double pitchedY = y * cosP - z * sinP;
+            double pitchedZ = y * sinP + z * cosP;
+            double worldX = x * cos + pitchedZ * sin;
+            double worldZ = -x * sin + pitchedZ * cos;
+            consumer.accept(entity.position().add(worldX, pitchedY, worldZ));
         }
     }
 

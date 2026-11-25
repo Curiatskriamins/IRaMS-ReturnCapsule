@@ -46,5 +46,17 @@
   "subtitles.returncapsule.boom_impact": "Explosion",
   "subtitles.returncapsule.capsule_impact": "Return capsule slams down",
   "subtitles.returncapsule.capsule_open": "Capsule opens",
-  "subtitles.returncapsule.missile_lock": "Missile lock"
+  "subtitles.returncapsule.missile_lock": "Missile lock",
+  "message.returncapsule.manned_empty": "This set has already been issued",
+  "item.returncapsule.standard_storage_anchor": "Standard Storage Anchor",
+  "block.returncapsule.manned_capsule": "Manned Return Capsule",
+  "item.returncapsule.manned_capsule": "Manned Return Capsule",
+  "message.returncapsule.kit_owner_only": "This capsule's kit belongs to someone else",
+  "message.returncapsule.designator_blocked": "The marker spot is blocked",
+  "message.returncapsule.designator_charge": "Not charged yet (%d%%)",
+  "message.returncapsule.designator_payment": "Needs an active beacon record and a nether star",
+  "message.returncapsule.designator_spawn": "Could not summon the capsule",
+  "message.returncapsule.designator_no_marker": "No marker set yet",
+  "message.returncapsule.designator_portal": "No nether portal nearby",
+  "message.returncapsule.designator_star": "Needs a nether star"
 }

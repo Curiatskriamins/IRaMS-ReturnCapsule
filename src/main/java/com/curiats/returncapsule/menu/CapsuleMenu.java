@@ -25,6 +25,7 @@ public class CapsuleMenu extends AbstractContainerMenu {
     private static final int PAGE_DATA_ID = 0;
 
     private final Container container;
+    private final boolean takeOnly;
     private int page;
 
     public CapsuleMenu(int id, Inventory inventory) {
@@ -32,8 +33,13 @@ public class CapsuleMenu extends AbstractContainerMenu {
     }
 
     public CapsuleMenu(int id, Inventory inventory, Container container) {
+        this(id, inventory, container, false);
+    }
+
+    public CapsuleMenu(int id, Inventory inventory, Container container, boolean takeOnly) {
         super(ModMenus.CAPSULE.get(), id);
         this.container = container;
+        this.takeOnly = takeOnly;
         this.page = 0;
         container.startOpen(inventory.player);
 
@@ -124,6 +130,9 @@ public class CapsuleMenu extends AbstractContainerMenu {
             if (!this.moveItemStackTo(stack, PAGE_SLOTS, this.slots.size(), true)) {
                 return ItemStack.EMPTY;
             }
+        } else if (this.takeOnly) {
+            // Manned capsules only hand items out.
+            return ItemStack.EMPTY;
         } else if (!this.moveItemStackTo(stack, 0, PAGE_SLOTS, false)) {
             return ItemStack.EMPTY;
         }
@@ -165,6 +174,11 @@ public class CapsuleMenu extends AbstractContainerMenu {
         public ItemStack remove(int amount) {
             int index = this.realIndex();
             return index < 0 ? ItemStack.EMPTY : this.container.removeItem(index, amount);
+        }
+
+        @Override
+        public boolean mayPlace(ItemStack stack) {
+            return !takeOnly;
         }
 
         @Override

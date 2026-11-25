@@ -46,5 +46,17 @@
   "subtitles.returncapsule.boom_impact": "爆炸",
   "subtitles.returncapsule.capsule_impact": "返回舱砸落",
   "subtitles.returncapsule.capsule_open": "返回舱开启",
-  "subtitles.returncapsule.missile_lock": "导弹锁定"
+  "subtitles.returncapsule.missile_lock": "导弹锁定",
+  "message.returncapsule.manned_empty": "这套列装装备已经发放过了",
+  "item.returncapsule.standard_storage_anchor": "标准存储锚点",
+  "block.returncapsule.manned_capsule": "载人返回舱",
+  "item.returncapsule.manned_capsule": "载人返回舱",
+  "message.returncapsule.kit_owner_only": "这个返回舱的列装套不属于你",
+  "message.returncapsule.designator_blocked": "目标位置被阻挡",
+  "message.returncapsule.designator_charge": "充能不足（%d%%）",
+  "message.returncapsule.designator_payment": "需要有效信标记录和下界之星",
+  "message.returncapsule.designator_spawn": "无法召唤返回舱",
+  "message.returncapsule.designator_no_marker": "还没有设置标记点",
+  "message.returncapsule.designator_portal": "附近没有下界传送门",
+  "message.returncapsule.designator_star": "需要下界之星"
 }

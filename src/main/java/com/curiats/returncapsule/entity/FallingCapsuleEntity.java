@@ -30,6 +30,10 @@ public abstract class FallingCapsuleEntity extends Entity {
     protected static final String TAG_IMPACTED = "Impacted";
 
     @Nullable
+    private static final net.minecraft.network.syncher.EntityDataAccessor<Float> DATA_LANDING_Y =
+            net.minecraft.network.syncher.SynchedEntityData.defineId(FallingCapsuleEntity.class,
+                    net.minecraft.network.syncher.EntityDataSerializers.FLOAT);
+
     protected BlockPos anchor;
     @Nullable
     protected UUID ownerUuid;
@@ -49,6 +53,7 @@ public abstract class FallingCapsuleEntity extends Entity {
 
     protected final void beginFall(BlockPos target, @Nullable Entity owner, double spawnHeight) {
         this.anchor = target.immutable();
+        this.entityData.set(DATA_LANDING_Y, (float) target.getY());
         this.spawnY = target.getY() + spawnHeight;
         this.ownerUuid = owner == null ? null : owner.getUUID();
         this.setPos(target.getX() + 0.5D, this.spawnY, target.getZ() + 0.5D);
@@ -56,6 +61,21 @@ public abstract class FallingCapsuleEntity extends Entity {
             this.landingFacing = facingFrom(target, owner);
             this.setYRot(this.landingFacing.toYRot());
         }
+        this.onFallBegun(target);
+    }
+
+    /** Hook for subclasses that must keep the target chunk loaded while falling. */
+    protected void onFallBegun(BlockPos target) {
+    }
+
+    @Override
+    protected void defineSynchedData() {
+        this.entityData.define(DATA_LANDING_Y, 0.0F);
+    }
+
+    /** Client side copy of the anchor height: the block position itself is not synched. */
+    public double landingY() {
+        return this.anchor != null ? this.anchor.getY() : (double) this.entityData.get(DATA_LANDING_Y);
     }
 
     protected abstract double fallSpeed(double currentVelocity);
@@ -91,7 +111,10 @@ public abstract class FallingCapsuleEntity extends Entity {
 
         ServerLevel server = (ServerLevel) this.level();
         this.fallAge++;
-        this.smashPass(server);
+        this.noPhysics = this.phaseThroughFall();
+        if (!this.noPhysics) {
+            this.smashPass(server);
+        }
 
         double beforeY = this.getY();
         double dy = this.fallSpeed(this.getDeltaMovement().y);
@@ -101,6 +124,8 @@ public abstract class FallingCapsuleEntity extends Entity {
 
             this.setPos(this.getX(), beforeY - Math.max(0.1D, -dy), this.getZ());
         }
+
+        this.onFallTick(server);
 
         if (this.getY() <= this.anchor.getY()) {
             BlockPos landing = this.anchor;
@@ -117,7 +142,16 @@ public abstract class FallingCapsuleEntity extends Entity {
         }
     }
 
-    private void smashPass(ServerLevel level) {
+    /** High altitude cruise: no collision, no block breaking, just travel. */
+    protected boolean phaseThroughFall() {
+        return false;
+    }
+
+    /** Called after the vertical step and before the landing check. */
+    protected void onFallTick(ServerLevel server) {
+    }
+
+    protected void smashPass(ServerLevel level) {
         if (!Config.BREAK_BLOCKS.get()) {
             return;
         }
@@ -139,10 +173,6 @@ public abstract class FallingCapsuleEntity extends Entity {
             return viewer.getDirection().getOpposite();
         }
         return Direction.getNearest(dx, 0.0D, dz);
-    }
-
-    @Override
-    protected void defineSynchedData() {
     }
 
     @Override

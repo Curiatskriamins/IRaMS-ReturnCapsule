@@ -24,8 +24,8 @@ public final class ClientTrail {
         }
         if (entity instanceof SupplyCapsuleEntity) {
             supplyTrail(level, entity);
-        } else if (entity instanceof TransportCapsuleEntity) {
-            transportTrail(level, entity);
+        } else if (entity instanceof TransportCapsuleEntity transport) {
+            transportPhase(level, transport);
         }
     }
 
@@ -35,33 +35,83 @@ public final class ClientTrail {
         double cy = entity.getY() + 1.0D;
         double cz = entity.getZ();
 
-        emit(level, random, ParticleTypes.CAMPFIRE_COSY_SMOKE, 5, cx, cy, cz, 2.0D, 8.0D, 2.0D, -0.4D, 0.035D);
-        emit(level, random, ParticleTypes.CAMPFIRE_SIGNAL_SMOKE, 2, cx, cy, cz, 1.5D, 7.0D, 1.5D, 0.0D, 0.025D);
         emit(level, random, ParticleTypes.LARGE_SMOKE, 8, cx, cy, cz, 2.5D, 2.2D, 2.5D, -0.6D, 0.02D);
         emit(level, random, ParticleTypes.SMOKE, 8, cx, cy, cz, 2.0D, 2.0D, 2.0D, -0.4D, 0.015D);
-        emit(level, random, ParticleTypes.FLAME, 5, cx, cy, cz, 1.6D, 1.8D, 1.6D, -0.4D, 0.01D);
-        if (entity.tickCount % 4 == 0) {
-            emit(level, random, ParticleTypes.EXPLOSION, 1, cx, cy, cz, 1.2D, 1.2D, 1.2D, 0.0D, 0.0D);
+        if (nearGround(level, entity)) {
+            // Fire and touchdown smoke belong to the landing, not to the whole descent.
+            emit(level, random, ParticleTypes.CAMPFIRE_COSY_SMOKE, 5, cx, cy, cz, 2.0D, 8.0D, 2.0D, -0.4D, 0.035D);
+            emit(level, random, ParticleTypes.CAMPFIRE_SIGNAL_SMOKE, 2, cx, cy, cz, 1.5D, 7.0D, 1.5D, 0.0D, 0.025D);
+            emit(level, random, ParticleTypes.FLAME, 5, cx, cy, cz, 1.6D, 1.8D, 1.6D, -0.4D, 0.01D);
+            if (entity.tickCount % 4 == 0) {
+                emit(level, random, ParticleTypes.EXPLOSION, 1, cx, cy, cz, 1.2D, 1.2D, 1.2D, 0.0D, 0.0D);
+            }
         }
     }
 
-    private static void transportTrail(ClientLevel level, FallingCapsuleEntity entity) {
-        RandomSource random = level.random;
-        double cx = entity.getX();
-        double cy = entity.getY() + 1.0D;
-        double cz = entity.getZ();
+    private static final double ATMOSPHERE_TOP = 120_000.0D;
 
-        emit(level, random, ParticleTypes.CAMPFIRE_COSY_SMOKE, 45, cx, cy, cz, 3.0D, 12.0D, 3.0D, -0.5D, 0.02D);
-        emit(level, random, ParticleTypes.CAMPFIRE_SIGNAL_SMOKE, 18, cx, cy, cz, 2.5D, 10.0D, 2.5D, 0.0D, 0.018D);
-        emit(level, random, ParticleTypes.LARGE_SMOKE, 55, cx, cy, cz, 3.5D, 4.0D, 3.5D, -0.8D, 0.015D);
-        emit(level, random, ParticleTypes.SMOKE, 35, cx, cy, cz, 3.0D, 4.0D, 3.0D, -0.4D, 0.01D);
-        emit(level, random, ParticleTypes.FLAME, 45, cx, cy, cz, 2.25D, 3.0D, 2.25D, -0.5D, -0.01D);
-        emit(level, random, TRANSPORT_DUST, 30, cx, cy, cz, 4.0D, 10.0D, 4.0D, -1.0D, 0.0D);
-        emit(level, random, ParticleTypes.CLOUD, 15, cx, cy, cz, 2.5D, 3.0D, 2.5D, 0.0D, 0.0D);
-        if (entity.tickCount % 3 == 0) {
-            emit(level, random, ParticleTypes.EXPLOSION, 6, cx, cy, cz, 1.5D, 1.8D, 1.5D, 0.0D, 0.0D);
+    private static final double ATMOSPHERE_BOTTOM = 10_800.0D;
+
+    private static void transportPhase(ClientLevel level, TransportCapsuleEntity entity) {
+        double remaining = entity.getY() - entity.landingY();
+        if (remaining > ATMOSPHERE_TOP) {
+            // Space: no particles at all.
+            return;
         }
-        landingBurn(level, random, entity);
+        if (remaining > ATMOSPHERE_BOTTOM) {
+            plasmaRing(level, entity);
+            return;
+        }
+        retroFlames(level, entity);
+        landingBurn(level, level.random, entity);
+    }
+
+    /** A ring of flame and black smoke around the hull while it is actually inside the atmosphere. */
+    private static void plasmaRing(ClientLevel level, TransportCapsuleEntity entity) {
+        RandomSource random = level.random;
+        double y = entity.getY() + 1.5D;
+        float pitch = TransportAttitude.pitchDegrees(entity);
+        double cosP = Math.cos(Math.toRadians(pitch));
+        double sinP = Math.sin(Math.toRadians(pitch));
+        double cosY = Math.cos(Math.toRadians(180.0D - entity.getYRot() + Config.MODEL_YAW_OFFSET.get().floatValue()));
+        double sinY = Math.sin(Math.toRadians(180.0D - entity.getYRot() + Config.MODEL_YAW_OFFSET.get().floatValue()));
+        for (int index = 0; index < 10; index++) {
+            double angle = index * Math.PI * 2.0D / 10.0D + entity.tickCount * 0.05D;
+            double localX = Math.cos(angle) * 2.2D;
+            double localZ = Math.sin(angle) * 2.2D;
+            double pitchedZ = localZ * cosP;
+            double pitchedY = -localZ * sinP;
+            double x = entity.getX() + localX * cosY + pitchedZ * sinY;
+            double z = entity.getZ() - localX * sinY + pitchedZ * cosY;
+            double ringY = y + pitchedY;
+            level.addParticle(ParticleTypes.FLAME, true, x, ringY, z,
+                    Math.cos(angle) * 0.05D, 0.02D, Math.sin(angle) * 0.05D);
+            level.addParticle(ParticleTypes.LARGE_SMOKE, true, x, ringY - 0.4D, z,
+                    Math.cos(angle) * 0.03D, -0.02D, Math.sin(angle) * 0.03D);
+            if (random.nextFloat() < 0.3F) {
+                level.addParticle(ParticleTypes.SMOKE, true, x, ringY - 0.8D, z, 0.0D, -0.04D, 0.0D);
+            }
+        }
+    }
+
+    /** Retro rockets burn from the atmosphere bottom all the way down, four nozzles. */
+    private static void retroFlames(ClientLevel level, TransportCapsuleEntity entity) {
+        RandomSource random = level.random;
+        MannedCapsuleGeoModel.forEachThruster(entity, point -> {
+            level.addParticle(ParticleTypes.FLAME, true, point.x, point.y, point.z,
+                    random.nextDouble() * 0.04D - 0.02D, -1.2D, random.nextDouble() * 0.04D - 0.02D);
+            if (random.nextFloat() < 0.25F) {
+                level.addParticle(ParticleTypes.LARGE_SMOKE, true, point.x, point.y, point.z,
+                        0.02D, -0.4D, 0.02D);
+            }
+        });
+    }
+
+    /** Fire, explosion puffs and touchdown smoke only make sense in the last few blocks. */
+    private static boolean nearGround(ClientLevel level, FallingCapsuleEntity entity) {
+        int groundY = level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES,
+                Mth.floor(entity.getX()), Mth.floor(entity.getZ()));
+        return entity.getY() - groundY < 8.0D;
     }
 
     /** Retro rocket flames in the last three blocks, and the dust cloud at touchdown. */

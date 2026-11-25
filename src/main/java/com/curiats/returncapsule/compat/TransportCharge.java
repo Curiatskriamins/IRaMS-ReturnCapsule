@@ -20,13 +20,13 @@ public final class TransportCharge {
                 || event.player.tickCount % RECHARGE_INTERVAL_TICKS != 0) {
             return;
         }
-        charge(event.player.getInventory());
+        charge(event.player.getInventory(), event.player);
         if (event.player instanceof net.minecraft.server.level.ServerPlayer serverPlayer) {
-            charge(serverPlayer.getEnderChestInventory());
+            charge(serverPlayer.getEnderChestInventory(), serverPlayer);
         }
     }
 
-    private static void charge(Container container) {
+    private static void charge(Container container, net.minecraft.world.entity.player.Player eventPlayer) {
         int max = Config.designatorMaxCharge();
         for (int i = 0, size = container.getContainerSize(); i < size; i++) {
             ItemStack stack = container.getItem(i);
@@ -37,6 +37,9 @@ public final class TransportCharge {
             if (current < max) {
                 TransportDesignatorItem.setCharge(stack, current + 1);
                 container.setChanged();
+                if (eventPlayer != null) {
+                    eventPlayer.inventoryMenu.broadcastChanges();
+                }
             }
         }
     }

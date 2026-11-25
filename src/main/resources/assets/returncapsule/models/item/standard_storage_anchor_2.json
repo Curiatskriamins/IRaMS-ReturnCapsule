@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/generated",
+  "textures": {
+    "layer0": "returncapsule:item/standard_storage_anchor_2"
+  }
+}

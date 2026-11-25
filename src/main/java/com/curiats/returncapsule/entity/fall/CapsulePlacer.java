@@ -22,13 +22,18 @@ public final class CapsulePlacer {
                 capsule.setLootTable(lootTable, level.random.nextLong());
             }
         } else {
-            dropFallback(level, pos);
+            dropFallback(level, pos, CapsuleKind.SUPPLY);
         }
     }
 
     public static void withItems(ServerLevel level, BlockPos pos, Direction facing,
                                  Container source, SummonTier tier) {
-        if (place(level, pos, facing, tier)) {
+        withItems(level, pos, facing, source, tier, CapsuleKind.SUPPLY);
+    }
+
+    public static void withItems(ServerLevel level, BlockPos pos, Direction facing,
+                                 Container source, SummonTier tier, CapsuleKind kind) {
+        if (place(level, pos, facing, tier, kind)) {
             if (level.getBlockEntity(pos) instanceof CapsuleBlockEntity capsule) {
                 int slots = Math.min(capsule.getContainerSize(), source.getContainerSize());
                 for (int i = 0; i < slots; i++) {
@@ -37,12 +42,18 @@ public final class CapsulePlacer {
                 capsule.markLootGenerated();
             }
         } else {
-            dropFallback(level, pos);
+            dropFallback(level, pos, kind);
         }
     }
 
     private static boolean place(ServerLevel level, BlockPos pos, Direction facing, SummonTier tier) {
-        BlockState state = ModBlocks.CAPSULE.get().defaultBlockState().setValue(CapsuleBlock.FACING, facing);
+        return place(level, pos, facing, tier, CapsuleKind.SUPPLY);
+    }
+
+    private static boolean place(ServerLevel level, BlockPos pos, Direction facing, SummonTier tier,
+                                 CapsuleKind kind) {
+        var block = kind == CapsuleKind.MANNED ? ModBlocks.MANNED_CAPSULE.get() : ModBlocks.CAPSULE.get();
+        BlockState state = block.defaultBlockState().setValue(CapsuleBlock.FACING, facing);
         if (!level.setBlock(pos, state, Block.UPDATE_ALL)) {
             return false;
         }
@@ -52,8 +63,12 @@ public final class CapsulePlacer {
         return true;
     }
 
-    private static void dropFallback(ServerLevel level, BlockPos pos) {
-        Block.popResource(level, pos, new ItemStack(ModItems.CAPSULE.get()));
+    /** Draft change: a failed manned placement must not fall back to a supply capsule item. */
+    private static void dropFallback(ServerLevel level, BlockPos pos, CapsuleKind kind) {
+        ItemStack drop = kind == CapsuleKind.MANNED
+                ? new ItemStack(ModItems.MANNED_CAPSULE.get())
+                : new ItemStack(ModItems.CAPSULE.get());
+        Block.popResource(level, pos, drop);
     }
 
     private CapsulePlacer() {

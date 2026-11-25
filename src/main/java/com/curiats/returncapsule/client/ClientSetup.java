@@ -29,6 +29,7 @@ public final class ClientSetup {
         event.registerEntityRenderer(ModEntities.BOOM.get(), BoomRenderer::new);
         event.registerEntityRenderer(ModEntities.BASE_HUMANOID.get(), HumanoidRenderer::new);
         event.registerBlockEntityRenderer(ModBlockEntities.CAPSULE.get(), CapsuleBlockRenderer::new);
+        event.registerBlockEntityRenderer(ModBlockEntities.MANNED_CAPSULE.get(), CapsuleBlockRenderer::new);
         event.registerBlockEntityRenderer(ModBlockEntities.TRANSPORT_MARKER.get(), TransportMarkerRenderer::new);
     }
 
@@ -37,10 +38,13 @@ public final class ClientSetup {
     public static void clientSetup(FMLClientSetupEvent event) {
         event.enqueueWork(() -> {
             MenuScreens.register(ModMenus.CAPSULE.get(), CapsuleScreen::new);
+            net.minecraft.client.renderer.item.ItemProperties.register(
+                    com.curiats.returncapsule.registry.ModItems.STANDARD_STORAGE_ANCHOR.get(),
+                    com.curiats.returncapsule.ReturnCapsuleMod.id("stored"),
+                    (stack, level, entity, seed) -> com.curiats.returncapsule.util.AnchorStorage.count(stack));
 
             CapsuleClientHooks.install(ClientTrail::onFallingTick);
             BoomClientHooks.install(BoomClientTrail::onTick);
-            net.minecraftforge.common.MinecraftForge.EVENT_BUS.register(KillMarkerRenderer.class);
             ReturnCapsuleMod.LOGGER.debug("[kill-marker] renderer registered");
             com.curiats.returncapsule.compat.mobends.MobendsAddon.registerIfPresent();
         });

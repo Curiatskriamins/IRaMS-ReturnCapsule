@@ -69,8 +69,7 @@ public final class BoomExplosion {
                 int hits = target.getPersistentData().getInt("returncapsule_bomb_hits") + 1;
                 target.getPersistentData().putInt("returncapsule_bomb_hits", hits);
                 if (hits > 5 && target instanceof net.minecraft.world.entity.monster.Enemy) {
-                    target.invulnerableTime = 0;
-                    target.hurt(TrueDamage.boom(level, bomb, owner), 500.0F);
+                    applyDamage(target, TrueDamage.boom(level, bomb, owner), 500.0F);
                     TrueDot.apply(level, target, bomb, owner, 10, 10.0F);
                     continue;
                 }
@@ -80,14 +79,42 @@ public final class BoomExplosion {
             if (damage <= 0.0F) {
                 continue;
             }
-            target.invulnerableTime = 0;
             DamageSource source = mode == Mode.ANCHOR
                     ? level.damageSources().explosion(bomb, owner)
                     : TrueDamage.boom(level, bomb, owner);
-            target.hurt(source, damage);
+            applyDamage(target, source, damage);
             if (mode == Mode.ANCHOR && target.isAlive()) {
                 ShockManager.applyShock(target, Config.BOOM_SHOCK_TICKS.get());
             }
+        }
+    }
+
+    /**
+     * Applies the damage and verifies it landed.
+     *
+     * <p>Entities from some mods cancel hurt() while an animation is stuck, which silently eats every bomb hit. If the
+     * health value did not move, the amount is written directly instead; reaching zero is followed by die() because a
+     * bare setHealth leaves a zero health body that never runs the death path.</p>
+     */
+    private static void applyDamage(LivingEntity target, DamageSource source, float damage) {
+        if (damage <= 0.0F) {
+            return;
+        }
+        float before = target.getHealth();
+        target.invulnerableTime = 0;
+        target.hurt(source, damage);
+        if (!target.isAlive() || target.isRemoved()) {
+            return;
+        }
+        float after = target.getHealth();
+        if (!Float.isNaN(after) && after < before - 0.01F) {
+            return;
+        }
+        float current = Float.isNaN(after) ? before : after;
+        float remaining = current - damage;
+        target.setHealth(Math.max(0.0F, remaining));
+        if (remaining <= 0.0F && !target.isDeadOrDying()) {
+            target.die(source);
         }
     }
 

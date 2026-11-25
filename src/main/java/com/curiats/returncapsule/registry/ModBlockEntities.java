@@ -2,6 +2,7 @@ package com.curiats.returncapsule.registry;
 
 import com.curiats.returncapsule.ReturnCapsuleMod;
 import com.curiats.returncapsule.block.CapsuleBlockEntity;
+import com.curiats.returncapsule.block.MannedCapsuleBlockEntity;
 import com.curiats.returncapsule.block.TransportMarkerBlockEntity;
 import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraftforge.registries.DeferredRegister;
@@ -15,6 +16,11 @@ public final class ModBlockEntities {
     public static final RegistryObject<BlockEntityType<CapsuleBlockEntity>> CAPSULE =
             BLOCK_ENTITIES.register("capsule", () -> BlockEntityType.Builder
                     .of(CapsuleBlockEntity::new, ModBlocks.CAPSULE.get())
+                    .build(null));
+
+    public static final RegistryObject<BlockEntityType<MannedCapsuleBlockEntity>> MANNED_CAPSULE =
+            BLOCK_ENTITIES.register("manned_capsule", () -> BlockEntityType.Builder
+                    .of(MannedCapsuleBlockEntity::new, ModBlocks.MANNED_CAPSULE.get())
                     .build(null));
 
     public static final RegistryObject<BlockEntityType<TransportMarkerBlockEntity>> TRANSPORT_MARKER =

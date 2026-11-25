@@ -418,7 +418,11 @@ public class NeutralHumanoid extends PathfinderMob implements RangedAttackMob {
     }
 
     private static String describe(ItemStack stack) {
-        return stack.isEmpty() ? "none" : ForgeRegistries.ITEMS.getKey(stack.getItem()).toString();
+        if (stack.isEmpty()) {
+            return "none";
+        }
+        net.minecraft.resources.ResourceLocation id = ForgeRegistries.ITEMS.getKey(stack.getItem());
+        return id == null ? stack.getItem().toString() : id.toString();
     }
 
     private void makeConversionImmune() {

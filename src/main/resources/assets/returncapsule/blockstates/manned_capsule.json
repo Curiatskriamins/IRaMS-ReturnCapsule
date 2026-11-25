@@ -1,0 +1,16 @@
+{
+  "variants": {
+    "facing=north": {
+      "model": "returncapsule:block/manned_capsule"
+    },
+    "facing=east": {
+      "model": "returncapsule:block/manned_capsule"
+    },
+    "facing=south": {
+      "model": "returncapsule:block/manned_capsule"
+    },
+    "facing=west": {
+      "model": "returncapsule:block/manned_capsule"
+    }
+  }
+}

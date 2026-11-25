@@ -16,6 +16,9 @@ public final class TaczShooter {
 
     private static volatile boolean resolved;
     private static volatile boolean broken;
+
+    /** A resolve attempted before TaCZ finished loading must be retried, not latched forever. */
+    private static volatile long retryAt;
     private static final java.util.Set<String> reportedOutcomes = java.util.concurrent.ConcurrentHashMap.newKeySet();
 
     private static final java.util.Set<Integer> shotsLogged = java.util.concurrent.ConcurrentHashMap.newKeySet();
@@ -154,6 +157,9 @@ public final class TaczShooter {
     }
 
     private static boolean resolve() {
+        if (!resolved && System.currentTimeMillis() < retryAt) {
+            return false;
+        }
         if (resolved) {
             return fromLivingEntity != null;
         }
@@ -175,7 +181,9 @@ public final class TaczShooter {
                 ReturnCapsuleMod.LOGGER.debug("[humanoid] TaCZ firing bridge ready");
             } catch (ReflectiveOperationException | RuntimeException exception) {
                 fromLivingEntity = null;
-                ReturnCapsuleMod.LOGGER.debug("TaCZ is not available for humanoid gunfire: {}",
+                resolved = false;
+                retryAt = System.currentTimeMillis() + 5000L;
+                ReturnCapsuleMod.LOGGER.debug("TaCZ is not available for humanoid gunfire, retrying later: {}",
                         exception.toString());
             }
             return fromLivingEntity != null;

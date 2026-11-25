@@ -10,8 +10,16 @@ public final class Config {
     public static final ForgeConfigSpec.IntValue SPAWN_HEIGHT;
     public static final ForgeConfigSpec.DoubleValue GRAVITY;
     public static final ForgeConfigSpec.DoubleValue TERMINAL_VELOCITY;
+    public static final ForgeConfigSpec.BooleanValue MANNED_FALL_REALISTIC;
+    public static final ForgeConfigSpec.IntValue MANNED_SPAWN_HEIGHT;
+    public static final ForgeConfigSpec.DoubleValue MANNED_CRUISE_SPEED;
+    public static final ForgeConfigSpec.DoubleValue MANNED_REALISTIC_SPEED;
+    public static final ForgeConfigSpec.IntValue MANNED_HORIZONTAL_DISTANCE;
+    public static final ForgeConfigSpec.IntValue MANNED_HORIZONTAL_START;
 
     public static final ForgeConfigSpec.BooleanValue BREAK_BLOCKS;
+
+    public static final ForgeConfigSpec.BooleanValue HEALTH_GUARD;
     public static final ForgeConfigSpec.IntValue SMASH_INNER_RADIUS;
     public static final ForgeConfigSpec.IntValue SMASH_OUTER_RADIUS;
     public static final ForgeConfigSpec.DoubleValue SMASH_OUTER_CHANCE;
@@ -138,7 +146,26 @@ public final class Config {
         ForgeConfigSpec.Builder builder = new ForgeConfigSpec.Builder();
 
         builder.push("fall");
-        SPAWN_HEIGHT = builder
+        MANNED_FALL_REALISTIC = builder
+            .comment("拟真下坠：约 10 分钟；关闭则按 mannedCruiseSpeed 缩短(Realistic fall takes about ten minutes)",
+                    "现实返回舱没有降落伞阶段的模拟，只是把下落速度放慢(Only the descent speed changes)")
+            .define("mannedFallRealistic", false);
+    MANNED_SPAWN_HEIGHT = builder
+            .comment("载人返回舱起始高度，约 500km 近地轨道(Start height of the manned capsule, about 500 km)")
+            .defineInRange("mannedSpawnHeight", 499697, 100, 8_000_000);
+    MANNED_CRUISE_SPEED = builder
+            .comment("拟真关闭时的巡航速度，约 3 分钟落地(Cruise speed when realistic fall is off, about three minutes)")
+            .defineInRange("mannedCruiseSpeed", 160.0D, 8.0D, 2048.0D);
+    MANNED_REALISTIC_SPEED = builder
+            .comment("拟真开启时的巡航速度，约 10 分钟落地(Cruise speed when realistic fall is on, about ten minutes)")
+            .defineInRange("mannedRealisticSpeed", 45.0D, 4.0D, 2048.0D);
+    MANNED_HORIZONTAL_DISTANCE = builder
+            .comment("拟真档的横向进场距离；0 表示纯垂直(Realistic lateral approach distance, 0 for a vertical fall)")
+            .defineInRange("mannedHorizontalDistance", 2048, 0, 8192);
+    MANNED_HORIZONTAL_START = builder
+            .comment("开始横向移动的高度(Altitude where the lateral approach starts)")
+            .defineInRange("mannedHorizontalStart", 10000, 100, 120000);
+    SPAWN_HEIGHT = builder
                 .comment("掉落高度 1740 格，落地约需 20 秒(Drop height 1740, about 20 seconds)" +
                         "a_air = 2s / t² = (2 × 1740) / 20² = 8.7 m/s², 但实际上是1470，我算错了")
                 .defineInRange("spawnHeight", 1470, 20, 4000);
@@ -154,6 +181,10 @@ public final class Config {
         BREAK_BLOCKS = builder
                 .comment("破坏方块(break Blocks)")
                 .define("breakBlocks", true);
+        HEALTH_GUARD = builder
+                .comment("实体生命值为 0 或 NaN 时强制调用 die()(Force die() on a living entity whose health ended up zero or NaN; some modpacks leave such bodies standing)",
+                        "只作为整合包兼容的兜底，默认开启(Only a compatibility fallback for packs; on by default)")
+                .define("killInvalidHealth", true);
         SMASH_INNER_RADIUS = builder
                 .comment("通道破坏范围(inner radius)")
                 .defineInRange("innerRadius", 1, 0, 8);
@@ -564,6 +595,26 @@ public final class Config {
 
     public static int spawnHeight() {
         return SPAWN_HEIGHT.get();
+    }
+
+    public static int mannedSpawnHeight() {
+        return MANNED_SPAWN_HEIGHT.get();
+    }
+
+    public static boolean mannedFallRealistic() {
+        return MANNED_FALL_REALISTIC.get();
+    }
+
+    public static double mannedCruiseSpeed() {
+        return mannedFallRealistic() ? MANNED_REALISTIC_SPEED.get() : MANNED_CRUISE_SPEED.get();
+    }
+
+    public static int mannedHorizontalDistance() {
+        return mannedFallRealistic() ? MANNED_HORIZONTAL_DISTANCE.get() : 0;
+    }
+
+    public static int mannedHorizontalStart() {
+        return MANNED_HORIZONTAL_START.get();
     }
 
     public static int designatorMaxCharge() {

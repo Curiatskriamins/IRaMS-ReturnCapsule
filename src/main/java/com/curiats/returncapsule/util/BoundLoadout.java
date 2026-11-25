@@ -47,12 +47,27 @@ public final class BoundLoadout {
         return player.getPersistentData().getBoolean(TAG_OPENED);
     }
 
-    public static void markOpened(ServerPlayer player) {
-        player.getPersistentData().putBoolean(TAG_OPENED, true);
-    }
-
     /** Builds the five bound pieces; returns null when the player already got their one allocation. */
     @Nullable
+    public static boolean isGranted(net.minecraft.world.entity.player.Player player) {
+        return player.getPersistentData().getBoolean(TAG_GRANTED);
+    }
+
+    /** Writes the granted set and the storage anchor into the capsule container. */
+    public static boolean fillCapsule(com.curiats.returncapsule.block.CapsuleBlockEntity capsule,
+                                      net.minecraft.server.level.ServerPlayer player) {
+        ItemStack[] set = grant(player);
+        if (set == null) {
+            return false;
+        }
+        for (int slot = 0; slot < set.length; slot++) {
+            capsule.setItem(slot, set[slot]);
+        }
+        capsule.setItem(set.length,
+                new ItemStack(com.curiats.returncapsule.registry.ModItems.STANDARD_STORAGE_ANCHOR.get()));
+        return true;
+    }
+
     public static ItemStack[] grant(ServerPlayer player) {
         CompoundTag data = player.getPersistentData();
         if (data.getBoolean(TAG_GRANTED)) {
@@ -165,8 +180,4 @@ public final class BoundLoadout {
         }
     }
 
-    /** True when the set was opened for this player already, so later capsules carry nothing. */
-    public static boolean canReceiveSet(ServerPlayer player) {
-        return !granted(player);
-    }
 }

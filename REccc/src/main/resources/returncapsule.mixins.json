@@ -1,0 +1,20 @@
+{
+    "required": true,
+    "minVersion": "0.8",
+    "package": "com.curiats.returncapsule.mixin",
+    "compatibilityLevel": "JAVA_17",
+    "refmap": "returncapsule.refmap.json",
+    "mixins": [
+        "LivingEntitySetHealthMixin",
+        "EntityDiscardGuardMixin",
+        "LivingEntityHealLockMixin",
+        "HumanoidAggroGuardMixin",
+        "PlayerHurtMixin",
+        "MobPickupGuardMixin",
+        "LivingEntityHealthGuardMixin",
+        "ThunderConversionMixin"
+    ],
+    "injectors": {
+        "defaultRequire": 1
+    }
+}

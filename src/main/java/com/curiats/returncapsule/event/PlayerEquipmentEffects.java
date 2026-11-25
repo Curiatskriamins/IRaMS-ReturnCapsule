@@ -50,7 +50,8 @@ public final class PlayerEquipmentEffects {
         }
     }
 
-    private static boolean isBlocked(MobEffectInstance instance) {
+    /** Shared with the anchor field so pets are filtered by exactly the same list as the player. */
+    public static boolean isBlocked(MobEffectInstance instance) {
         MobEffect effect = instance.getEffect();
         ResourceLocation id = BuiltInRegistries.MOB_EFFECT.getKey(effect);
         String key = id == null ? "" : id.toString();

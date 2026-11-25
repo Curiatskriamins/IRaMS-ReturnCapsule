@@ -243,7 +243,7 @@ public class HumanoidCombatGoal extends Goal {
             return false;
         }
         this.stalledTicks++;
-        if (this.stalledTicks == AIM_SWITCH_TICKS && this.aimMode == AimMode.HEAD) {
+        if (this.stalledTicks >= AIM_SWITCH_TICKS && this.aimMode == AimMode.HEAD) {
             this.aimMode = AimMode.BODY;
         }
         if (this.stalledTicks <= STALL_TIMEOUT) {
@@ -286,11 +286,12 @@ public class HumanoidCombatGoal extends Goal {
             this.fallbackTicks--;
             return this.fallbackTicks > 0;
         }
-        if (this.mob.hurtTime <= 0 || this.fallbackCooldown > 0) {
+        if (this.fallbackCooldown > 0) {
+            this.fallbackCooldown--;
             return false;
         }
-        if (this.fallbackCooldown > -200) {
-            this.fallbackCooldown--;
+        if (this.mob.hurtTime <= 0) {
+            return false;
         }
         if (this.isOpenGround(this.mob.blockPosition())) {
             this.fallbackCooldown = FALLBACK_COOLDOWN;

@@ -101,7 +101,7 @@ public class KillMarkerItem extends Item {
         Set<UUID> excluded = new java.util.HashSet<>();
         player.playNotifySound(ModSounds.MISSILE_LOCK.get(), SoundSource.PLAYERS, 1.0F, 1.0F);
         for (int i = 0; i < count; i++) {
-            Shot shot = resolveShot(player, level, excluded);
+            Shot shot = resolveShot(player, level, java.util.Set.of());
             if (shot == null) {
                 break;
             }
@@ -158,7 +158,9 @@ public class KillMarkerItem extends Item {
         if (volley.shots.size() >= maxQueued) {
             return;
         }
-        Shot shot = resolveShot(player, level, queued(volley));
+        // Charging stacks bombs on whatever the crosshair is on: excluding already queued targets made the
+        // second shot impossible whenever the player kept aiming at the same enemy.
+        Shot shot = resolveShot(player, level, java.util.Set.of());
         if (shot == null) {
             return;
         }

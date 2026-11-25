@@ -1,0 +1,26 @@
+{
+  "parent": "minecraft:item/generated",
+  "textures": {
+    "layer0": "returncapsule:item/standard_storage_anchor"
+  },
+  "overrides": [
+    {
+      "predicate": {
+        "stored": 1
+      },
+      "model": "returncapsule:item/standard_storage_anchor_1"
+    },
+    {
+      "predicate": {
+        "stored": 2
+      },
+      "model": "returncapsule:item/standard_storage_anchor_2"
+    },
+    {
+      "predicate": {
+        "stored": 3
+      },
+      "model": "returncapsule:item/standard_storage_anchor_3"
+    }
+  ]
+}

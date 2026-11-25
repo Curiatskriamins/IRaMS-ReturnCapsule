@@ -1,21 +1,18 @@
 package com.curiats.returncapsule.entity;
 
 import com.curiats.returncapsule.Config;
-import com.curiats.returncapsule.compat.ShockManager;
+import com.curiats.returncapsule.entity.fall.CapsuleKind;
+import com.curiats.returncapsule.entity.fall.CapsuleLanding;
 import com.curiats.returncapsule.entity.fall.CapsuleParticles;
-import com.curiats.returncapsule.entity.fall.CapsulePlacer;
 import com.curiats.returncapsule.entity.fall.LandingSite;
 import com.curiats.returncapsule.entity.fall.ShakeBurst;
 import com.curiats.returncapsule.progress.SummonTier;
 import com.curiats.returncapsule.registry.ModEntities;
-import com.curiats.returncapsule.registry.ModSounds;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.particles.DustParticleOptions;
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.sounds.SoundEvents;
-import net.minecraft.sounds.SoundSource;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
@@ -30,7 +27,7 @@ import java.util.Set;
 import java.util.UUID;
 
 @SuppressWarnings({"this-escape"})
-public class SupplyCapsuleEntity extends FallingCapsuleEntity {
+public class SupplyCapsuleEntity extends AbstractCapsuleEntity {
     private static final DustParticleOptions MARKER_DUST =
             new DustParticleOptions(new Vector3f(1.0F, 0.02F, 0.02F), 1.2F);
     private static final int FALL_SHAKE_AMPLIFIER = 3;
@@ -44,6 +41,11 @@ public class SupplyCapsuleEntity extends FallingCapsuleEntity {
         this(ModEntities.SUPPLY_CAPSULE.get(), level);
         this.setTier(tier);
         this.beginFall(target, owner, Config.spawnHeight());
+    }
+
+    @Override
+    public CapsuleKind capsuleKind() {
+        return CapsuleKind.SUPPLY;
     }
 
     @Override
@@ -80,48 +82,46 @@ public class SupplyCapsuleEntity extends FallingCapsuleEntity {
     }
 
     @Override
-    protected void onLanded(ServerLevel server) {
-        if (this.impacted || this.anchor == null) {
-            return;
-        }
-        this.impacted = true;
+    protected BlockPos resolveLanding(ServerLevel server) {
+        return LandingSite.findLanding(server, this.anchor);
+    }
 
-        this.anchor = LandingSite.findLanding(server, this.anchor);
-        BlockPos landing = this.anchor;
+    @Override
+    protected void impactEffects(ServerLevel server, BlockPos landing) {
+        super.impactEffects(server, landing);
+        // Draft change: the impact particles stay before the shock, like the original implementation.
+        this.spawnImpactParticles(server,
+                landing.getX() + 0.5D, landing.getY() + 1.0D, landing.getZ() + 0.5D);
+    }
+
+    @Override
+    protected void afterShock(ServerLevel server, BlockPos landing) {
+        // Draft change: the cloud, the scattered drops and the clear step run after the shock again, so the shock
+        // occlusion test sees the same blocks the original implementation saw.
         double x = landing.getX() + 0.5D;
         double y = landing.getY() + 1.0D;
         double z = landing.getZ() + 0.5D;
-
-        server.playSound(null, x, y, z, SoundEvents.GENERIC_EXPLODE, SoundSource.BLOCKS,
-                Config.IMPACT_SOUND_VOLUME.get().floatValue(),
-                Config.IMPACT_SOUND_PITCH.get().floatValue());
-
-        server.playSound(null, x, y, z, ModSounds.CAPSULE_IMPACT.get(), SoundSource.BLOCKS,
-                Config.IMPACT_THUD_VOLUME.get().floatValue(),
-                Config.IMPACT_THUD_PITCH.get().floatValue());
-        this.spawnImpactParticles(server, x, y, z);
-
-        if (Config.SCREEN_SHAKE.get()) {
-            ShakeBurst.around(server, x, y, z, Config.SHAKE_RADIUS.get(), 25, 0);
-        }
-
-        Entity owner = this.ownerUuid == null ? null : server.getEntity(this.ownerUuid);
-        Set<UUID> excluded = new HashSet<>(2);
-        if (!Config.DAMAGE_OWNER.get() && owner != null) {
-            excluded.add(owner.getUUID());
-        }
-        ShockManager.impact(server, new Vec3(x, y, z), Config.IMPACT_HALF_SIZE.get(), this, excluded);
-
         this.spawnExplosionCloud(server, x, y, z);
         LandingSite.scatterDrops(server, landing, this.random);
         if (Config.CLEAR_LANDING_AREA.get()) {
             LandingSite.clearArea(server, landing);
         }
-        CapsulePlacer.withLootTable(server, landing, this.landingFacing,
+    }
+
+    @Override
+    protected Set<UUID> shockExclusions(ServerLevel server) {
+        Entity owner = this.ownerUuid == null ? null : server.getEntity(this.ownerUuid);
+        Set<UUID> excluded = new HashSet<>(2);
+        if (!Config.DAMAGE_OWNER.get() && owner != null) {
+            excluded.add(owner.getUUID());
+        }
+        return excluded;
+    }
+
+    @Override
+    protected void placeCargo(ServerLevel server, BlockPos landing) {
+        CapsuleLanding.landWithLootTable(server, landing, this.landingFacing, CapsuleKind.SUPPLY,
                 this.tier.lootTable(), this.tier);
-        CapsuleFire.spread(server, new Vec3(x, y, z),
-                Config.LANDING_FIRE_RADIUS.get(), Config.LANDING_FIRE_CHANCE.get());
-        this.discard();
     }
 
     private void spawnImpactParticles(ServerLevel server, double x, double y, double z) {
@@ -156,7 +156,6 @@ public class SupplyCapsuleEntity extends FallingCapsuleEntity {
     @Override
     protected void addAdditionalSaveData(CompoundTag tag) {
         super.addAdditionalSaveData(tag);
-
         if (this.anchor != null) {
             tag.putLong(TAG_LEGACY_TARGET, this.anchor.asLong());
         }

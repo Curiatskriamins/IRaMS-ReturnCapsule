@@ -3,6 +3,7 @@ package com.curiats.returncapsule.registry;
 import com.curiats.returncapsule.ReturnCapsuleMod;
 import com.curiats.returncapsule.block.CapsuleBlock;
 import com.curiats.returncapsule.block.CapsulePartBlock;
+import com.curiats.returncapsule.block.MannedCapsuleBlock;
 import com.curiats.returncapsule.block.TransportMarkerBlock;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.SoundType;
@@ -22,6 +23,19 @@ public final class ModBlocks {
                     .mapColor(MapColor.METAL)
                     .strength(20.0F, 1200.0F).requiresCorrectToolForDrops()
                     .sound(SoundType.METAL)
+                    .pushReaction(PushReaction.BLOCK)
+                    .noOcclusion()
+                    .dynamicShape()
+                    .isRedstoneConductor((state, level, pos) -> false)
+                    .isSuffocating((state, level, pos) -> false)
+                    .isViewBlocking((state, level, pos) -> false)));
+
+    public static final RegistryObject<CapsuleBlock> MANNED_CAPSULE = BLOCKS.register("manned_capsule",
+            () -> new MannedCapsuleBlock(BlockBehaviour.Properties.of()
+                    .mapColor(MapColor.METAL)
+                    .strength(20.0F, 1200.0F).requiresCorrectToolForDrops()
+                    .sound(SoundType.METAL)
+                    .pushReaction(PushReaction.BLOCK)
                     .noOcclusion()
                     .dynamicShape()
                     .isRedstoneConductor((state, level, pos) -> false)

@@ -22,10 +22,18 @@ public final class ModItems {
             () -> new CapsuleCallerItem(new Item.Properties().stacksTo(1)));
 
     public static final RegistryObject<BlockItem> CAPSULE = ITEMS.register("capsule",
-            () -> new CapsuleBlockItem(new Item.Properties().stacksTo(1)));
+            () -> new CapsuleBlockItem(new Item.Properties().stacksTo(1).fireResistant()));
+
+    public static final RegistryObject<BlockItem> MANNED_CAPSULE = ITEMS.register("manned_capsule",
+            () -> new CapsuleBlockItem(ModBlocks.MANNED_CAPSULE,
+                    new Item.Properties().stacksTo(1).fireResistant()));
 
     public static final RegistryObject<Item> TRANSPORT_DESIGNATOR = ITEMS.register("transport_designator",
             () -> new TransportDesignatorItem(new Item.Properties().stacksTo(1)));
+
+    public static final RegistryObject<Item> STANDARD_STORAGE_ANCHOR = ITEMS.register("standard_storage_anchor",
+            () -> new com.curiats.returncapsule.item.StandardStorageAnchorItem(
+                    new Item.Properties().stacksTo(1)));
 
     public static final RegistryObject<Item> KILL_MARKER_INDICATOR = ITEMS.register("kill_marker_indicator",
             () -> new KillMarkerItem(new Item.Properties().stacksTo(1)));

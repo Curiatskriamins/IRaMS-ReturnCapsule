@@ -61,8 +61,8 @@ public class TransportMarkerBlock extends BaseEntityBlock {
     @Override
     public void onRemove(BlockState state, Level level, BlockPos pos, BlockState newState, boolean moving) {
         if (!level.isClientSide && state.getBlock() != newState.getBlock()
-                && level.getBlockEntity(pos) instanceof TransportMarkerBlockEntity marker) {
-            marker.releaseChunks();
+                && level.getBlockEntity(pos) instanceof TransportMarkerBlockEntity) {
+            // Chunk keeping is per-view now; do not touch FORCED, it is shared with other mods and /forceload.
         }
         super.onRemove(state, level, pos, newState, moving);
     }

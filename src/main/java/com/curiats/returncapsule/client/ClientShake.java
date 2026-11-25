@@ -43,6 +43,12 @@ public final class ClientShake {
                 ? soundAmplitude * (soundTicks / (float) SHAKE_TICKS)
                 : 0.0F;
         float amplitude = Math.max(effectAmplitude, soundAmplitudeNow);
+        if (player.getVehicle() instanceof com.curiats.returncapsule.entity.TransportCapsuleEntity capsule) {
+            double remaining = capsule.getY() - capsule.landingY();
+            if (remaining > 10_800.0D && remaining < 120_000.0D) {
+                amplitude = Math.max(amplitude, 0.22F);
+            }
+        }
         if (amplitude <= 0.0F) {
             return;
         }

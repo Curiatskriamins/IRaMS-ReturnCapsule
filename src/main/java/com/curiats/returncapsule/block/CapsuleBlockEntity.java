@@ -1,9 +1,11 @@
 package com.curiats.returncapsule.block;
 
 import com.curiats.returncapsule.Config;
+import com.curiats.returncapsule.entity.fall.CapsuleKind;
 import com.curiats.returncapsule.menu.CapsuleMenu;
 import com.curiats.returncapsule.progress.SummonTier;
 import com.curiats.returncapsule.registry.ModBlockEntities;
+import com.curiats.returncapsule.registry.ModBlocks;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.NonNullList;
 import net.minecraft.nbt.CompoundTag;
@@ -38,9 +40,12 @@ public class CapsuleBlockEntity extends RandomizableContainerBlockEntity {
     }
 
     private static final String TAG_OWNER = "Owner";
+    private static final String TAG_KIT_OWNER = "KitOwner";
+    private static final String TAG_PRESSURE = "PressureEqualized";
     private static final String TAG_TIER = "Tier";
     private static final int SHELL_REPAIR_INTERVAL = 40;
 
+    private final boolean manned;
     private final int slots;
     private final CapsuleAnimator animator;
     private final CapsuleLoot loot;
@@ -49,16 +54,29 @@ public class CapsuleBlockEntity extends RandomizableContainerBlockEntity {
     private NonNullList<ItemStack> items;
     @Nullable
     private UUID owner;
+
+    /** Not null while the first-open kit has not been issued yet. */
+    @javax.annotation.Nullable
+    private UUID kitOwner;
     private SummonTier tier = SummonTier.BASIC;
     private int repairCooldown = SHELL_REPAIR_INTERVAL;
 
     public CapsuleBlockEntity(BlockPos pos, BlockState state) {
-        super(ModBlockEntities.CAPSULE.get(), pos, state);
-        this.slots = Config.containerSlots();
+        this(ModBlockEntities.CAPSULE.get(), pos, state, false);
+    }
+
+    protected CapsuleBlockEntity(net.minecraft.world.level.block.entity.BlockEntityType<?> type,
+                                 BlockPos pos, BlockState state, boolean manned) {
+        super(type, pos, state);
+        this.manned = manned;
+        this.slots = manned ? 6 : Config.containerSlots();
         this.items = NonNullList.withSize(this.slots, ItemStack.EMPTY);
         this.animator = new CapsuleAnimator(this);
         this.loot = new CapsuleLoot(this);
-        this.renderBox = new AABB(pos.offset(-1, 0, -1), pos.offset(2, 3, 2));
+        // Draft change: the manned model is 5 wide, 3 tall, so the tiny supply render box would cull it.
+        this.renderBox = manned
+                ? new AABB(pos.offset(-2, 0, -2), pos.offset(3, 4, 3))
+                : new AABB(pos.offset(-1, 0, -1), pos.offset(2, 3, 2));
     }
 
     public AnimState getAnimState() {
@@ -67,6 +85,18 @@ public class CapsuleBlockEntity extends RandomizableContainerBlockEntity {
 
     public float getLidProgress(float partialTick) {
         return this.animator.lidProgress(partialTick);
+    }
+
+    private boolean pressureEqualized;
+
+    /** The opening hiss is escaping air: it happens once, when the capsule first equalises, not on every lid cycle. */
+    public boolean claimPressureSound() {
+        if (this.pressureEqualized) {
+            return false;
+        }
+        this.pressureEqualized = true;
+        this.setChanged();
+        return true;
     }
 
     public void startOpening() {
@@ -91,8 +121,10 @@ public class CapsuleBlockEntity extends RandomizableContainerBlockEntity {
         this.animator.tick(server);
         if (--this.repairCooldown <= 0) {
             this.repairCooldown = SHELL_REPAIR_INTERVAL;
-            if (!CapsuleStructure.isIntact(server, this.worldPosition)) {
-                CapsuleStructure.placeParts(server, this.worldPosition);
+            // Draft change: repair the footprint this block actually has instead of always the 3x3 supply one.
+            CapsuleKind kind = this.manned() ? CapsuleKind.MANNED : CapsuleKind.SUPPLY;
+            if (!CapsuleStructure.isIntact(server, this.worldPosition, kind)) {
+                CapsuleStructure.placeParts(server, this.worldPosition, kind);
             }
         }
     }
@@ -146,6 +178,11 @@ public class CapsuleBlockEntity extends RandomizableContainerBlockEntity {
 
     @Override
     protected Component getDefaultName() {
+        com.curiats.returncapsule.ReturnCapsuleMod.LOGGER.info(
+                "[capsule] name query manned={} type={} tier={}", this.manned(), this.getType(), this.tier);
+        if (this.manned()) {
+            return Component.translatable("block.returncapsule.manned_capsule");
+        }
         return Component.translatable(this.tier.containerKey());
     }
 
@@ -154,14 +191,40 @@ public class CapsuleBlockEntity extends RandomizableContainerBlockEntity {
         return this.items.size();
     }
 
+    public boolean manned() {
+        return this.manned;
+    }
+
+    public boolean isEmptyContainer() {
+        for (int i = 0; i < this.getContainerSize(); i++) {
+            if (!this.getItem(i).isEmpty()) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     @Override
     protected AbstractContainerMenu createMenu(int id, Inventory inventory) {
-        return new CapsuleMenu(id, inventory, this);
+        com.curiats.returncapsule.ReturnCapsuleMod.LOGGER.info(
+                "[capsule] menu for {} manned={} slots={} type={}", this.getBlockState().getBlock(),
+                this.manned(), this.slots, this.getType());
+        return new CapsuleMenu(id, inventory, this, this.manned());
     }
 
     @Nullable
     public UUID getOwner() {
         return this.owner;
+    }
+
+    @Nullable
+    public UUID kitOwner() {
+        return this.kitOwner;
+    }
+
+    public void setKitOwner(@Nullable UUID owner) {
+        this.kitOwner = owner;
+        this.setChanged();
     }
 
     public void setOwner(@Nullable UUID owner) {
@@ -194,6 +257,8 @@ public class CapsuleBlockEntity extends RandomizableContainerBlockEntity {
             ContainerHelper.loadAllItems(tag, this.items);
         }
         this.owner = tag.hasUUID(TAG_OWNER) ? tag.getUUID(TAG_OWNER) : null;
+        this.kitOwner = tag.hasUUID(TAG_KIT_OWNER) ? tag.getUUID(TAG_KIT_OWNER) : null;
+        this.pressureEqualized = tag.getBoolean(TAG_PRESSURE);
         this.tier = SummonTier.byName(tag.getString(TAG_TIER));
         this.loot.load(tag, hasLootTable);
         this.animator.load(tag);
@@ -205,6 +270,10 @@ public class CapsuleBlockEntity extends RandomizableContainerBlockEntity {
         if (!this.trySaveLootTable(tag)) {
             ContainerHelper.saveAllItems(tag, this.items);
         }
+        if (this.kitOwner != null) {
+            tag.putUUID(TAG_KIT_OWNER, this.kitOwner);
+        }
+        tag.putBoolean(TAG_PRESSURE, this.pressureEqualized);
         if (this.owner != null) {
             tag.putUUID(TAG_OWNER, this.owner);
         }

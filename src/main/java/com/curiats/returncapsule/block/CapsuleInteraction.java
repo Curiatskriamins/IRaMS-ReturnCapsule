@@ -26,11 +26,33 @@ public final class CapsuleInteraction {
             }
             switch (capsule.getAnimState()) {
                 case CLOSED -> {
+                    // Manned capsules open silently; the hiss is escaping air and happens once per capsule.
+                    if (!capsule.manned() && capsule.claimPressureSound()) {
+                        level.playSound(null, pos, ModSounds.CAPSULE_OPEN.get(),
+                                SoundSource.BLOCKS, 1.0F, 1.0F);
+                    }
                     capsule.startOpening();
-                    level.playSound(null, pos, ModSounds.CAPSULE_OPEN.get(),
-                            SoundSource.BLOCKS, 1.0F, 1.0F);
                 }
-                case OPEN -> player.openMenu(capsule);
+                case OPEN -> {
+                if (capsule.kitOwner() != null) {
+                if (!(player instanceof net.minecraft.server.level.ServerPlayer server)
+                        || !server.getUUID().equals(capsule.kitOwner())) {
+                    player.displayClientMessage(net.minecraft.network.chat.Component.translatable(
+                            "message.returncapsule.kit_owner_only"), true);
+                    return InteractionResult.CONSUME;
+                }
+                if (com.curiats.returncapsule.util.BoundLoadout.isGranted(server)) {
+                    capsule.setKitOwner(null);
+                } else if (com.curiats.returncapsule.util.BoundLoadout.fillCapsule(capsule, server)) {
+                    capsule.setKitOwner(null);
+                }
+            }
+            if (capsule.manned() && capsule.isEmptyContainer()) {
+                    player.displayClientMessage(net.minecraft.network.chat.Component.translatable("message.returncapsule.manned_empty"), true);
+                    return InteractionResult.CONSUME;
+                }
+                player.openMenu(capsule);
+            }
                 case OPENING, CLOSING -> {
                     return InteractionResult.SUCCESS;
                 }

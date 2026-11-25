@@ -59,6 +59,43 @@ public abstract class LivingEntitySetHealthMixin {
         PlayerEquipment.convert(player, loss);
     }
 
+    private static final ThreadLocal<Boolean> CONVERTING = ThreadLocal.withInitial(() -> false);
+
+    /**
+     * Pets and other wearers: a direct health write from a parasite skips armour and the hurt path just like it does
+     * for players, so replay it through hurt. Vanilla damage inside hurt is excluded with hurtTime and a re-entry flag.
+     */
+    @Inject(method = "setHealth", at = @At("HEAD"), cancellable = true, require = 0)
+    private void returncapsule$convertWearerHealthLoss(float health, CallbackInfo ci) {
+        if (!((Object) this instanceof LivingEntity living)
+                || living instanceof ServerPlayer
+                || living instanceof NeutralHumanoid
+                || living.level().isClientSide) {
+            return;
+        }
+        if (CONVERTING.get() || living.hurtTime > 0 || living.isDeadOrDying() || living.isInvulnerable()) {
+            return;
+        }
+        float loss = living.getHealth() - health;
+        if (loss <= 0.0F) {
+            return;
+        }
+        if (!Config.EQUIPMENT_SET_ENABLED.get() || !PlayerEquipment.wearingFullSet(living)) {
+            return;
+        }
+        ci.cancel();
+        CONVERTING.set(true);
+        try {
+            LivingEntity attacker = living.getLastHurtByMob();
+            float amount = health <= 0.0F ? living.getHealth() : loss;
+            living.hurt(attacker == null
+                    ? living.damageSources().generic()
+                    : living.damageSources().mobAttack(attacker), amount);
+        } finally {
+            CONVERTING.set(false);
+        }
+    }
+
     @Inject(method = "setHealth", at = @At("HEAD"), cancellable = true, require = 0)
     private void returncapsule$convertDirectHealthLoss(float health, CallbackInfo ci) {
         if (!((Object) this instanceof NeutralHumanoid humanoid) || humanoid.level().isClientSide) {

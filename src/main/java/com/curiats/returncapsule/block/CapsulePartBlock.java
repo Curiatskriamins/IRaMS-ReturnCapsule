@@ -26,14 +26,37 @@ import javax.annotation.Nullable;
         "deprecation"})
 public class CapsulePartBlock extends Block {
 
-    public static final IntegerProperty PART = IntegerProperty.create("part", 0, 17);
+    /** Index range 0..17 belongs to the 3x3 supply capsule. */
+    public static final int SUPPLY_PARTS = 18;
+
+    /** One 5x5x3 footprint has 75 cells, of which one is the main block: 18 + 75 - 1. */
+    public static final int MAX_PART = SUPPLY_PARTS + 5 * 5 * 3 - 1;
+
+    /** 0..17 describe the 3x3 supply capsule, 18..92 the 5x5 manned capsule. */
+    public static final IntegerProperty PART = IntegerProperty.create("part", 0, MAX_PART);
 
     private static final VoxelShape EDGE = Block.box(2.0D, 0.0D, 2.0D, 14.0D, 16.0D, 14.0D);
+    private static final VoxelShape OUTER_EDGE = Block.box(4.0D, 0.0D, 4.0D, 12.0D, 16.0D, 12.0D);
+    private static final VoxelShape OUTER_CORNER = Block.box(6.0D, 0.0D, 6.0D, 10.0D, 16.0D, 10.0D);
     private static final VoxelShape CORNER = Block.box(5.0D, 0.0D, 5.0D, 11.0D, 16.0D, 11.0D);
 
     public CapsulePartBlock(Properties properties) {
         super(properties);
         this.registerDefaultState(this.stateDefinition.any().setValue(PART, 0));
+    }
+
+    /**
+     * Decodes the offset from the main block for a part index. Draft change: shared by {@link CapsuleStructure} so the
+     * main block can be found exactly instead of scanning the neighbourhood.
+     *
+     * @return {@code {dx, dy, dz}} relative to the main block
+     */
+    public static int[] offsetOf(int part) {
+        if (part >= SUPPLY_PARTS) {
+            int local = part - SUPPLY_PARTS;
+            return new int[]{local % 5 - 2, local / 5 / 5, (local / 5) % 5 - 2};
+        }
+        return new int[]{part % 3 - 1, part / 9, (part / 3) % 3 - 1};
     }
 
     @Override
@@ -58,6 +81,33 @@ public class CapsulePartBlock extends Block {
 
     private static VoxelShape shapeFor(BlockState state) {
         int part = state.getValue(PART);
+        if (part >= SUPPLY_PARTS) {
+            int local = part - SUPPLY_PARTS;
+            int dx = local % 5 - 2;
+            int dz = (local / 5) % 5 - 2;
+            if (Math.abs(dx) <= 1 && Math.abs(dz) <= 1) {
+                return Shapes.block();
+            }
+            // Octagonal approximation of the round hull: edge cells keep the inner 3/4, corners keep the inner
+            // corner, so the collision matches the visible silhouette instead of a full cube.
+            double minX = dx == -2 ? 0.25D : 0.0D;
+            double maxX = dx == 2 ? 0.75D : 1.0D;
+            double minZ = dz == -2 ? 0.25D : 0.0D;
+            double maxZ = dz == 2 ? 0.75D : 1.0D;
+            if (Math.abs(dx) == 2 && Math.abs(dz) == 2) {
+                if (dx == 2) {
+                    maxX = 0.5625D;
+                } else {
+                    minX = 0.4375D;
+                }
+                if (dz == 2) {
+                    maxZ = 0.5625D;
+                } else {
+                    minZ = 0.4375D;
+                }
+            }
+            return Shapes.box(minX, 0.0D, minZ, maxX, 1.0D, maxZ);
+        }
         int dx = part % 3 - 1;
         int dz = (part / 3) % 3 - 1;
         if (dx == 0 && dz == 0) {

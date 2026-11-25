@@ -11,7 +11,10 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.util.Mth;
+import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
+import net.minecraft.world.InteractionResultHolder;
+import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.context.UseOnContext;
@@ -24,6 +27,12 @@ public class TransportDesignatorItem extends Item {
     private static final String TAG_CHARGE = "Charge";
     private static final String TAG_MARKER_POS = "MarkerPos";
     private static final String TAG_MARKER_TOKEN = "MarkerToken";
+    private static final String TAG_MANNED_SUMMONS = "returncapsule_manned_summons";
+
+    private static final int MAX_MANNED_SUMMONS = 3;
+
+    private static final int MAX_OWNED_HUMANOIDS = 3;
+
     private static final String TAG_CONFIRM_UNTIL = "ConfirmUntil";
     private static final String TAG_LEGACY_DAMAGE = "Damage";
 
@@ -84,71 +93,135 @@ public class TransportDesignatorItem extends Item {
         }
 
         ItemStack stack = context.getItemInHand();
-        if (player.isShiftKeyDown()) {
-            clearMarker(level, stack);
-            return InteractionResult.CONSUME;
-        }
-
         BlockPos platform = findPlatform(level, context.getClickedPos());
-        if (platform == null) {
-            return InteractionResult.FAIL;
+        if (platform != null) {
+            return rideFromPlatform(level, stack, player, platform);
         }
-        BlockPos markerPos = platform.above();
-        if (!hasNetherPortal(level, markerPos)) {
-            return InteractionResult.FAIL;
+        if (player.isShiftKeyDown()) {
+            // Sneaking on ordinary ground is the deliberate way to summon a manned capsule.
+            return awayFromPlatform(level, stack, player);
         }
+        if (getMarkerPos(stack) != null) {
+            return returnToMarker(level, stack, player);
+        }
+        return fail(player, "message.returncapsule.designator_no_marker");
+    }
 
-        TransportCapsuleEntity inFlight = TransportCapsuleEntity.find(level, markerPos);
+    /** A complete 5x5 obsidian pad rides the player down to its centre, no portal required. */
+    private static InteractionResult rideFromPlatform(Level level, ItemStack stack, ServerPlayer player,
+                                                      BlockPos platform) {
+        BlockPos landing = platform.above();
+        TransportCapsuleEntity inFlight = TransportCapsuleEntity.find(level, landing);
         if (inFlight != null) {
-            if (inFlight.addPassenger(player)) {
-                player.getCooldowns().addCooldown(this, Config.DESIGNATOR_COOLDOWN_TICKS.get());
-                return InteractionResult.CONSUME;
-            }
-            return InteractionResult.FAIL;
+            return inFlight.addPassenger(player) ? InteractionResult.CONSUME : InteractionResult.FAIL;
         }
 
-        if (!(level.getBlockEntity(markerPos) instanceof TransportMarkerBlockEntity marker)
-                || !markerPos.equals(getMarkerPos(stack))) {
-            if (!level.getBlockState(markerPos).isAir()) {
-                return InteractionResult.FAIL;
-            }
+        CompoundTag tag = stack.getOrCreateTag();
+        BlockPos marked = getMarkerPos(stack);
+        boolean markedHere = marked != null && marked.equals(landing)
+                && level.getBlockState(landing).is(ModBlocks.TRANSPORT_MARKER.get());
+        if (!markedHere) {
+            // First click only marks; the red beam is kept by the item token and the marker re-checks its 5x5 pad.
             UUID token = UUID.randomUUID();
-            level.setBlock(markerPos, ModBlocks.TRANSPORT_MARKER.get().defaultBlockState(), 3);
-            if (level.getBlockEntity(markerPos) instanceof TransportMarkerBlockEntity created) {
+            level.setBlock(landing, ModBlocks.TRANSPORT_MARKER.get().defaultBlockState(), 3);
+            if (level.getBlockEntity(landing) instanceof TransportMarkerBlockEntity created) {
                 created.configure(player.getUUID(), token, platform);
             }
-            CompoundTag tag = stack.getOrCreateTag();
-            tag.putLong(TAG_MARKER_POS, markerPos.asLong());
+            tag.putLong(TAG_MARKER_POS, landing.asLong());
             tag.putUUID(TAG_MARKER_TOKEN, token);
             tag.remove(TAG_CONFIRM_UNTIL);
             return InteractionResult.CONSUME;
         }
-
-        CompoundTag tag = stack.getOrCreateTag();
-        long now = level.getGameTime();
-        long confirmUntil = tag.getLong(TAG_CONFIRM_UNTIL);
-        if (now < confirmUntil) {
-            int max = Config.designatorMaxCharge();
-            if (migrateCharge(stack) < max) {
-                return InteractionResult.FAIL;
-            }
-            if (!player.isCreative() && !canPay(player)) {
-                return InteractionResult.FAIL;
-            }
-            if (TransportCapsuleEntity.spawn((ServerLevel) level, markerPos, player)) {
-                if (!player.isCreative()) {
-                    NetherStars.consumeOne(player);
-                }
-                setCharge(stack, Math.min(1, max - 1));
-                tag.remove(TAG_CONFIRM_UNTIL);
-                player.getCooldowns().addCooldown(this, Config.DESIGNATOR_COOLDOWN_TICKS.get());
-                return InteractionResult.CONSUME;
-            }
-            return InteractionResult.FAIL;
+        int max = Config.designatorMaxCharge();
+        if (!player.isCreative() && migrateCharge(stack) < max) {
+            return failCharge(player, stack);
         }
-
-        tag.putLong(TAG_CONFIRM_UNTIL, now + Config.DESIGNATOR_CONFIRM_TICKS.get());
+        if (!player.isCreative() && !canPay(player)) {
+            return fail(player, "message.returncapsule.designator_payment");
+        }
+        if (!(level instanceof ServerLevel server) || !TransportCapsuleEntity.spawn(server, landing, player)) {
+            return fail(player, "message.returncapsule.designator_spawn");
+        }
+        if (!player.isCreative()) {
+            NetherStars.consumeOne(player);
+        }
+        setCharge(stack, 1);
+        player.getCooldowns().addCooldown(stack.getItem(), Config.DESIGNATOR_COOLDOWN_TICKS.get());
         return InteractionResult.CONSUME;
+    }
+
+    @Override
+    public InteractionResultHolder<ItemStack> use(Level level, Player player, InteractionHand hand) {
+        ItemStack stack = player.getItemInHand(hand);
+        if (!(player instanceof ServerPlayer server) || level.isClientSide) {
+            return InteractionResultHolder.sidedSuccess(stack, level.isClientSide);
+        }
+        if (getMarkerPos(stack) == null) {
+            return new InteractionResultHolder<>(
+                    fail(server, "message.returncapsule.designator_no_marker"), stack);
+        }
+        return new InteractionResultHolder<>(returnToMarker(level, stack, server), stack);
+    }
+
+    /** Not on an obsidian platform: summon a manned capsule, or fall back to riding home once used up. */
+    private static InteractionResult awayFromPlatform(Level level, ItemStack stack, ServerPlayer player) {
+        int summons = player.getPersistentData().getInt(TAG_MANNED_SUMMONS);
+        // Stored humanoids and living ones share the same three slot cap.
+        int owned = com.curiats.returncapsule.event.HumanoidOwnerEvents.ownedCount(
+                player.serverLevel(), player.getUUID())
+                + com.curiats.returncapsule.util.AnchorStorage.storedTotal(player);
+        if (summons >= MAX_MANNED_SUMMONS || owned >= MAX_OWNED_HUMANOIDS) {
+            return returnToMarker(level, stack, player);
+        }
+        if (!player.isCreative() && migrateCharge(stack) < Config.designatorMaxCharge()) {
+            return failCharge(player, stack);
+        }
+        if (!player.isCreative() && !NetherStars.has(player)) {
+            return fail(player, "message.returncapsule.designator_star");
+        }
+        BlockPos landing = player.blockPosition().above(2);
+        if (!(level instanceof ServerLevel server)
+                || !TransportCapsuleEntity.spawnManned(server, landing, player)) {
+            return fail(player, "message.returncapsule.designator_spawn");
+        }
+        if (!player.isCreative()) {
+            NetherStars.consumeOne(player);
+        }
+        setCharge(stack, 1);
+        player.getPersistentData().putInt(TAG_MANNED_SUMMONS, summons + 1);
+        player.getCooldowns().addCooldown(stack.getItem(), Config.DESIGNATOR_COOLDOWN_TICKS.get());
+        return InteractionResult.CONSUME;
+    }
+
+    private static InteractionResult returnToMarker(Level level, ItemStack stack, ServerPlayer player) {
+        BlockPos marker = getMarkerPos(stack);
+        if (!(level instanceof ServerLevel server) || marker == null) {
+            return fail(player, "message.returncapsule.designator_no_marker");
+        }
+        // The portal may be gone, so the return trip loads the recorded marker chunk itself; the flight ticket keeps
+        // it ticking until touchdown.
+        net.minecraft.world.level.ChunkPos chunk = new net.minecraft.world.level.ChunkPos(marker);
+        server.getChunkSource().addRegionTicket(net.minecraft.server.level.TicketType.PORTAL, chunk, 2, marker);
+        server.getChunk(chunk.x, chunk.z);
+        TransportCapsuleEntity inFlight = TransportCapsuleEntity.find(level, marker);
+        if (inFlight != null) {
+            return inFlight.addPassenger(player) ? InteractionResult.CONSUME : InteractionResult.FAIL;
+        }
+        return TransportCapsuleEntity.spawn(server, marker, player)
+                ? InteractionResult.CONSUME : InteractionResult.FAIL;
+    }
+
+    private static InteractionResult fail(ServerPlayer player, String key) {
+        player.displayClientMessage(net.minecraft.network.chat.Component.translatable(key), true);
+        return InteractionResult.FAIL;
+    }
+
+    private static InteractionResult failCharge(ServerPlayer player, ItemStack stack) {
+        int max = Config.designatorMaxCharge();
+        int current = migrateCharge(stack);
+        player.displayClientMessage(net.minecraft.network.chat.Component.translatable(
+                "message.returncapsule.designator_charge", current * 100 / max), true);
+        return InteractionResult.FAIL;
     }
 
     private static boolean canPay(ServerPlayer player) {
@@ -157,7 +230,7 @@ public class TransportDesignatorItem extends Item {
                 && NetherStars.has(player);
     }
 
-    private static boolean hasNetherPortal(Level level, BlockPos center) {
+    public static boolean hasNetherPortal(Level level, BlockPos center) {
         int chunkX = center.getX() >> 4;
         int chunkZ = center.getZ() >> 4;
         for (int dx = -1; dx <= 1; dx++) {
@@ -173,6 +246,10 @@ public class TransportDesignatorItem extends Item {
             }
         }
         return false;
+    }
+
+    public static BlockPos markerPos(ItemStack stack) {
+        return getMarkerPos(stack);
     }
 
     private static BlockPos getMarkerPos(ItemStack stack) {
@@ -216,14 +293,13 @@ public class TransportDesignatorItem extends Item {
     }
 
     public static boolean isCompletePlatform(Level level, BlockPos center) {
-        for (int dx = -1; dx <= 1; dx++) {
-            for (int dz = -1; dz <= 1; dz++) {
+        for (int dx = -2; dx <= 2; dx++) {
+            for (int dz = -2; dz <= 2; dz++) {
                 if (!level.getBlockState(center.offset(dx, 0, dz)).is(Blocks.OBSIDIAN)) {
                     return false;
                 }
             }
         }
-        return level.getBlockState(center.above()).isAir()
-                || level.getBlockState(center.above()).is(ModBlocks.TRANSPORT_MARKER.get());
+        return true;
     }
 }

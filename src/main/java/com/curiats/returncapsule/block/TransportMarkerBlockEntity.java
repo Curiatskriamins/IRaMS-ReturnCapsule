@@ -51,14 +51,7 @@ public class TransportMarkerBlockEntity extends BlockEntity {
         if (!(this.level instanceof ServerLevel server) || this.platformCenter == null) {
             return false;
         }
-        for (int dx = -1; dx <= 1; dx++) {
-            for (int dz = -1; dz <= 1; dz++) {
-                if (!server.getBlockState(this.platformCenter.offset(dx, 0, dz)).is(Blocks.OBSIDIAN)) {
-                    return false;
-                }
-            }
-        }
-        return true;
+        return com.curiats.returncapsule.item.TransportDesignatorItem.isCompletePlatform(server, this.platformCenter);
     }
 
     @Override
@@ -110,34 +103,6 @@ public class TransportMarkerBlockEntity extends BlockEntity {
 
     private void removeMarker(ServerLevel server) {
         server.removeBlock(this.worldPosition, false);
-    }
-
-    public void forceChunks(ServerLevel server) {
-        if (this.platformCenter == null) {
-            return;
-        }
-        int radius = Config.MARKER_CHUNK_RADIUS.get();
-        int cx = this.platformCenter.getX() >> 4;
-        int cz = this.platformCenter.getZ() >> 4;
-        for (int dx = -radius; dx <= radius; dx++) {
-            for (int dz = -radius; dz <= radius; dz++) {
-                server.setChunkForced(cx + dx, cz + dz, true);
-            }
-        }
-    }
-
-    public void releaseChunks() {
-        if (!(this.level instanceof ServerLevel server) || this.platformCenter == null) {
-            return;
-        }
-        int radius = Config.MARKER_CHUNK_RADIUS.get();
-        int cx = this.platformCenter.getX() >> 4;
-        int cz = this.platformCenter.getZ() >> 4;
-        for (int dx = -radius; dx <= radius; dx++) {
-            for (int dz = -radius; dz <= radius; dz++) {
-                server.setChunkForced(cx + dx, cz + dz, false);
-            }
-        }
     }
 
     @Override
